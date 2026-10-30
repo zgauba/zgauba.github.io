@@ -3,97 +3,171 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Jubail Community Tools — Zeeshan Gauba</title>
-<meta name="description" content="Free community tools for Jubail Island neighbors, built by a resident — starting with the trick-or-treat map.">
+<title>Zeeshan Gauba</title>
+<meta name="description" content="Zeeshan Gauba — Builder + Integrator. Senior operating executive in Abu Dhabi: operations, client success, M&A integration, AI transformation.">
+<meta property="og:title" content="Zeeshan Gauba — Builder + Integrator">
+<meta property="og:description" content="Senior operating executive in Abu Dhabi: operations, client success, M&A integration, AI transformation.">
+<meta property="og:type" content="website">
 <link rel="icon" href="../assets/zg-mark-cyan.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --navy:#0A0E1A; --cyan:#22D3EE; --coverText:#F0F4FF; --coverSub:#8B9CC8;
-  --pagebg:#F7F9FC; --inkhead:#101A33; --inkbody:#3A4A66; --teal:#0E7490; --cardline:#E1E7F2;
+  --navy:#0A0E1A;
+  --navy2:#0F1629;
+  --cyan:#22D3EE;
+  --coverText:#F0F4FF;
+  --coverSub:#8B9CC8;
+  --pagebg:#F7F9FC;
+  --inkhead:#101A33;
+  --inkbody:#3A4A66;
+  --teal:#0E7490;
+  --cardline:#E1E7F2;
 }
 *{box-sizing:border-box}
-body{margin:0; background:var(--pagebg); color:var(--inkbody); font-family:'Manrope','Segoe UI',system-ui,sans-serif; font-size:17px; line-height:1.7; -webkit-font-smoothing:antialiased}
+body{
+  margin:0;
+  background:var(--pagebg);
+  color:var(--inkbody);
+  font-family:'Manrope', 'Segoe UI', system-ui, sans-serif;
+  font-size:17px;
+  line-height:1.7;
+  -webkit-font-smoothing:antialiased;
+}
 .wrap{max-width:680px; margin:0 auto; padding:0 24px}
 a{color:var(--teal); text-decoration-color:rgba(14,116,144,.4); text-underline-offset:3px}
 a:hover{text-decoration-color:var(--teal)}
-a:focus-visible,.btn:focus-visible{outline:2.5px solid var(--cyan); outline-offset:3px; border-radius:3px}
-.cover{background:var(--navy); color:var(--coverText); padding:64px 0 52px}
-.eyebrow{font-size:12.5px; font-weight:700; letter-spacing:.22em; text-transform:uppercase; margin:0 0 38px}
+a:focus-visible, .btn:focus-visible{outline:2.5px solid var(--cyan); outline-offset:3px; border-radius:3px}
+
+/* ---- dark cover hero ---- */
+.cover{background:var(--navy); color:var(--coverText); padding:72px 0 56px}
+.eyebrow{
+  font-size:12.5px; font-weight:700; letter-spacing:.22em; text-transform:uppercase;
+  margin:0 0 42px;
+}
 .cover .eyebrow{color:var(--cyan)}
-.rule{width:46px; height:5px; background:var(--cyan); border-radius:1px; margin:0 0 24px}
-.cover h1{font-size:clamp(36px,7.6vw,56px); font-weight:800; letter-spacing:-.02em; line-height:1.08; margin:0 0 18px}
-.cover .lede{font-size:17.5px; color:var(--coverSub); max-width:56ch; margin:0}
-section{padding:48px 0 4px}
-h2{font-size:clamp(24px,4.6vw,29px); font-weight:800; letter-spacing:-.015em; color:var(--inkhead); margin:0 0 14px; line-height:1.25}
+.rule{width:46px; height:5px; background:var(--cyan); border-radius:1px; margin:0 0 26px}
+.cover h1{
+  font-size:clamp(40px, 8.4vw, 62px);
+  font-weight:800; letter-spacing:-.02em; line-height:1.06;
+  margin:0 0 18px;
+}
+.cover .tag{
+  font-size:clamp(19px, 3.8vw, 23px); font-weight:700; color:var(--coverText);
+  margin:0 0 16px;
+}
+.cover .tag .plus{color:var(--cyan)}
+.cover .lede{font-size:17.5px; color:var(--coverSub); max-width:56ch; margin:0 0 34px}
+.btnrow{display:flex; gap:20px; align-items:center; flex-wrap:wrap}
+.btn{
+  display:inline-block; background:var(--cyan); color:var(--navy);
+  text-decoration:none; font-size:16px; font-weight:800;
+  padding:13px 28px; border-radius:6px;
+}
+.btn:hover{background:#4ADDF4}
+.cover .quiet{color:var(--cyan); font-size:16px; font-weight:600}
+.coverfoot{display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:58px; flex-wrap:wrap}
+.coverfoot .who{font-size:13.5px; color:var(--coverSub); max-width:34ch}
+.coverfoot img{width:min(230px, 52vw); height:auto; display:block}
+
+/* ---- light body ---- */
+section{padding:52px 0 8px}
+h2{
+  font-size:clamp(26px, 5vw, 32px); font-weight:800; letter-spacing:-.015em;
+  color:var(--inkhead); margin:0 0 16px; line-height:1.2;
+}
 .body-ey{color:var(--teal); margin:0 0 10px}
 section p{margin:0 0 16px; max-width:66ch}
-.tool{background:#fff; border:1px solid var(--cardline); border-radius:12px; padding:22px; margin:22px 0}
-.tool h3{margin:0 0 8px; font-size:20px; font-weight:800; color:var(--inkhead)}
-.tool p{margin:0 0 12px}
-.btn{display:inline-block; background:var(--teal); color:#fff; text-decoration:none; font-size:15.5px; font-weight:800; padding:11px 24px; border-radius:6px}
-.btn:hover{background:#0A5E75}
-.foot{background:var(--navy); color:var(--coverSub); margin-top:52px; padding:32px 0 42px}
-.foot .inner{display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap}
-.foot img{width:min(210px,48vw); height:auto; display:block}
-.foot .loc{font-size:13.5px}
-.foot a{color:var(--cyan)}
-.statgrid{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:14px; margin:24px 0 20px}
-@media (max-width:560px){
-  .statgrid{grid-template-columns:1fr; gap:10px}
-  .statgrid .tool{display:flex; align-items:baseline; gap:14px}
-  .statgrid .tool > div:first-child{min-width:110px}
-  .statgrid .tool > div:last-child{margin-top:0 !important}
+section b{color:var(--inkhead)}
+
+.cards{
+  display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:14px;
+  margin:26px 0 22px;
 }
+.card{
+  background:#fff; border:1px solid var(--cardline); border-radius:12px;
+  padding:18px 16px;
+}
+.card .n{font-size:30px; font-weight:800; color:var(--teal); line-height:1.1; letter-spacing:-.01em}
+.card .l{font-size:13.5px; color:var(--inkbody); margin-top:6px; line-height:1.5}
+@media (max-width:560px){
+  .cards{grid-template-columns:1fr; gap:10px}
+  .card{display:flex; align-items:baseline; gap:14px}
+  .card .n{min-width:110px}
+  .card .l{margin-top:0}
+}
+.cards.four{grid-template-columns:repeat(2, minmax(0,1fr))}
+.card .t{font-size:16.5px; font-weight:800; color:var(--inkhead); line-height:1.3}
+.card .t + .l{margin-top:8px}
+@media (max-width:560px){
+  .cards.four{grid-template-columns:1fr}
+  .cards.four .card{display:block}
+}
+
+/* ---- dark footer ---- */
+.foot{background:var(--navy); color:var(--coverSub); margin-top:56px; padding:34px 0 44px}
+.foot .inner{display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap}
+.foot img{width:min(210px, 48vw); height:auto; display:block}
+.foot .loc{font-size:13.5px}
 </style>
 </head>
 <body>
 
 <header class="cover">
   <div class="wrap">
-    <p class="eyebrow">Jubail Island · Community tools</p>
+    <p class="eyebrow">Abu Dhabi · Operations · M&amp;A · AI</p>
     <div class="rule" aria-hidden="true"></div>
-    <h1>Hello, neighbor.</h1>
-    <p class="lede">I'm Zeeshan — a resident in Ain Al Maha. I build small, free tools for our island community: shaped by whatever the WhatsApp groups ask for next, and private by design.</p>
+    <h1>Zeeshan Gauba</h1>
+    <p class="tag">Builder <span class="plus">+</span> Integrator</p>
+    <p class="lede">Senior operating executive — operations, client success, M&amp;A integration, and AI transformation. Two decades building and integrating technology businesses, the last decade-plus in fintech and regulated financial services.</p>
+    <div class="btnrow">
+      <a class="btn" href="https://www.linkedin.com/in/zeeshangauba" target="_blank" rel="noopener">Connect on LinkedIn</a>
+      <a class="quiet" href="mailto:zgauba@gmail.com">zgauba@gmail.com</a>
+    </div>
+    <div class="coverfoot">
+      <div class="who">Based on Jubail Island, Abu Dhabi. US national, UAE resident.</div>
+      <img src="../assets/lockup.svg" alt="Zeeshan Gauba — High-Performance Fintech Operations">
+    </div>
   </div>
 </header>
 
 <main>
   <section>
     <div class="wrap">
-      <p class="eyebrow body-ey">Live now</p>
-      <h2>The trick-or-treat map</h2>
-      <div class="tool">
-        <h3>🎃 Jubail Trick-or-Treat</h3>
-        <p>Sign your home up, drop a pin, and manage everything yourselves on the night — out-of-treats toggle, gate directions, allergy-friendly teal pumpkins. Built for Halloween 2026, with 122 homes across five villages.</p>
-        <a class="btn" href="https://zgauba.github.io/jubail-halloween/" target="_blank" rel="noopener">Open the map</a>
+      <p class="eyebrow body-ey">The work</p>
+      <h2>I build operating systems inside companies.</h2>
+      <p>The cadence, tooling, and teams that turn strategy into shipped outcomes.</p>
+      <div class="cards" role="group" aria-label="Career highlights">
+        <div class="card"><div class="n">18</div><div class="l">years running operations in financial technology — the software behind banks</div></div>
+        <div class="card"><div class="n">$135MM</div><div class="l">exit of Segmint, where I built the client success organization from 20 to 165 clients</div></div>
+        <div class="card"><div class="n">30+</div><div class="l">AI agents put into production across corporate development work</div></div>
       </div>
-      <p>Every tool here follows the same rules: <b style="color:var(--inkhead)">no names, no phone numbers</b> — only unit numbers and pin locations, and seasonal data is deleted after each event.</p>
+      <p>At Segmint, the client success organization I built grew recurring revenue from $130K to $1.1MM MRR — the engine behind its exit to Alkami Technology in 2022. I stayed through the integration and went on to lead Corporate Development Operations at Alkami at COO-level scope: running the Integration Management Office for a $400M acquisition, rebuilding the function's reporting infrastructure, and automating deal work that previously ran on manual effort.</p>
+      <p><b>The pattern across all of it:</b> inherit something fragmented, make it legible, make it compound.</p>
     </div>
   </section>
 
   <section>
     <div class="wrap">
-      <p class="eyebrow body-ey">The story</p>
-      <h2>From one WhatsApp message to a live map, the same day.</h2>
-      <p>In October 2026, a neighbor asked our island's WhatsApp group if anyone could organize trick-or-treating across the community. The map went live the same day — home sign-ups, private self-serve controls for every family, an organizer panel — built with AI as the workbench.</p>
-      <div class="statgrid">
-        <div class="tool" style="margin:0; padding:18px 16px"><div style="font-size:28px; font-weight:800; color:var(--teal); line-height:1.1">Same day</div><div style="font-size:13.5px; margin-top:6px">from WhatsApp question to live site</div></div>
-        <div class="tool" style="margin:0; padding:18px 16px"><div style="font-size:28px; font-weight:800; color:var(--teal); line-height:1.1">122</div><div style="font-size:13.5px; margin-top:6px">homes signed up in four weeks</div></div>
-        <div class="tool" style="margin:0; padding:18px 16px"><div style="font-size:28px; font-weight:800; color:var(--teal); line-height:1.1">5</div><div style="font-size:13.5px; margin-top:6px">villages, feedback in two languages</div></div>
+      <p class="eyebrow body-ey">The neighborhood test</p>
+      <h2>How I operate, at household scale.</h2>
+      <p>In October 2026, a neighbor asked our island's WhatsApp group if anyone could organize trick-or-treating across the community. I had a working map live the same day — home sign-ups, private self-serve controls for every family, an organizer panel — built with AI as the workbench.</p>
+      <div class="cards" role="group" aria-label="Community map results">
+        <div class="card"><div class="n">Same day</div><div class="l">from WhatsApp question to live site</div></div>
+        <div class="card"><div class="n">122</div><div class="l">homes signed up across the island in four weeks</div></div>
+        <div class="card"><div class="n">5</div><div class="l">villages participating, feedback in two languages</div></div>
       </div>
-      <p>Features the community asked for shipped within hours of the ask — the gate directions, the allergy-friendly teal pumpkins, the printable list. The approach: find the real problem, ship the smallest thing that solves it, iterate in public, and hand the keys to the people who will run it.</p>
+      <p>Features the community asked for shipped within hours of the ask — gate directions, allergy-friendly teal pumpkins, an Arabic-speaking welcome. Only unit numbers and pin locations are stored, and seasonal data is deleted after each event. I treat it as a working definition of how I operate: find the real problem, ship the smallest thing that solves it, iterate in public, and hand the keys to the people who will run it. <a href="https://zgauba.github.io/jubail-halloween/" target="_blank" rel="noopener">The map is live here.</a></p>
     </div>
   </section>
 
   <section>
     <div class="wrap">
-      <p class="eyebrow body-ey">How these get built</p>
-      <h2>Ideas come from neighbors.</h2>
-      <p>Almost every feature on the map started as a message in a community group — the gate colors, the allergy-friendly option, the Arabic requests. If you have an idea for something our community could use, post it in the Residents Hub or send it my way. More community tools are in the works for the winter season.</p>
-      <p>Professionally, I'm a fintech operations executive — if you're curious, <a href="../">more about my work is here</a>.</p>
+      <p class="eyebrow body-ey">Now</p>
+      <h2>Operating mandates, and a newsletter.</h2>
+      <p>I'm exploring senior operating roles across the UAE — operations, transformation, client success, and corporate development — with financial services, technology companies, and investor-backed groups. I also write <a href="https://www.linkedin.com/newsletters/builder-integrator-7461525730414329856" target="_blank" rel="noopener">Builder + Integrator</a>, a biweekly newsletter on operating systems for fintech, banking technology, and AI-enabled teams — <a href="https://www.linkedin.com/newsletters/builder-integrator-7461525730414329856" target="_blank" rel="noopener">subscribe here</a> — and I build <a href="https://zgauba.github.io/jubail-halloween/" target="_blank" rel="noopener">free community tools</a> for my island neighborhood in Abu Dhabi.</p>
+      <p>The fastest way to reach me is <a href="https://www.linkedin.com/in/zeeshangauba" target="_blank" rel="noopener">LinkedIn</a> — I answer.</p>
     </div>
   </section>
 </main>
@@ -101,7 +175,7 @@ section p{margin:0 0 16px; max-width:66ch}
 <footer class="foot">
   <div class="wrap inner">
     <img src="../assets/lockup.svg" alt="Zeeshan Gauba — High-Performance Fintech Operations">
-    <div class="loc">Jubail Island, Abu Dhabi</div>
+    <div class="loc">Abu Dhabi, UAE</div>
   </div>
 </footer>
 </body>

@@ -97,6 +97,13 @@ section b{color:var(--inkhead)}
   .card .n{min-width:110px}
   .card .l{margin-top:0}
 }
+.cards.four{grid-template-columns:repeat(2, minmax(0,1fr))}
+.card .t{font-size:16.5px; font-weight:800; color:var(--inkhead); line-height:1.3}
+.card .t + .l{margin-top:8px}
+@media (max-width:560px){
+  .cards.four{grid-template-columns:1fr}
+  .cards.four .card{display:block}
+}
 
 /* ---- dark footer ---- */
 .foot{background:var(--navy); color:var(--coverSub); margin-top:56px; padding:34px 0 44px}
@@ -143,10 +150,15 @@ section b{color:var(--inkhead)}
 
   <section>
     <div class="wrap">
-      <p class="eyebrow body-ey">AI, deployed</p>
-      <h2>Agents in production, not pilots.</h2>
-      <p>At Alkami, I built and deployed more than thirty AI agents across Corporate Development — automating the analytical and reporting workflows that previously slowed leadership decision-prep. The M&amp;A pipeline ran end to end with monthly outlier reporting to leadership, on reporting infrastructure the executive team and Steering Committee used daily.</p>
-      <p>The operating philosophy behind that work is documented in four frameworks I publish: <b>The Operations Stack</b>, <b>The Improvement Stack</b>, <b>The Visible Value Loop</b>, and <b>The Compounding Deal Framework</b>.</p>
+      <p class="eyebrow body-ey">Where I operate</p>
+      <h2>Four domains, one discipline.</h2>
+      <div class="cards four" role="group" aria-label="Operating domains">
+        <div class="card"><div class="t">Operations &amp; strategy</div><div class="l">Built the operating toolstack, cadence, and first partner onboarding processes where none existed — compressing onboarding from 205 to 90 business days.</div></div>
+        <div class="card"><div class="t">M&amp;A integration &amp; corporate development</div><div class="l">Led the Integration Management Office for a $400M acquisition — cross-functional execution, risk controls, and value capture.</div></div>
+        <div class="card"><div class="t">Client success &amp; revenue</div><div class="l">99% client retention through a period of 725% client growth, with 13x average client ROI.</div></div>
+        <div class="card"><div class="t">AI-enabled operations</div><div class="l">30+ AI agents in production, automating the analytical and reporting work that slowed leadership decision-prep.</div></div>
+      </div>
+      <p>The playbook behind this is published as four frameworks: <b>The Operations Stack</b>, <b>The Improvement Stack</b>, <b>The Visible Value Loop</b>, and <b>The Compounding Deal Framework</b>.</p>
     </div>
   </section>
 
