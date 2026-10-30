@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jubail Community Tools — Zeeshan Gauba</title>
+<meta name="description" content="Free community tools for Jubail Island neighbors, built by a resident — starting with the trick-or-treat map.">
+<link rel="icon" href="../assets/zg-mark-cyan.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#0A0E1A; --cyan:#22D3EE; --coverText:#F0F4FF; --coverSub:#8B9CC8;
+  --pagebg:#F7F9FC; --inkhead:#101A33; --inkbody:#3A4A66; --teal:#0E7490; --cardline:#E1E7F2;
+}
+*{box-sizing:border-box}
+body{margin:0; background:var(--pagebg); color:var(--inkbody); font-family:'Manrope','Segoe UI',system-ui,sans-serif; font-size:17px; line-height:1.7; -webkit-font-smoothing:antialiased}
+.wrap{max-width:680px; margin:0 auto; padding:0 24px}
+a{color:var(--teal); text-decoration-color:rgba(14,116,144,.4); text-underline-offset:3px}
+a:hover{text-decoration-color:var(--teal)}
+a:focus-visible,.btn:focus-visible{outline:2.5px solid var(--cyan); outline-offset:3px; border-radius:3px}
+.cover{background:var(--navy); color:var(--coverText); padding:64px 0 52px}
+.eyebrow{font-size:12.5px; font-weight:700; letter-spacing:.22em; text-transform:uppercase; margin:0 0 38px}
+.cover .eyebrow{color:var(--cyan)}
+.rule{width:46px; height:5px; background:var(--cyan); border-radius:1px; margin:0 0 24px}
+.cover h1{font-size:clamp(36px,7.6vw,56px); font-weight:800; letter-spacing:-.02em; line-height:1.08; margin:0 0 18px}
+.cover .lede{font-size:17.5px; color:var(--coverSub); max-width:56ch; margin:0}
+section{padding:48px 0 4px}
+h2{font-size:clamp(24px,4.6vw,29px); font-weight:800; letter-spacing:-.015em; color:var(--inkhead); margin:0 0 14px; line-height:1.25}
+.body-ey{color:var(--teal); margin:0 0 10px}
+section p{margin:0 0 16px; max-width:66ch}
+.tool{background:#fff; border:1px solid var(--cardline); border-radius:12px; padding:22px; margin:22px 0}
+.tool h3{margin:0 0 8px; font-size:20px; font-weight:800; color:var(--inkhead)}
+.tool p{margin:0 0 12px}
+.btn{display:inline-block; background:var(--teal); color:#fff; text-decoration:none; font-size:15.5px; font-weight:800; padding:11px 24px; border-radius:6px}
+.btn:hover{background:#0A5E75}
+.foot{background:var(--navy); color:var(--coverSub); margin-top:52px; padding:32px 0 42px}
+.foot .inner{display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap}
+.foot img{width:min(210px,48vw); height:auto; display:block}
+.foot .loc{font-size:13.5px}
+.foot a{color:var(--cyan)}
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="wrap">
+    <p class="eyebrow">Jubail Island · Community tools</p>
+    <div class="rule" aria-hidden="true"></div>
+    <h1>Hello, neighbor.</h1>
+    <p class="lede">I'm Zeeshan — a resident in Ain Al Maha. I build small, free tools for our island community: shaped by whatever the WhatsApp groups ask for next, and private by design.</p>
+  </div>
+</header>
+
+<main>
+  <section>
+    <div class="wrap">
+      <p class="eyebrow body-ey">Live now</p>
+      <h2>The trick-or-treat map</h2>
+      <div class="tool">
+        <h3>🎃 Jubail Trick-or-Treat</h3>
+        <p>Sign your home up, drop a pin, and manage everything yourselves on the night — out-of-treats toggle, gate directions, allergy-friendly teal pumpkins. Built for Halloween 2026, with 122 homes across five villages.</p>
+        <a class="btn" href="https://zgauba.github.io/jubail-halloween/" target="_blank" rel="noopener">Open the map</a>
+      </div>
+      <p>Every tool here follows the same rules: <b style="color:var(--inkhead)">no names, no phone numbers</b> — only unit numbers and pin locations, and seasonal data is deleted after each event.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <p class="eyebrow body-ey">How these get built</p>
+      <h2>Ideas come from neighbors.</h2>
+      <p>Almost every feature on the map started as a message in a community group — the gate colors, the allergy-friendly option, the Arabic requests. If you have an idea for something our community could use, post it in the Residents Hub or send it my way. More community tools are in the works for the winter season.</p>
+      <p>Professionally, I'm a fintech operations executive — if you're curious, <a href="../">more about my work is here</a>.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap inner">
+    <img src="../assets/lockup.svg" alt="Zeeshan Gauba — High-Performance Fintech Operations">
+    <div class="loc">Jubail Island, Abu Dhabi</div>
+  </div>
+</footer>
+</body>
+</html>
