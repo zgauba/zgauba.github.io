@@ -40,6 +40,13 @@ section p{margin:0 0 16px; max-width:66ch}
 .foot img{width:min(210px,48vw); height:auto; display:block}
 .foot .loc{font-size:13.5px}
 .foot a{color:var(--cyan)}
+.statgrid{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:14px; margin:24px 0 20px}
+@media (max-width:560px){
+  .statgrid{grid-template-columns:1fr; gap:10px}
+  .statgrid .tool{display:flex; align-items:baseline; gap:14px}
+  .statgrid .tool > div:first-child{min-width:110px}
+  .statgrid .tool > div:last-child{margin-top:0 !important}
+}
 </style>
 </head>
 <body>
@@ -64,6 +71,20 @@ section p{margin:0 0 16px; max-width:66ch}
         <a class="btn" href="https://zgauba.github.io/jubail-halloween/" target="_blank" rel="noopener">Open the map</a>
       </div>
       <p>Every tool here follows the same rules: <b style="color:var(--inkhead)">no names, no phone numbers</b> — only unit numbers and pin locations, and seasonal data is deleted after each event.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <p class="eyebrow body-ey">The story</p>
+      <h2>From one WhatsApp message to a live map, the same day.</h2>
+      <p>In October 2026, a neighbor asked our island's WhatsApp group if anyone could organize trick-or-treating across the community. The map went live the same day — home sign-ups, private self-serve controls for every family, an organizer panel — built with AI as the workbench.</p>
+      <div class="statgrid">
+        <div class="tool" style="margin:0; padding:18px 16px"><div style="font-size:28px; font-weight:800; color:var(--teal); line-height:1.1">Same day</div><div style="font-size:13.5px; margin-top:6px">from WhatsApp question to live site</div></div>
+        <div class="tool" style="margin:0; padding:18px 16px"><div style="font-size:28px; font-weight:800; color:var(--teal); line-height:1.1">122</div><div style="font-size:13.5px; margin-top:6px">homes signed up in four weeks</div></div>
+        <div class="tool" style="margin:0; padding:18px 16px"><div style="font-size:28px; font-weight:800; color:var(--teal); line-height:1.1">5</div><div style="font-size:13.5px; margin-top:6px">villages, feedback in two languages</div></div>
+      </div>
+      <p>Features the community asked for shipped within hours of the ask — the gate directions, the allergy-friendly teal pumpkins, the printable list. The approach: find the real problem, ship the smallest thing that solves it, iterate in public, and hand the keys to the people who will run it.</p>
     </div>
   </section>
 
