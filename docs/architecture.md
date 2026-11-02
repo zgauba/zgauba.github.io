@@ -4,8 +4,8 @@
 APP: zgauba.github.io (Jubail Commons monorepo)
 PRIMARY PURPOSE: Zee's networking pages + Jubail Island community tools
   (Halloween trick-or-treat map live; Jubail Commons platform in rebuild)
-LAST VERIFIED: 2026-11-02 (/manifest refresh — every [live] fact below re-queried
-  from running infra this date; Commons landing now live at /commons/, modules not yet built)
+LAST VERIFIED: 2026-11-03 (KG edits via /synthesize-audits — see docs/qa/SYNTHESIS-2026-11-03.md;
+  [live] facts last re-queried 2026-11-02; Commons landing live at /commons/, modules not yet built)
 COST-BEARING LAYERS: none — GitHub Pages, Supabase free tier, keyless map tiles.
 SOURCE-OF-TRUTH POLICY:
   [live] = queried from running infra. Re-query before assuming.
@@ -79,7 +79,11 @@ SOURCE-OF-TRUTH POLICY:
 ## Known gaps & drift
 
 1. **Historical `jh_` schema not in git** — only migrations from 2026-11-02 onward are mirrored into `supabase/signalpost/migrations/`; the ~24 earlier `jh_` migrations exist only in Supabase migration history. Backfill when convenient.
-2. **Season close-out pending** (deliberately deferred; do in this order): bake final village/treats numbers into dashboard.html → Export CSV → delete season-2026 rows (honors the "deleted after the season" promise) → new season label → unschedule `jh-hourly-snapshot`.
+2. **Season close-out pending** (deliberately deferred; do in this order): bake final village/treats numbers into dashboard.html → Export CSV → **record the final per-village split for the Commons Halloween-2026 baseline stats row** (watch the one-off "Marsa Al jubail" vs "Marfaa Al Jubail" spelling before quoting village counts) → delete season-2026 rows (honors the "deleted after the season" promise) → new season label → unschedule `jh-hourly-snapshot`. → Theme T1 in `docs/qa/SYNTHESIS-2026-11-03.md`.
 3. **Print button hidden** (`display:none`, listener still bound) pending community privacy consensus.
 4. **Unused `non_food` column** on jh_homes (superseded by `treats`); `jh_set_nonfood` grant revoked but function lingers.
-5. **Bio-page stats stale** — `/jubail/` says 122 homes; reconcile final count (live DB: 124 active + 3 removed; note one-off "Marsa Al jubail" village spelling vs "Marfaa Al Jubail" before quoting a village count).
+5. ~~**Bio-page stats stale** — `/jubail/` says 122 homes; reconcile final count.~~ ✓ **Resolved 2026-11-02** (PR #5 updated `/jubail/` to 124; spelling caveat moved into KG 2).
+6. **Obsolete Commons close function — do not apply.** The part-2 paste of `supabase/commons/migrations/20261102180000_foundation.sql` (`jc_season_close`) predates the 2026-11-03 archive-at-close decision; applying it would delete rows the product now keeps. Rewrite once against the archive model (snapshot stats → mark archived → delete nothing; purge = separate optional action). → Theme T2.
+7. **Docs state a superseded privacy posture.** CLAUDE.md and `docs/plans/backlog.md` still describe the zero-PII default; superseded 2026-11-03 (accounts + first-party-only privacy policy). Update both alongside the auth PR, with public disclosure — never silently. Stale backlog items: recovery PIN, optional-PII identity slots. → Theme T6.
+8. **JubailCommons free-tier auto-pause** — the project pauses after 7 idle days; resolve (upgrade or keep-alive) before invites go out. → Theme T6.
+9. **Admin-failure counter has no reader** — `jh_admin_fail_count` is write-only in practice; event-day checks are manual. Fold a reader into the Commons Reports panel / event-day checklist. → Theme T4.
