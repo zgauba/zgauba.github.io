@@ -34,7 +34,7 @@ SOURCE-OF-TRUTH POLICY:
 - [live] Supabase project **SignalPost** (`hrdmhifeynnokzjqtlsa`) — Jubail tables are prefixed `jh_`.
 - [live] All access via `security definer` RPCs (all pin `search_path=public`); REST base `https://hrdmhifeynnokzjqtlsa.supabase.co/rest/v1/rpc/`.
 - [live] Public RPCs (anon): jh_list, jh_signup (passcode-gated), jh_set_candy, jh_set_handout, jh_set_entrance, jh_set_treats, jh_set_details, jh_update_location, jh_remove, jh_get_note, jh_ack_note, jh_stats_list, jh_broadcast_get.
-- [live] Admin RPCs: organizer-code-gated; enumerated in the private ops doc, not here. Failed code checks are tar-pitted (1.5s sleep before BAD_ADMIN) and counted via the `jh_admin_fail_count` sequence (sequences survive the failed transaction's rollback) — see `supabase/migrations/20261102170000_jh_admin_tarpit.sql`.
+- [live] Admin RPCs: organizer-code-gated; enumerated in the private ops doc, not here. Failed code checks are tar-pitted (1.5s sleep before BAD_ADMIN) and counted via the `jh_admin_fail_count` sequence (sequences survive the failed transaction's rollback) — see `supabase/signalpost/migrations/20261102170000_jh_admin_tarpit.sql`.
 - [live] Internal-only (no anon/authenticated execute): jh_snapshot (pg_cron), jh_assert_admin, jh_backfill_prefixes, jh_set_nonfood (superseded).
 - [live] pg_cron: `jh-hourly-snapshot` (minute 5, active; last success 2026-11-02 16:05 UTC — fired cleanly after the RLS lockdown) → `jh_snapshot()` → `jh_stats`. Unschedule at season close-out.
 - [live] No other table or RPC in this Supabase project is anon/authenticated-accessible (verified 2026-11-02).
@@ -42,7 +42,7 @@ SOURCE-OF-TRUTH POLICY:
 
 ### LAYER — DATABASE
 - [live] Tables: `jh_homes` (unit, village, lat/lng, candy/handout/entrance/treats, notes, season, edit_token, removed, created_at), `jh_settings` (key/value: passcode, admin_code, season, broadcast), `jh_stats` (hourly snapshots; `both_kinds` — `both` is a Postgres reserved word).
-- [live] RLS enabled, zero policies (deny-all) on all three `jh_` tables; no anon/authenticated table grants. RPCs are the only access path. (`jh_stats` brought into line 2026-11-02 — see `supabase/migrations/20261102160000_jh_stats_rls_lockdown.sql`.)
+- [live] RLS enabled, zero policies (deny-all) on all three `jh_` tables; no anon/authenticated table grants. RPCs are the only access path. (`jh_stats` brought into line 2026-11-02 — see `supabase/signalpost/migrations/20261102160000_jh_stats_rls_lockdown.sql`.)
 - [live] Season model: rows tagged by `season` ('2026'); "New season" relabels the active season; 500-entry cap per season.
 - [live] Check constraints on home_type/handout/entrance; treats validated in RPC.
 
@@ -59,7 +59,7 @@ SOURCE-OF-TRUTH POLICY:
 
 ## SECTION — COMMONS (`commons/`) — not yet built
 
-- **Decision (2026-11-02): Commons gets its OWN Supabase project** — it does not share SignalPost. `jc_` prefix retained for clarity; migrations land in `supabase/migrations/` here before anything goes live.
+- **Decision (2026-11-02): Commons gets its OWN Supabase project** — **JubailCommons** (`qrpxfssdeeuzmsmlbtbu`, ap-south-1, created 2026-11-02). `jc_` prefix retained for clarity; migrations land in `supabase/commons/migrations/` here. Repo layout: one dir per remote project (`supabase/signalpost/`, `supabase/commons/`) so a migration can never be applied to the wrong database.
 - Per-community config + per-module feature flags, EN/AR + RTL, optional-PII identity slots — see `docs/plans/backlog.md`.
 
 ## LAYER — CI / CD (whole repo)
@@ -78,7 +78,7 @@ SOURCE-OF-TRUTH POLICY:
 
 ## Known gaps & drift
 
-1. **Historical `jh_` schema not in git** — only migrations from 2026-11-02 onward are mirrored into `supabase/migrations/`; the ~24 earlier `jh_` migrations exist only in Supabase migration history. Backfill when convenient.
+1. **Historical `jh_` schema not in git** — only migrations from 2026-11-02 onward are mirrored into `supabase/signalpost/migrations/`; the ~24 earlier `jh_` migrations exist only in Supabase migration history. Backfill when convenient.
 2. **Season close-out pending** (deliberately deferred; do in this order): bake final village/treats numbers into dashboard.html → Export CSV → delete season-2026 rows (honors the "deleted after the season" promise) → new season label → unschedule `jh-hourly-snapshot`.
 3. **Print button hidden** (`display:none`, listener still bound) pending community privacy consensus.
 4. **Unused `non_food` column** on jh_homes (superseded by `treats`); `jh_set_nonfood` grant revoked but function lingers.
