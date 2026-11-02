@@ -12,7 +12,7 @@ ONE repo, served by GitHub Pages as the user site, holding three things:
 | `jubail-halloween/` | 2026 Halloween trick-or-treat site (legacy, live) | /jubail-halloween/ |
 | `commons/` | **Jubail Commons** — the community platform rebuild (events, court bookings, pet directory) | /commons/ (when built) |
 
-**Jubail Commons** is the product: community-run events, facility booking, and pet directory for Jubail Island, Abu Dhabi. Platform name "Commons"; multi-community pattern is "⟨Community⟩ Commons". Backends: the legacy Halloween site uses Supabase project "SignalPost" (`hrdmhifeynnokzjqtlsa`, tables prefixed `jh_`); **Commons gets its own dedicated Supabase project** (decision 2026-11-02 — create it before any `jc_` table exists; never put `jc_` tables in SignalPost). Schema SQL lives in `supabase/migrations/` in this repo.
+**Jubail Commons** is the product: community-run events, facility booking, and pet directory for Jubail Island, Abu Dhabi. Platform name "Commons"; multi-community pattern is "⟨Community⟩ Commons". Backends: the legacy Halloween site uses Supabase project "SignalPost" (`hrdmhifeynnokzjqtlsa`, tables prefixed `jh_`); **Commons gets its own dedicated Supabase project** (**JubailCommons**, `qrpxfssdeeuzmsmlbtbu`, ap-south-1 — never put `jc_` tables in SignalPost). Schema SQL lives per-project in this repo: `supabase/signalpost/migrations/` and `supabase/commons/migrations/`.
 
 ## How to work in this repo
 
@@ -41,7 +41,7 @@ ONE repo, served by GitHub Pages as the user site, holding three things:
 
 - No package manager, no build step. Deploy = push to `main` → Pages → ~10 min CDN. Verify: `gh api repos/zgauba/zgauba.github.io/actions/runs`.
 - Local verification: Playwright with stubbed RPCs (CORS headers + OPTIONS 204 on stubs; chainable-Proxy `window.L` shim when the Leaflet CDN is unreachable).
-- Supabase changes via migrations; mirror each into `supabase/migrations/` here.
+- Supabase changes via migrations; mirror each into `supabase/<project>/migrations/` here (signalpost or commons — every migration's header comment names its target project ref).
 
 ## Where docs live
 

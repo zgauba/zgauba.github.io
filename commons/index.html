@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Jubail Commons</title>
+<meta name="description" content="Jubail Island community platform — events, bookings, pets. By neighbors, for neighbors.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌴</text></svg>">
+<link rel="stylesheet" href="assets/tokens.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0; background:var(--jc-bg); color:var(--jc-ink);
+  font:15px/1.6 var(--jc-font); -webkit-font-smoothing:antialiased; min-height:100vh}
+main{max-width:860px; margin:0 auto; padding:28px 18px 40px}
+header{display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:6px}
+h1{font-size:26px; font-weight:800; letter-spacing:-.01em; margin:0}
+.tagline{color:var(--jc-muted); margin:4px 0 26px; max-width:52ch}
+#langBtn{border:1px solid var(--jc-line); background:var(--jc-surface); color:var(--jc-ink);
+  border-radius:var(--jc-radius-pill); padding:7px 16px; font-size:13.5px; font-weight:700; cursor:pointer}
+#bcast{display:none; background:var(--jc-danger); color:#2d0808; border-radius:var(--jc-radius);
+  padding:10px 14px; font-weight:700; margin-bottom:16px}
+.cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px}
+.card{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius);
+  padding:18px 16px; display:flex; flex-direction:column; gap:8px}
+.card h2{font-size:17px; margin:0}
+.card p{margin:0; color:var(--jc-muted); font-size:13.5px; flex:1}
+.pill{align-self:flex-start; font-size:11.5px; font-weight:800; letter-spacing:.04em;
+  border-radius:var(--jc-radius-pill); padding:4px 10px; background:var(--jc-surface-2);
+  color:var(--jc-muted); border:1px solid var(--jc-line); text-transform:uppercase}
+a.go{align-self:flex-start; background:var(--jc-accent); color:var(--jc-accent-ink);
+  text-decoration:none; font-weight:800; font-size:13.5px; padding:9px 16px; border-radius:10px}
+.notice{color:var(--jc-faint); font-size:12px; margin:26px 0 0; line-height:1.7}
+.errbar{display:none; background:var(--jc-surface-2); border:1px solid var(--jc-line);
+  color:var(--jc-warn); border-radius:var(--jc-radius); padding:9px 13px; font-size:13px; margin:0 0 16px}
+footer{color:var(--jc-faint); font-size:12px; text-align:center; padding:10px 16px 24px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1 id="brand"></h1><p class="tagline" id="tagline"></p></div>
+    <button id="langBtn" type="button"></button>
+  </header>
+  <div id="bcast" role="alert"></div>
+  <p class="errbar" id="errbar"></p>
+  <div class="cards" id="cards"></div>
+  <p class="notice" id="privacy"></p>
+</main>
+<footer id="credit"></footer>
+
+<script src="assets/strings.js"></script>
+<script>
+/* Config comes from the community's row in the Commons backend (DB is the only
+   source of truth). These defaults render instantly and are overwritten — or
+   kept, with a visible notice — if the fetch fails. */
+var API = "https://qrpxfssdeeuzmsmlbtbu.supabase.co/rest/v1/rpc/";
+var KEY = "sb_publishable_cQKcp9tzYzeyrIO0Hzz6ZQ_jaxoq7QU"; /* publishable by design */
+var COMMUNITY = "jubail";
+
+var DEFAULT_CFG = {
+  name_en: "Jubail Commons", name_ar: "Jubail Commons",
+  modules: { events:{enabled:false}, bookings:{enabled:false}, pets:{enabled:false} },
+  links: { halloween_archive: "https://zgauba.github.io/jubail-halloween/" },
+  broadcast: ""
+};
+
+function el(id){ return document.getElementById(id); }
+function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+
+function moduleCard(key, enabled){
+  return '<div class="card"><h2>' + esc(jcT("module_" + key)) + '</h2>' +
+    '<p>' + esc(jcT("module_" + key + "_desc")) + '</p>' +
+    (enabled ? '<a class="go" href="' + esc(key) + '/">' + esc(jcT("archive_open")) + '</a>'
+             : '<span class="pill">' + esc(jcT("coming_soon")) + '</span>') + '</div>';
+}
+
+function render(cfg){
+  var lang = jcLang();
+  document.title = lang === "ar" ? cfg.name_ar || cfg.name_en : cfg.name_en;
+  el("brand").textContent = lang === "ar" ? (cfg.name_ar || cfg.name_en) : cfg.name_en;
+  el("tagline").textContent = jcT("tagline");
+  el("langBtn").textContent = jcT("toggle_label");
+  el("privacy").textContent = jcT("privacy_line");
+  el("credit").textContent = jcT("footer_credit");
+  var mods = cfg.modules || {};
+  var html = "";
+  ["events","bookings","pets"].forEach(function(k){
+    html += moduleCard(k, !!(mods[k] && mods[k].enabled));
+  });
+  /* config-sourced links must be https — blocks javascript:/data: schemes if a
+     config row were ever compromised (this page shares the github.io origin) */
+  var archiveUrl = (cfg.links && cfg.links.halloween_archive) || "";
+  if (!/^https:\/\//.test(archiveUrl)) archiveUrl = DEFAULT_CFG.links.halloween_archive;
+  html += '<div class="card"><h2>' + esc(jcT("archive_halloween")) + '</h2>' +
+    '<p>' + esc(jcT("archive_halloween_desc")) + '</p>' +
+    '<a class="go" target="_blank" rel="noopener" href="' + esc(archiveUrl) + '">' + esc(jcT("archive_open")) + '</a></div>';
+  el("cards").innerHTML = html;
+  var b = (cfg.broadcast || "").trim();
+  el("bcast").textContent = b ? "⚠️ " + b : "";
+  el("bcast").style.display = b ? "block" : "none";
+}
+
+var currentCfg = DEFAULT_CFG;
+
+function loadConfig(){
+  return fetch(API + "jc_config_get", {
+    method: "POST",
+    headers: { "apikey": KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ p_community: COMMUNITY })
+  }).then(function(r){
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }).then(function(cfg){
+    if (!cfg) throw new Error("empty");
+    currentCfg = cfg;
+    el("errbar").style.display = "none";
+    render(currentCfg);
+  }).catch(function(){
+    /* explicit failure state — never a silently blank page */
+    el("errbar").textContent = jcT("error_config");
+    el("errbar").style.display = "block";
+    render(currentCfg);
+  });
+}
+
+el("langBtn").addEventListener("click", function(){
+  jcSetLang(jcLang() === "ar" ? "en" : "ar");
+  render(currentCfg);
+});
+
+jcSetLang(jcLang());
+render(DEFAULT_CFG);
+loadConfig();
+</script>
+</body>
+</html>

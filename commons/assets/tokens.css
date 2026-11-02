@@ -1,0 +1,45 @@
+/* Jubail Commons — design tokens.
+   Three layers, by precedence:
+   1. :root            — platform-neutral defaults (PLACEHOLDER values; the
+                         branding pass replaces values, never variable names).
+   2. [data-community] — per-community overrides, applied at runtime from the
+                         community's config row (brand lives in the DB).
+   3. [data-theme]     — per-event overlays (e.g. haq-al-laila), applied on top.
+   Modules style against variables only — never raw colors. */
+
+:root{
+  /* surfaces */
+  --jc-bg:#101217;
+  --jc-surface:#1a1d24;
+  --jc-surface-2:#232732;
+  --jc-line:#343a48;
+  /* text */
+  --jc-ink:#f2f4f8;
+  --jc-muted:#9aa3b5;
+  --jc-faint:#6c7487;
+  /* roles */
+  --jc-accent:#d8a23a;        /* primary action / brand */
+  --jc-accent-ink:#1d1504;    /* text on accent */
+  --jc-good:#6fcf8f;
+  --jc-warn:#f0c060;
+  --jc-danger:#ef7b7b;
+  --jc-info:#58c4d4;          /* allergy-friendly / informational marker */
+  /* shape & type */
+  --jc-radius:14px;
+  --jc-radius-pill:999px;
+  --jc-font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Arabic",
+            "Geeza Pro",sans-serif;  /* one stack serves EN + AR */
+  --jc-font-display:var(--jc-font);
+}
+
+/* Event-theme overlay example (values land with the event module) */
+[data-theme="haq-al-laila"]{
+  --jc-bg:#131129;
+  --jc-surface:#1b1838;
+  --jc-accent:#e8c05a;
+}
+
+/* RTL: layout must flow from direction, not from side-specific rules.
+   Use margin-inline / padding-inline / inset-inline in all Commons CSS. */
+[dir="rtl"]{ --jc-dir:rtl; }
+[dir="ltr"]{ --jc-dir:ltr; }
