@@ -5,7 +5,7 @@ APP: zgauba.github.io (Jubail Commons monorepo)
 PRIMARY PURPOSE: Zee's networking pages + Jubail Island community tools
   (Halloween trick-or-treat map live; Jubail Commons platform in rebuild)
 LAST VERIFIED: 2026-11-02 (/manifest refresh — every [live] fact below re-queried
-  from running infra this date; Commons not yet built)
+  from running infra this date; Commons landing now live at /commons/, modules not yet built)
 COST-BEARING LAYERS: none — GitHub Pages, Supabase free tier, keyless map tiles.
 SOURCE-OF-TRUTH POLICY:
   [live] = queried from running infra. Re-query before assuming.
@@ -57,7 +57,7 @@ SOURCE-OF-TRUTH POLICY:
 - [live] None by design on the client. Server-side: Supabase edge logs (~24h retention) are the only traffic proxy; query recipes live in the private ops doc.
 - [live] `jh_stats` hourly snapshots (read via `jh_stats_list`).
 
-## SECTION — COMMONS (`commons/`) — not yet built
+## SECTION — COMMONS (`commons/`) — landing live, modules not yet built
 
 - **Decision (2026-11-02): Commons gets its OWN Supabase project** — **JubailCommons** (`qrpxfssdeeuzmsmlbtbu`, ap-south-1, created 2026-11-02). `jc_` prefix retained for clarity; migrations land in `supabase/commons/migrations/` here. Repo layout: one dir per remote project (`supabase/signalpost/`, `supabase/commons/`) so a migration can never be applied to the wrong database.
 - Per-community config + per-module feature flags, EN/AR + RTL, optional-PII identity slots — see `docs/plans/backlog.md`.
