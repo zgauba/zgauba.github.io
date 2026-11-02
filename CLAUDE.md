@@ -12,7 +12,7 @@ ONE repo, served by GitHub Pages as the user site, holding three things:
 | `jubail-halloween/` | 2026 Halloween trick-or-treat site (legacy, live) | /jubail-halloween/ |
 | `commons/` | **Jubail Commons** — the community platform rebuild (events, court bookings, pet directory) | /commons/ (when built) |
 
-**Jubail Commons** is the product: community-run events, facility booking, and pet directory for Jubail Island, Abu Dhabi. Platform name "Commons"; multi-community pattern is "⟨Community⟩ Commons". Backend: Supabase project "SignalPost" (`hrdmhifeynnokzjqtlsa`) — Halloween tables prefixed `jh_`, Commons tables prefixed `jc_`. Schema SQL for Commons lives in `supabase/migrations/` in this repo.
+**Jubail Commons** is the product: community-run events, facility booking, and pet directory for Jubail Island, Abu Dhabi. Platform name "Commons"; multi-community pattern is "⟨Community⟩ Commons". Backends: the legacy Halloween site uses Supabase project "SignalPost" (`hrdmhifeynnokzjqtlsa`, tables prefixed `jh_`); **Commons gets its own dedicated Supabase project** (decision 2026-11-02 — create it before any `jc_` table exists; never put `jc_` tables in SignalPost). Schema SQL lives in `supabase/migrations/` in this repo.
 
 ## How to work in this repo
 

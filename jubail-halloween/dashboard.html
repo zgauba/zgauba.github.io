@@ -141,8 +141,10 @@ function hideTip(){ tip.style.display = "none"; }
 })();
 
 /* ---- live home stats ---- */
+function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 function hbar(label, value, max, color){
   var pct = max > 0 ? Math.max(Math.round(value / max * 100), 2) : 2;
+  label = esc(label);
   return '<div class="hrow"><div class="hl" title="' + label + '">' + label + '</div>' +
     '<div class="htrack"><div class="hfill" style="width:' + pct + '%; background:' + color + '"></div>' +
     '<span class="hval">' + value + '</span></div></div>';
@@ -157,7 +159,7 @@ function refresh(){
       document.getElementById("tHomes").textContent = homes.length;
       document.getElementById("tOut").textContent = out;
 
-      var byV = {};
+      var byV = Object.create(null); // null prototype: a village named "constructor" etc. must stay plain data
       homes.forEach(function(h){ byV[h.village] = (byV[h.village] || 0) + 1; });
       var names = Object.keys(byV).sort(function(a, b){ return byV[b] - byV[a]; });
       var vmax = byV[names[0]] || 1;
