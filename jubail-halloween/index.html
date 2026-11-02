@@ -1,0 +1,1211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Jubail Trick-or-Treat</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#15101c">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Jubail Trick Or Treat">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎃</text></svg>">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap">
+<style>
+:root{
+  --bg:#15101c; --panel:#201a2b; --panel2:#2b2338; --line:#3a3150;
+  --fg:#f4eff8; --muted:#a79fbb;
+  --accent:#ff8a3d; --accent-soft:#ffb347;
+  --good:#7ddf8a; --out:#8d8798;
+  --radius:14px;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+html{-webkit-text-size-adjust:100%}
+body{-webkit-font-smoothing:antialiased;
+  background:var(--bg); color:var(--fg);
+  font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  display:flex; flex-direction:column; height:100vh; height:100dvh;
+}
+header{padding:calc(14px + env(safe-area-inset-top, 0px)) 16px 8px; background:linear-gradient(180deg,#241a2f,var(--bg)); border-bottom:1px solid var(--line)}
+/* Installed-app mode: extra cushion below the iPhone status bar */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  header{padding-top:calc(28px + env(safe-area-inset-top, 0px))}
+}
+header h1{margin:0; font-family:Fraunces,Georgia,serif; font-weight:700; font-size:21px; letter-spacing:.2px}
+header .sub{color:var(--muted); font-size:12.5px; margin-top:2px}
+header .sub b{color:var(--accent-soft); font-weight:600}
+nav{display:flex; gap:6px; padding:8px 12px; border-bottom:1px solid var(--line); background:var(--bg)}
+nav button{
+  flex:1; padding:9px 2px; border:1px solid var(--line); border-radius:999px;
+  background:var(--panel); color:var(--muted); font-size:12.5px; font-weight:600; cursor:pointer; white-space:nowrap;
+}
+nav button.on{background:var(--accent); border-color:var(--accent); color:#2b1405}
+main{flex:1; min-height:0; display:flex; flex-direction:column}
+section{display:none; padding:16px; overflow-y:auto}
+section.active{display:block}
+#sec-map{padding:0}
+#sec-map.active{display:flex; flex:1; position:relative; flex-direction:column; overflow:hidden}
+#map{flex:1; min-height:0}
+.map-overlay{position:absolute; left:10px; right:10px; bottom:calc(10px + env(safe-area-inset-bottom,0px)); z-index:900; display:flex; gap:6px; flex-wrap:wrap; pointer-events:none}
+.chip{pointer-events:auto; background:rgba(26,20,36,.92); border:1px solid var(--line); border-radius:999px; padding:5px 11px; font-size:12px; color:var(--fg)}
+.chip .dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px}
+.dot-on{background:var(--accent)} .dot-off{background:var(--out)}
+#refreshBtn{position:absolute; top:10px; right:10px; z-index:900; width:40px; height:40px; border-radius:50%; border:1px solid var(--line); background:rgba(26,20,36,.92); color:var(--fg); font-size:18px; cursor:pointer}
+#locBtn{position:absolute; top:58px; right:10px; z-index:900; width:40px; height:40px; border-radius:50%; border:1px solid var(--line); background:rgba(26,20,36,.92); font-size:17px; cursor:pointer}
+#locBtn.on{background:#4aa3ff; border-color:#4aa3ff}
+.me-dot{width:16px; height:16px; border-radius:50%; background:#4aa3ff; border:3px solid #fff; box-shadow:0 0 0 0 rgba(74,163,255,.55); animation:mepulse 2s infinite}
+@keyframes mepulse{to{box-shadow:0 0 0 14px rgba(74,163,255,0)}}
+@media (prefers-reduced-motion:reduce){ .me-dot{animation:none} }
+.dist{color:var(--accent-soft); font-size:11.5px; font-weight:700; white-space:nowrap}
+#moveBanner{position:absolute; top:10px; left:10px; right:58px; z-index:900; background:var(--accent); color:#2b1405; border-radius:var(--radius); padding:10px 12px; font-size:13.5px; font-weight:600; display:none}
+#bcast{display:none; background:#F87171; color:#2d0808; padding:10px 16px; font-size:14px; font-weight:700; line-height:1.45; text-align:center}
+#moveBanner button{float:right; border:0; background:#2b1405; color:#ffd9b8; border-radius:8px; padding:3px 10px; font-size:12px; cursor:pointer}
+/* Dark-mode filter over the light OSM tiles (street mode only; satellite stays natural) */
+.streetmode .leaflet-tile-pane{filter:invert(1) hue-rotate(200deg) brightness(.85) contrast(.9) saturate(.6)}
+.pin{position:relative; width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; background:var(--accent); border:2.5px solid #fff; box-shadow:0 2px 8px rgba(0,0,0,.5)}
+.tealpump{display:inline-block; filter:hue-rotate(145deg) saturate(1.5)}
+.pin.out{background:var(--out); opacity:.8}
+.pin.e-garden{border-color:#7ddf8a}
+.pin.e-both{border-color:#fff #7ddf8a #7ddf8a #fff}
+.ent-pill{font-size:10.5px; font-weight:800; border-radius:999px; padding:3px 8px; white-space:nowrap}
+.ent-front{background:var(--panel2); color:#c9c4d4; border:1px solid var(--line)}
+.ent-garden{background:rgba(125,223,138,.15); color:var(--good); border:1px solid rgba(125,223,138,.35)}
+.ent-both{background:linear-gradient(100deg, rgba(255,255,255,.12) 50%, rgba(125,223,138,.2) 50%); color:var(--good); border:1px solid rgba(125,223,138,.5)}
+.ring{display:inline-block; width:13px; height:13px; border-radius:50%; background:var(--accent); border:2.5px solid #fff; margin-right:5px; vertical-align:-2px}
+.ring.g{border-color:#7ddf8a}
+.ring.b{border-color:#fff #7ddf8a #7ddf8a #fff}
+.nf-pill{background:rgba(45,212,191,.13); color:#5eead4; border:1px solid rgba(45,212,191,.4)}
+.leaflet-popup-content-wrapper{background:var(--panel2); color:var(--fg); border-radius:12px}
+.leaflet-popup-tip{background:var(--panel2)}
+.leaflet-popup-content{margin:12px 14px; font:13.5px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.pop-title{font-weight:700; font-size:15px}
+.pop-sub{color:var(--muted); font-size:12px; margin:2px 0 6px}
+.pop-note{margin:6px 0; color:#d9d2e6}
+.pop-out{color:#f0a9a9; font-weight:600}
+.gobtn{display:inline-block; margin-top:8px; background:var(--accent); color:#2b1405!important; font-weight:700; padding:7px 12px; border-radius:9px; text-decoration:none; font-size:13px}
+h2{font-family:Fraunces,Georgia,serif; font-size:18px; margin:2px 0 12px}
+.village{margin-bottom:18px}
+.village h3{font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--accent-soft); margin:0 0 8px; font-weight:700}
+.row{display:flex; align-items:center; gap:10px; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; margin-bottom:8px; flex-wrap:wrap}
+.row .ic{font-size:20px}
+.row .meta{flex:1; min-width:120px}
+.row .meta .u{font-weight:700}
+.row .meta .d{color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:52vw}
+.row.outrow{opacity:.55}
+.row.rmrow .u{text-decoration:line-through}
+.row a,.mini{border:1px solid var(--line); background:var(--panel2); color:var(--fg); border-radius:9px; padding:6px 10px; font-size:12px; text-decoration:none; cursor:pointer}
+.status{font-size:11px; font-weight:700; border-radius:999px; padding:3px 8px}
+.st-on{background:rgba(125,223,138,.15); color:var(--good)}
+.st-off{background:rgba(141,135,152,.2); color:#c9c4d4}
+form .field,.field{margin-bottom:14px}
+label{display:block; font-size:12.5px; font-weight:600; color:var(--muted); margin-bottom:6px; letter-spacing:.02em}
+input[type=text],textarea,select{width:100%; background:var(--panel); border:1px solid var(--line); border-radius:11px; color:var(--fg); padding:11px 12px; font-size:15px; color-scheme:dark}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--accent); outline-offset:0; border-color:var(--accent)}
+select{appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23a79fbb' stroke-width='2' fill='none'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 14px center}
+select:invalid{color:var(--muted)}
+textarea{min-height:64px; resize:vertical; font-family:inherit}
+.seg{display:flex; gap:7px; flex-wrap:wrap}
+.seg input{position:absolute; opacity:0; pointer-events:none}
+.seg span{display:inline-block; padding:9px 13px; border-radius:999px; border:1px solid var(--line); background:var(--panel); font-size:13.5px; cursor:pointer}
+.seg input:checked+span{background:var(--accent); border-color:var(--accent); color:#2b1405; font-weight:700}
+.seg input:focus-visible+span{outline:2px solid var(--accent-soft)}
+#pickmap{height:260px; border-radius:var(--radius); border:1px solid var(--line)}
+.locrow{display:flex; gap:8px; margin-top:8px; align-items:center; flex-wrap:wrap}
+.btn{border:0; border-radius:11px; padding:12px 16px; font-size:15px; font-weight:700; cursor:pointer}
+.btn-primary{background:var(--accent); color:#2b1405; width:100%}
+.btn-ghost{background:var(--panel2); color:var(--fg); border:1px solid var(--line); font-size:13px; padding:9px 12px}
+.btn[disabled]{opacity:.55}
+.hint{color:var(--muted); font-size:12px}
+.privacy{color:var(--muted); font-size:12px; margin:10px 0 14px}
+.card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px; margin-bottom:12px}
+.card .t{font-weight:700; font-size:16px}
+.card .s{color:var(--muted); font-size:12.5px; margin:2px 0 10px}
+.bigtoggle{width:100%; border:0; border-radius:12px; padding:14px; font-size:15px; font-weight:800; cursor:pointer; margin-bottom:9px}
+.tg-on{background:rgba(125,223,138,.15); color:var(--good); border:1.5px solid rgba(125,223,138,.4)}
+.tg-off{background:rgba(255,138,61,.12); color:var(--accent-soft); border:1.5px solid rgba(255,138,61,.45)}
+.cardbtns{display:flex; gap:8px; flex-wrap:wrap}
+.cardbtns button{flex:1; min-width:110px}
+.empty{color:var(--muted); text-align:center; padding:30px 10px; font-size:14px}
+.notice{background:rgba(255,179,71,.07); border:1px solid rgba(255,179,71,.35); border-radius:var(--radius); padding:11px 14px; margin-bottom:14px}
+.notice summary{cursor:pointer; font-weight:700; color:var(--accent-soft); font-size:13.5px; list-style-position:inside}
+.notice ul{margin:8px 0 0; padding-left:20px; color:#d9d2e6; font-size:13px}
+.notice li{margin-bottom:5px}
+.adminbar{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}
+.adminbar button{flex:1; min-width:120px}
+.inlineform{display:none; margin-bottom:12px}
+.inlineform.open{display:block}
+#toast{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(24px + env(safe-area-inset-bottom,0px)); background:#efe8f7; color:#241a2f; padding:11px 18px; border-radius:999px; font-size:13.5px; font-weight:600; z-index:2000; display:none; max-width:88vw; text-align:center; box-shadow:0 6px 24px rgba(0,0,0,.5)}
+footer{padding:10px 16px calc(12px + env(safe-area-inset-bottom,0px)); color:#6f6885; font-size:11px; text-align:center}
+.printhead{display:none}
+.pmapwrap{display:none}
+.pnum{display:none}
+@media print{
+  .pmapwrap{display:block; margin:0 0 8px; break-inside:avoid; page-break-inside:avoid}
+  .pnum{display:inline; font-weight:800; margin-right:4px}
+  body{background:#fff !important; color:#000}
+  header, nav, footer, #sec-map, #sec-signup, #sec-mine, #sec-admin, .notice, .printrow, .row a, .dist, #toast, #listwrap p.hint{display:none !important}
+  main{padding:0}
+  #sec-list{display:block !important}
+  #sec-list h2{display:none}
+  .printhead{display:block; font-size:15px; font-weight:800; color:#000; margin:0 0 10px}
+  .printhead .sub2{font-weight:400; font-size:11px; color:#444; margin-top:2px}
+  .village h3{color:#000}
+  .village{break-inside:auto}
+  .row{background:#fff !important; border:1px solid #bbb; break-inside:avoid; page-break-inside:avoid}
+  .row .meta .u{color:#000}
+  .row .meta .d{color:#444 !important; max-width:none; white-space:normal}
+  .row.outrow{opacity:1}
+  .ent-pill{background:#fff !important; color:#000 !important; border:1px solid #999 !important}
+  .status{background:#fff !important; color:#000 !important; border:1px solid #999}
+}
+@media (prefers-reduced-motion:no-preference){ nav button,.btn,.seg span{transition:background .15s,color .15s} }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎃 Jubail Trick-or-Treat</h1>
+  <div class="sub">Sat <b>Oct 31</b> · <b>5–8 PM</b> · <span id="counts">loading…</span></div>
+</header>
+<div id="bcast" role="alert"></div>
+<nav>
+  <button id="tab-map" class="on">🗺️ Map</button>
+  <button id="tab-list">📋 List</button>
+  <button id="tab-signup">➕ Sign up</button>
+  <button id="tab-mine">🏠 Mine</button>
+  <button id="tab-admin" style="display:none">🛠️</button>
+</nav>
+<main>
+  <section id="sec-map" class="active">
+    <div id="map"></div>
+    <button id="refreshBtn" title="Refresh">⟳</button>
+    <button id="locBtn" title="Show my location">📍</button>
+    <div id="moveBanner">Tap the map to set the new pin location <button id="moveCancel">Cancel</button></div>
+    <div class="map-overlay">
+      <button class="chip" id="baseToggle" style="font-weight:700">🗺️ Streets</button>
+      <span class="chip"><span class="dot dot-on"></span>Treats available</span>
+      <span class="chip"><span class="dot dot-off"></span>Out of treats</span>
+      <span class="chip"><span class="ring"></span>Front Gate</span>
+      <span class="chip"><span class="ring g"></span>Garden Gate</span>
+      <span class="chip"><span class="ring b"></span>Both Gates</span>
+      <span class="chip">🍬 Candy</span>
+      <span class="chip"><span class="tealpump">🎃</span> Non-food treats</span>
+    </div>
+  </section>
+
+  <section id="sec-list">
+    <h2>Participating homes</h2>
+    <!-- Print button hidden for now (keep display:none so the JS listener still binds; set to flex to re-enable) -->
+    <div class="locrow printrow" style="margin:0 0 10px; display:none"><button type="button" class="btn btn-ghost" id="printBtn">🖨️ Print this list</button><span class="hint">ink-friendly version for walking the neighborhood</span></div>
+    <div class="printhead">🎃 Jubail Trick-or-Treat — Sat Oct 31 · 5–8 PM<div class="sub2">Printed copy — treats can run out during the night; live map &amp; status: zgauba.github.io/jubail-halloween</div></div>
+    <details class="notice">
+      <summary>📢 Community reminder — decorations allowed Oct 21 – Nov 10</summary>
+      <ul>
+        <li>Halloween decorations may go up from <b>21 October</b> and must come down by <b>10 November</b></li>
+        <li>Keep decorations within your own plot — not on public pathways, walkways, landscaping, roadsides or other shared spaces</li>
+        <li>Keep them family-friendly — Jubail is home to families and young children</li>
+      </ul>
+      <p class="hint" style="margin:8px 0 0">Summary of the Jubail Island community management announcement, per the Master Community Homeowner Guidelines.</p>
+    </details>
+    <div id="listwrap"><div class="empty">Loading…</div></div>
+  </section>
+
+  <section id="sec-signup">
+    <h2>Add your home to the map</h2>
+    <details class="notice">
+      <summary>📢 Community reminder — decorations allowed Oct 21 – Nov 10</summary>
+      <ul>
+        <li>Halloween decorations may go up from <b>21 October</b> and must come down by <b>10 November</b></li>
+        <li>Keep decorations within your own plot — not on public pathways, walkways, landscaping, roadsides or other shared spaces</li>
+        <li>Keep them family-friendly — Jubail is home to families and young children</li>
+      </ul>
+      <p class="hint" style="margin:8px 0 0">Summary of the Jubail Island community management announcement, per the Master Community Homeowner Guidelines.</p>
+    </details>
+    <form id="signupForm">
+      <div class="field">
+        <label>Home type</label>
+        <div class="seg">
+          <label><input type="radio" name="htype" value="villa" checked><span>🏠 Villa</span></label>
+          <label><input type="radio" name="htype" value="townhouse"><span>🏘️ Townhouse</span></label>
+          <label><input type="radio" name="htype" value="apartment"><span>🏢 Apartment</span></label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="village">Village / area</label>
+        <select id="village">
+          <option value="" disabled selected>Select your village…</option>
+          <option value="Ain Al Maha">Ain Al Maha</option>
+          <option value="Bada Al Jubail">Bada Al Jubail</option>
+          <option value="Marfaa Al Jubail">Marfaa Al Jubail</option>
+          <option value="Nad Al Dhabi">Nad Al Dhabi</option>
+          <option value="Seef Al Jubail">Seef Al Jubail</option>
+          <option value="Souk Al Jubail">Souk Al Jubail</option>
+          <option value="__other">Other…</option>
+        </select>
+        <input type="text" id="villageOther" placeholder="Type your village / area" autocomplete="off" style="display:none; margin-top:8px">
+      </div>
+      <div class="field">
+        <label for="unit">Villa / unit number</label>
+        <input type="text" id="unit" placeholder="e.g. 206 — or Apt 203, Bldg 4">
+      </div>
+      <div class="field">
+        <label>On the night, treats are…</label>
+        <div class="seg">
+          <label><input type="radio" name="handout" value="door" checked><span>🔔 We'll hand them out in person</span></label>
+          <label><input type="radio" name="handout" value="self_serve"><span>🧺 Self-serve — we'll leave treats out</span></label>
+        </div>
+      </div>
+      <div class="field">
+        <label>Kids should come to…</label>
+        <div class="seg">
+          <label><input type="radio" name="entrance" value="front" checked><span>🚪 Front Gate</span></label>
+          <label><input type="radio" name="entrance" value="garden"><span>🌳 Garden Gate (park side)</span></label>
+          <label><input type="radio" name="entrance" value="both"><span>🚪🌳 Both Gates</span></label>
+        </div>
+      </div>
+      <div class="field">
+        <label>What will you hand out?</label>
+        <div class="seg">
+          <label><input type="radio" name="treats" value="candy" checked><span>🍬 Candy only</span></label>
+          <label><input type="radio" name="treats" value="non_food"><span><span class="tealpump">🎃</span> Non-food treats only — no candy (stickers, toys — allergy-friendly)</span></label>
+          <label><input type="radio" name="treats" value="both"><span>🍬<span class="tealpump">🎃</span> Both — candy + non-food treats</span></label>
+        </div>
+      </div>
+      <div class="field">
+        <label for="details">Notes for visitors (optional)</label>
+        <textarea id="details" placeholder="e.g. use the garden gate on the Seef Park side · building entrance info · stroller-friendly path…"></textarea>
+      </div>
+      <div class="field">
+        <label>Pin your home on the map</label>
+        <div id="pickmap"></div>
+        <div class="locrow">
+          <button type="button" class="btn btn-ghost" id="geoBtn">📍 Use my current location</button>
+          <span class="hint">or tap / drag the pin — for apartments, pin the building entrance</span>
+        </div>
+        <div class="hint" id="coordStatus" style="margin-top:6px">No pin set yet</div>
+        <div class="locrow" style="margin-top:10px">
+          <input type="text" id="coordPaste" placeholder="Not home? Paste Google Maps coordinates here" autocomplete="off" style="flex:1; min-width:180px">
+          <button type="button" class="btn btn-ghost" id="coordBtn">Set pin</button>
+        </div>
+        <div class="hint" style="margin-top:6px">In Google Maps: press and hold on your home → tap the coordinates that appear → copy → paste here.</div>
+      </div>
+      <div class="field">
+        <label for="passcode">Group passcode</label>
+        <input type="text" id="passcode" placeholder="Shared in the WhatsApp group" autocomplete="off">
+      </div>
+      <p class="privacy">Only your unit number, village and pin location are stored — no names or phone numbers. Everything is deleted after Halloween.</p>
+      <button class="btn btn-primary" id="submitBtn" type="submit">Put us on the map 🍬</button>
+    </form>
+  </section>
+
+  <section id="sec-mine">
+    <h2>My home — your night-of controls</h2>
+    <p class="hint" style="margin:-6px 0 14px">Everything about your own sign-up lives here: your treats status, your pin, and your private control link.</p>
+    <details class="notice">
+      <summary>📢 Community reminder — decorations allowed Oct 21 – Nov 10</summary>
+      <ul>
+        <li>Halloween decorations may go up from <b>21 October</b> and must come down by <b>10 November</b></li>
+        <li>Keep decorations within your own plot — not on public pathways, walkways, landscaping, roadsides or other shared spaces</li>
+        <li>Keep them family-friendly — Jubail is home to families and young children</li>
+      </ul>
+      <p class="hint" style="margin:8px 0 0">Summary of the Jubail Island community management announcement, per the Master Community Homeowner Guidelines.</p>
+    </details>
+    <div id="minewrap"></div>
+    <div class="card" style="margin-top:12px">
+      <div class="t">🔗 Have a control link?</div>
+      <div class="s">If you signed up on another phone or in Safari before installing the app, paste your control link here to bring your home's buttons to this screen.</div>
+      <input type="text" id="linkPaste" placeholder="Paste your control link" autocomplete="off">
+      <button class="btn btn-ghost" id="linkAdd" style="width:100%; margin-top:8px">Add my home here</button>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="t">📲 Save this as an app</div>
+      <div class="s" id="installSteps"></div>
+      <button class="btn btn-ghost" id="installBtn" style="width:100%">Add to home screen</button>
+      <p class="hint" id="installHint" style="display:none; margin:8px 0 0"></p>
+    </div>
+  </section>
+
+  <section id="sec-admin">
+    <h2>🛠️ Organizer panel</h2>
+    <div id="adminLock">
+      <div class="field">
+        <label for="adminCodeInput">Organizer code</label>
+        <input type="text" id="adminCodeInput" placeholder="Shared privately between organizers" autocomplete="off">
+      </div>
+      <button class="btn btn-primary" id="adminUnlock">Unlock</button>
+    </div>
+    <div id="adminPanel" style="display:none"></div>
+  </section>
+</main>
+<div id="toast"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+var API = "https://hrdmhifeynnokzjqtlsa.supabase.co/rest/v1/rpc/";
+var KEY = "sb_publishable_7sJZM9wi5XmXEU0_t4e5uQ_WdfF05_s";
+var BASE = location.origin + location.pathname;
+var homes = [];
+var myHomes = [];
+var map, pickMap, pickMarker, markerLayer;
+var moveMode = null;
+var didFit = false;
+var CENTER = [24.552, 54.49];
+var adminCode = null;
+var adminData = null;
+var pendingManage = null;
+var editNotesId = null;
+var orgNotes = {};
+var adminNoteId = null;
+var userPos = null, userMarker = null, userAcc = null, geoWatchId = null, lastListPos = null;
+var listSortMode = "near"; // when location is on: "near" (distance) or "num" (house number)
+function unitNum(h){
+  var m = String(h.unit || "").match(/\d+/);
+  return m ? parseInt(m[0], 10) : Infinity;
+}
+function byUnitNum(a, b){
+  var na = unitNum(a), nb = unitNum(b);
+  if (na !== nb) return na - nb;
+  return String(a.unit).localeCompare(String(b.unit));
+}
+
+try { myHomes = JSON.parse(localStorage.getItem("jh_homes_v1") || "[]"); } catch(e){ myHomes = []; }
+try { adminCode = localStorage.getItem("jh_admin_code"); } catch(e){}
+function saveMine(){ try { localStorage.setItem("jh_homes_v1", JSON.stringify(myHomes)); } catch(e){} }
+
+var qp = new URLSearchParams(location.search);
+if (qp.get("m")) { var mp = qp.get("m").split("~"); if (mp.length === 2) pendingManage = { id: mp[0], token: mp[1] }; }
+var adminWanted = qp.has("admin");
+if (adminWanted || adminCode) document.getElementById("tab-admin").style.display = "";
+if (qp.get("m") !== null || adminWanted) { try { history.replaceState(null, "", location.pathname); } catch(e){} }
+
+function rpc(name, args){
+  return fetch(API + name, {
+    method: "POST",
+    headers: { "apikey": KEY, "Content-Type": "application/json" },
+    body: JSON.stringify(args || {})
+  }).then(function(r){
+    return r.text().then(function(t){
+      var j = null; try { j = t ? JSON.parse(t) : null; } catch(e){}
+      if (!r.ok) { var msg = (j && (j.message || j.error)) || ("HTTP " + r.status); throw new Error(msg); }
+      return j;
+    });
+  });
+}
+
+function toast(msg){
+  var el = document.getElementById("toast");
+  el.textContent = msg; el.style.display = "block";
+  clearTimeout(el._t); el._t = setTimeout(function(){ el.style.display = "none"; }, 3400);
+}
+
+function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+function typeIcon(t){ return t === "villa" ? "🏠" : t === "townhouse" ? "🏘️" : "🏢"; }
+function typeLabel(t){ return t.charAt(0).toUpperCase() + t.slice(1); }
+function gmaps(h){ return "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(h.lat + "," + h.lng) + "&dir_action=navigate&travelmode=walking"; }
+function distTo(h){ return userPos ? userPos.distanceTo(L.latLng(h.lat, h.lng)) : null; }
+function entClass(h){ return h.entrance === "garden" ? " e-garden" : h.entrance === "both" ? " e-both" : ""; }
+function entLabel(h){ return h.entrance === "garden" ? "🌳 Garden Gate (park side)" : h.entrance === "both" ? "🚪🌳 Both Gates (front & garden)" : "🚪 Front Gate"; }
+function entPill(h){
+  if (h.entrance === "garden") return '<span class="ent-pill ent-garden">🌳 Garden Gate</span>';
+  if (h.entrance === "both") return '<span class="ent-pill ent-both">🚪🌳 Both Gates</span>';
+  return '<span class="ent-pill ent-front">🚪 Front Gate</span>';
+}
+function treatGlyph(h){
+  if (h.treats === "non_food") return '<span class="tealpump">🎃</span>';
+  if (h.treats === "both") return '🍬<span class="tealpump">🎃</span>';
+  return "🍬";
+}
+function fmtDist(m){ return m < 950 ? (Math.max(10, Math.round(m / 10) * 10) + " m") : ((m / 1000).toFixed(1) + " km"); }
+function gpin(h){ return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(h.lat + "," + h.lng); }
+function manageLink(m){ return BASE + "?m=" + m.id + "~" + m.token; }
+
+function copyText(t){
+  function fb(){
+    var ta = document.createElement("textarea");
+    ta.value = t; document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); toast("Link copied ✓"); } catch(e){ toast(t); }
+    document.body.removeChild(ta);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(t).then(function(){ toast("Link copied ✓"); }, fb);
+  } else fb();
+}
+
+var OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+var OSM_ATTR = "&copy; OpenStreetMap contributors";
+var SAT_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+var SAT_ATTR = "Imagery &copy; Esri, Maxar, Earthstar Geographics";
+var baseMode = "sat";
+try { baseMode = localStorage.getItem("jh_basemap") || "sat"; } catch(e){}
+var baseMain = null, basePick = null;
+
+function baseLayer(){
+  return baseMode === "sat"
+    ? L.tileLayer(SAT_URL, { maxNativeZoom: 19, maxZoom: 20, attribution: SAT_ATTR })
+    : L.tileLayer(OSM_URL, { maxZoom: 19, attribution: OSM_ATTR });
+}
+function applyBase(){
+  if (map) { if (baseMain) { map.removeLayer(baseMain); } baseMain = baseLayer().addTo(map); }
+  if (pickMap) { if (basePick) { pickMap.removeLayer(basePick); } basePick = baseLayer().addTo(pickMap); }
+  document.getElementById("map").classList.toggle("streetmode", baseMode !== "sat");
+  document.getElementById("pickmap").classList.toggle("streetmode", baseMode !== "sat");
+  var bt = document.getElementById("baseToggle");
+  if (bt) bt.textContent = baseMode === "sat" ? "🗺️ Streets" : "🛰️ Satellite";
+  try { localStorage.setItem("jh_basemap", baseMode); } catch(e){}
+}
+
+function initMap(){
+  map = L.map("map", { zoomControl: true }).setView(CENTER, 13);
+  applyBase();
+  markerLayer = L.layerGroup().addTo(map);
+  map.on("click", function(ev){
+    if (!moveMode) return;
+    var mm = moveMode;
+    if (mm.adminId) {
+      rpc("jh_admin_set_location", { p_code: adminCode, p_id: mm.adminId, p_lat: ev.latlng.lat, p_lng: ev.latlng.lng })
+        .then(function(ok){
+          if (ok) { toast("Pin updated ✓"); } else { toast("Couldn't update — entry not found"); }
+          endMove(); loadHomes(); adminLoad();
+        })
+        .catch(function(){ toast("Couldn't update pin — try again"); endMove(); });
+      return;
+    }
+    rpc("jh_update_location", { p_id: mm.id, p_token: mm.token, p_lat: ev.latlng.lat, p_lng: ev.latlng.lng })
+      .then(function(ok){
+        if (ok) { toast("Pin updated ✓"); } else { toast("Couldn't update — entry not found"); }
+        endMove(); loadHomes();
+      })
+      .catch(function(){ toast("Couldn't update pin — try again"); endMove(); });
+  });
+}
+
+function endMove(){ moveMode = null; document.getElementById("moveBanner").style.display = "none"; }
+
+function parseLatLng(raw){
+  var m = raw.match(/@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/) ||
+          raw.match(/[?&](?:q|query|destination|ll)=(-?\d{1,2}\.\d+)(?:,|%2C)(-?\d{1,3}\.\d+)/) ||
+          raw.match(/(-?\d{1,2}\.\d{3,})[,\s]+(-?\d{1,3}\.\d{3,})/);
+  if (!m) return null;
+  return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+}
+
+function renderMap(){
+  if (!map) return;
+  markerLayer.clearLayers();
+  homes.forEach(function(h){
+    var cls = (h.out_of_candy ? "pin out" : "pin") + entClass(h);
+    var em = h.out_of_candy ? "🚫" :
+      (h.treats === "both" ? '<span style="font-size:11.5px; letter-spacing:-2px">' + treatGlyph(h) + '</span>' : treatGlyph(h));
+    var icon = L.divIcon({ className: "", html: '<div class="' + cls + '">' + em + "</div>", iconSize: [34,34], iconAnchor: [17,17] });
+    var pop = '<div class="pop-title">' + typeIcon(h.home_type) + " " + esc(h.unit) + '</div>' +
+      '<div class="pop-sub">' + esc(h.village) + " · " + typeLabel(h.home_type) + '</div>' +
+      (h.out_of_candy ? '<div class="pop-out">🚫 Out of treats</div>' :
+        '<div>' + (h.handout === "door" ? "🔔 Treats handed out in person" : "🧺 Self-serve — help yourself") + '</div>') +
+      '<div class="pop-sub" style="margin-top:4px">' + entLabel(h) + '</div>' +
+      (h.treats === "non_food" ? '<div style="margin-top:5px"><span class="ent-pill nf-pill">🎃 Non-food treats (allergy-friendly)</span></div>' :
+       h.treats === "both" ? '<div style="margin-top:5px"><span class="ent-pill nf-pill">🍬🎃 Candy + non-food treats</span></div>' : "") +
+      (h.details ? '<div class="pop-note">💬 ' + esc(h.details) + '</div>' : "") +
+      (distTo(h) !== null ? '<div class="pop-sub" style="margin-top:4px">📍 ≈ ' + fmtDist(distTo(h)) + ' from you</div>' : "") +
+      '<a class="gobtn" target="_blank" rel="noopener" href="' + gmaps(h) + '">Directions ➜</a>' +
+      ' <a class="gobtn" style="background:var(--panel); color:var(--fg)!important; border:1px solid var(--line)" target="_blank" rel="noopener" href="' + gpin(h) + '">📍 View pin</a>';
+    L.marker([h.lat, h.lng], { icon: icon }).bindPopup(pop).addTo(markerLayer);
+  });
+  if (!didFit && homes.length > 0) {
+    didFit = true;
+    var b = L.latLngBounds(homes.map(function(h){ return [h.lat, h.lng]; }));
+    map.fitBounds(b.pad(0.25), { maxZoom: 15 });
+  }
+}
+
+function renderCounts(){
+  var active = homes.filter(function(h){ return !h.out_of_candy; }).length;
+  document.getElementById("counts").textContent = homes.length === 0 ? "no homes yet — be the first!" : (homes.length + " homes · " + active + " with treats");
+}
+
+function villagePrintMap(list){
+  if (list.length === 0) return "";
+  var minLa = 90, maxLa = -90, minLo = 180, maxLo = -180;
+  list.forEach(function(h){
+    if (h.lat < minLa) minLa = h.lat; if (h.lat > maxLa) maxLa = h.lat;
+    if (h.lng < minLo) minLo = h.lng; if (h.lng > maxLo) maxLo = h.lng;
+  });
+  var padLa = Math.max((maxLa - minLa) * 0.15, 0.0004);
+  var padLo = Math.max((maxLo - minLo) * 0.15, 0.0004);
+  minLa -= padLa; maxLa += padLa; minLo -= padLo; maxLo += padLo;
+  var mPerLa = 111320, mPerLo = 111320 * Math.cos(24.535 * Math.PI / 180);
+  var wM = (maxLo - minLo) * mPerLo, hM = (maxLa - minLa) * mPerLa;
+  var sc = Math.min(660 / wM, 250 / hM);
+  var W = Math.max(Math.round(wM * sc), 120), H = Math.max(Math.round(hM * sc), 80);
+  var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%; max-width:' + W + 'px; height:auto; display:block">';
+  svg += '<rect x="0.5" y="0.5" width="' + (W - 1) + '" height="' + (H - 1) + '" fill="#fff" stroke="#bbb"/>';
+  list.forEach(function(h, i){
+    var x = ((h.lng - minLo) / (maxLo - minLo)) * W;
+    var y = (1 - (h.lat - minLa) / (maxLa - minLa)) * H;
+    svg += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="8" fill="' + (h.out_of_candy ? "#ddd" : "#fff") + '" stroke="#000" stroke-width="1.2"></circle>';
+    svg += '<text x="' + x.toFixed(1) + '" y="' + (y + 2.6).toFixed(1) + '" text-anchor="middle" font-size="7.5" font-weight="700" fill="#000" font-family="Arial, sans-serif">' + (i + 1) + '</text>';
+  });
+  svg += '<text x="6" y="' + (H - 6) + '" font-size="7" fill="#666" font-family="Arial, sans-serif">North is up · numbers match the list below</text>';
+  svg += '</svg>';
+  return '<div class="pmapwrap">' + svg + '</div>';
+}
+
+function renderList(){
+  var wrap = document.getElementById("listwrap");
+  if (homes.length === 0) { wrap.innerHTML = '<div class="empty">No homes have signed up yet.<br>Be the first — takes 30 seconds! 🍬</div>'; return; }
+  var byV = {};
+  homes.forEach(function(h){ (byV[h.village] = byV[h.village] || []).push(h); });
+  var vnames = Object.keys(byV);
+  var byDist = !!userPos && listSortMode === "near";
+  if (byDist) {
+    vnames.sort(function(a, b){
+      var ma = Math.min.apply(null, byV[a].map(distTo));
+      var mb = Math.min.apply(null, byV[b].map(distTo));
+      return ma - mb;
+    });
+  } else { vnames.sort(); }
+  var html = "";
+  if (userPos) {
+    html += '<p class="hint" style="margin:0 0 10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap">' +
+      (byDist ? '📍 Sorted by distance from you' : '🔢 Sorted by house number') +
+      '<button type="button" class="mini" data-lsort="1">' + (byDist ? 'Sort by house number' : 'Sort by distance') + '</button></p>';
+  }
+  vnames.forEach(function(v){
+    var list = byV[v].slice();
+    if (byDist) list.sort(function(a, b){ return distTo(a) - distTo(b); });
+    else list.sort(byUnitNum);
+    html += '<div class="village"><h3>' + esc(v) + " · " + list.length + '</h3>';
+    html += villagePrintMap(list);
+    list.forEach(function(h, idx){
+      var d = distTo(h);
+      html += '<div class="row' + (h.out_of_candy ? " outrow" : "") + '">' +
+        '<span class="ic">' + typeIcon(h.home_type) + '</span>' +
+        '<div class="meta"><div class="u"><span class="pnum">' + (idx + 1) + '.</span>' + esc(h.unit) + '</div>' +
+        '<div class="d">' + (h.handout === "door" ? "Handed out in person" : "Self-serve") + (h.details ? " · " + esc(h.details) : "") + '</div></div>' +
+        entPill(h) +
+        (d !== null ? '<span class="dist">' + fmtDist(d) + '</span>' : "") +
+        '<span class="status ' + (h.out_of_candy ? "st-off" : "st-on") + '">' + (h.out_of_candy ? "OUT" : treatGlyph(h)) + '</span>' +
+        '<a target="_blank" rel="noopener" href="' + gmaps(h) + '">Go</a>' +
+        '</div>';
+    });
+    html += "</div>";
+  });
+  wrap.innerHTML = html;
+}
+
+function renderMine(){
+  var wrap = document.getElementById("minewrap");
+  if (myHomes.length === 0) {
+    var now = new Date();
+    var rescue = (now >= new Date("2026-10-26T00:00:00+04:00") && now < new Date("2026-11-01T00:00:00+04:00"))
+      ? '<div class="notice" style="margin-bottom:14px">⚠️ <b>Halloween is this week!</b> Is your home already on the map, but nothing shows here? You\'re probably on a different phone or browser than you signed up with. <b>Message the organizers in the WhatsApp group now</b> and we\'ll send you your control link — please don\'t wait until the 31st! 🎃</div>'
+      : "";
+    wrap.innerHTML = rescue + '<div class="empty">Nothing saved on this phone yet.<br><br>Once you sign up, your home appears here with a one-tap <b>out of treats</b> button for the night.</div>';
+    return;
+  }
+  var html = "";
+  myHomes.forEach(function(m, i){
+    var live = null;
+    homes.forEach(function(h){ if (h.id === m.id) live = h; });
+    var out = live ? live.out_of_candy : false;
+    html += '<div class="card">' +
+      '<div class="t">' + esc(live ? live.unit : m.unit) + '</div><div class="s">' + esc(live ? live.village : m.village) + (live ? "" : " · (no longer on the map)") + '</div>' +
+      (live && orgNotes[m.id] ?
+        '<div class="notice" style="margin-bottom:10px">📣 <b>Message from the organizers:</b><br>' + esc(orgNotes[m.id]) +
+        '<div style="margin-top:8px"><button class="mini" data-i="' + i + '" data-act="acknote">Got it — dismiss</button></div></div>'
+      : "") +
+      (live ?
+        '<button class="bigtoggle ' + (out ? "tg-off" : "tg-on") + '" data-i="' + i + '" data-act="toggle">' +
+          (out ? "🚫 Out of treats — tap when restocked" : treatGlyph(live) + " Treats available — tap when you run out") + '</button>' +
+        '<div class="cardbtns">' +
+          '<button class="btn btn-ghost" data-i="' + i + '" data-act="handout">' + (live.handout === "door" ? "🧺 Switch to self-serve" : "🔔 Switch to in-person") + '</button>' +
+          '<button class="btn btn-ghost" data-i="' + i + '" data-act="entrance">' + (live.entrance === "garden" ? "🌳 Garden Gate" : live.entrance === "both" ? "🚪🌳 Both Gates" : "🚪 Front Gate") + ' — tap to change</button>' +
+          '<button class="btn btn-ghost" data-i="' + i + '" data-act="treats">' + (live.treats === "non_food" ? "🎃 Non-food only (no candy)" : live.treats === "both" ? "🍬🎃 Both — candy + non-food" : "🍬 Candy only") + ' — tap to change</button>' +
+          '<button class="btn btn-ghost" data-i="' + i + '" data-act="notes">📝 Edit notes</button>' +
+          '<button class="btn btn-ghost" data-i="' + i + '" data-act="link">🔗 Copy control link</button>' +
+          '<button class="btn btn-ghost" data-i="' + i + '" data-act="walink">📲 WhatsApp me my link</button>' +
+          '<button class="btn btn-ghost" data-i="' + i + '" data-act="move">📍 Fix pin</button>' +
+          '<button class="btn btn-ghost" data-i="' + i + '" data-act="remove">Remove</button>' +
+        '</div>' +
+        (editNotesId === m.id ?
+          '<div style="margin-top:10px">' +
+          '<textarea id="notesEdit-' + i + '" placeholder="Notes for visitors — entrance info, garden gate side, etc.">' + esc(live.details || "") + '</textarea>' +
+          '<div class="cardbtns" style="margin-top:8px">' +
+            '<button class="btn btn-ghost" data-i="' + i + '" data-act="notessave">💾 Save notes</button>' +
+            '<button class="btn btn-ghost" data-i="' + i + '" data-act="notescancel">Cancel</button>' +
+          '</div></div>'
+        : (live.details ? '<p class="hint" style="margin:8px 0 0">💬 ' + esc(live.details) + '</p>' : "")) +
+        '<p class="hint" style="margin:8px 0 0">' + (live.handout === "door" ? "Currently: 🔔 handing out in person" : "Currently: 🧺 self-serve — treats left out") + ' · ' + entLabel(live) + (live.treats === "non_food" ? " · 🎃 non-food treats" : live.treats === "both" ? " · 🍬🎃 candy + non-food" : "") + '</p>' +
+        ''
+      : '<div class="cardbtns"><button class="btn btn-ghost" data-i="' + i + '" data-act="forget">Clear from this phone</button></div>') +
+      '</div>';
+  });
+  html += '<div class="card" style="background:transparent">' +
+    '<div class="s" style="margin:0 0 8px; font-weight:700; color:var(--accent-soft); text-transform:uppercase; letter-spacing:.06em; font-size:11.5px">What each button does</div>' +
+    "<p class=\"hint\" style=\"margin:0 0 7px\">🍬 / 🚫 <b>Big button</b> — tap when you run out of treats; your house instantly greys out on everyone's map so families skip it. Tap again when restocked.</p>" +
+    "<p class=\"hint\" style=\"margin:0 0 7px\">🔗 <b>Copy control link</b> — your private remote control. Open the link on any phone to get these same buttons there. Don't post it in the group.</p>" +
+    "<p class=\"hint\" style=\"margin:0 0 7px\">📲 <b>WhatsApp me my link</b> — sends your control link to yourself (or family) on WhatsApp so it's never lost, even if you clear your browser or switch phones.</p>" +
+    "<p class=\"hint\" style=\"margin:0 0 7px\">🔔 / 🧺 <b>Switch</b> — change between handing treats out in person and self-serve (treats left out for kids to take).</p>" +
+    "<p class=\"hint\" style=\"margin:0 0 7px\">🚪 / 🌳 <b>Entrance</b> — tap to cycle where kids should come: front gate → garden gate (park side) → both. Changes your pin's ring color on the map.</p>" +
+    "<p class=\"hint\" style=\"margin:0 0 7px\">🍬 / 🎃 <b>Treats type</b> — tap to cycle: candy only → non-food treats (stickers, small toys, glow sticks — great for kids with allergies) → both. Non-food homes show a <b>teal pumpkin</b> on the map so families with dietary restrictions can spot them.</p>" +
+    "<p class=\"hint\" style=\"margin:0 0 7px\">📝 <b>Edit notes</b> — update your visitor notes anytime (entrance info, garden gate side, etc.).</p>" +
+    "<p class=\"hint\" style=\"margin:0 0 7px\">📍 <b>Fix pin</b> — move your home's location if the pin landed in the wrong spot.</p>" +
+    "<p class=\"hint\" style=\"margin:0\"><b>Remove</b> — take your home off the map entirely (asks you to tap twice).</p>" +
+    '</div>';
+  html += '<button class="btn btn-ghost" id="addAnother" style="width:100%">➕ Add another home</button>';
+  wrap.innerHTML = html;
+}
+
+function renderAll(){ renderCounts(); renderMap(); renderList(); renderMine(); }
+
+function applyPendingManage(){
+  if (!pendingManage) return;
+  var pm = pendingManage; pendingManage = null;
+  var exists = false;
+  myHomes.forEach(function(x){ if (x.id === pm.id) exists = true; });
+  if (!exists) {
+    var live = null;
+    homes.forEach(function(h){ if (h.id === pm.id) live = h; });
+    myHomes.push({ id: pm.id, token: pm.token, unit: live ? live.unit : "My home", village: live ? live.village : "" });
+    saveMine();
+  }
+  renderMine();
+  show("mine");
+  toast("Control link added on this phone 🎃");
+}
+
+function loadMyNotes(){
+  myHomes.forEach(function(m){
+    rpc("jh_get_note", { p_id: m.id, p_token: m.token }).then(function(n){
+      if ((orgNotes[m.id] || null) !== (n || null)) { orgNotes[m.id] = n; renderMine(); }
+    }).catch(function(){});
+  });
+}
+
+function loadHomes(){
+  return rpc("jh_list").then(function(data){ homes = data || []; renderAll(); applyPendingManage(); loadMyNotes(); })
+    .catch(function(){ toast("Couldn't load homes — check your connection"); });
+}
+
+/* ---------- tabs ---------- */
+var tabs = ["map","list","signup","mine","admin"];
+function show(tab){
+  tabs.forEach(function(t){
+    document.getElementById("sec-" + t).classList.toggle("active", t === tab);
+    document.getElementById("tab-" + t).classList.toggle("on", t === tab);
+  });
+  if (tab === "map" && map) setTimeout(function(){ map.invalidateSize(); }, 60);
+  if (tab === "signup") initPickMap();
+  if (tab === "admin" && adminCode) adminLoad();
+  if (tab !== "map") endMove();
+}
+tabs.forEach(function(t){ document.getElementById("tab-" + t).addEventListener("click", function(){ show(t); }); });
+
+/* ---------- signup picker ---------- */
+function setPick(latlng, zoom){
+  if (!pickMarker) {
+    pickMarker = L.marker(latlng, { draggable: true, icon: L.divIcon({ className: "", html: '<div class="pin">🏠</div>', iconSize: [34,34], iconAnchor: [17,17] }) }).addTo(pickMap);
+    pickMarker.on("dragend", function(){ updateCoordStatus(); });
+  } else { pickMarker.setLatLng(latlng); }
+  if (zoom) pickMap.setView(latlng, zoom);
+  updateCoordStatus();
+}
+function updateCoordStatus(){
+  var el = document.getElementById("coordStatus");
+  if (pickMarker) { var p = pickMarker.getLatLng(); el.textContent = "Pin set ✓ (" + p.lat.toFixed(5) + ", " + p.lng.toFixed(5) + ")"; el.style.color = "#7ddf8a"; }
+  else { el.textContent = "No pin set yet"; el.style.color = ""; }
+}
+function initPickMap(){
+  if (pickMap) { setTimeout(function(){ pickMap.invalidateSize(); }, 60); return; }
+  pickMap = L.map("pickmap").setView(CENTER, 13);
+  applyBase();
+  pickMap.on("click", function(ev){ setPick(ev.latlng); });
+}
+document.getElementById("village").addEventListener("change", function(){
+  document.getElementById("villageOther").style.display = this.value === "__other" ? "" : "none";
+});
+document.getElementById("coordBtn").addEventListener("click", function(){
+  var raw = document.getElementById("coordPaste").value.trim();
+  if (!raw) { toast("Paste coordinates or a Google Maps link first"); return; }
+  var c = parseLatLng(raw);
+  if (!c) {
+    toast("Couldn't read that — in Google Maps, press & hold your home, then copy the coordinates shown");
+    return;
+  }
+  var lat = c.lat, lng = c.lng;
+  if (!(lat > 22 && lat < 27 && lng > 51 && lng < 57)) {
+    toast("Those coordinates don't look like Abu Dhabi — double-check and try again");
+    return;
+  }
+  initPickMap();
+  setPick(L.latLng(lat, lng), 18);
+  document.getElementById("coordPaste").value = "";
+  toast("Pin set from coordinates ✓");
+});
+document.getElementById("geoBtn").addEventListener("click", function(){
+  if (!navigator.geolocation) { toast("Location not available — tap the map instead"); return; }
+  var btn = this; btn.disabled = true; btn.textContent = "Locating…";
+  navigator.geolocation.getCurrentPosition(function(pos){
+    btn.disabled = false; btn.textContent = "📍 Use my current location";
+    setPick(L.latLng(pos.coords.latitude, pos.coords.longitude), 17);
+  }, function(){
+    btn.disabled = false; btn.textContent = "📍 Use my current location";
+    toast("Couldn't get your location — tap the map to place the pin");
+  }, { enableHighAccuracy: true, timeout: 9000 });
+});
+
+/* ---------- signup submit ---------- */
+document.getElementById("signupForm").addEventListener("submit", function(ev){
+  ev.preventDefault();
+  var unit = document.getElementById("unit").value.trim();
+  var village = document.getElementById("village").value;
+  if (village === "__other") village = document.getElementById("villageOther").value.trim();
+  var pass = document.getElementById("passcode").value.trim();
+  var htype = document.querySelector('input[name=htype]:checked').value;
+  var handout = document.querySelector('input[name=handout]:checked').value;
+  var entrance = document.querySelector('input[name=entrance]:checked').value;
+  var details = document.getElementById("details").value.trim();
+  if (!village) { toast("Please select your village"); return; }
+  if (!unit) { toast("Please enter your villa / unit number"); return; }
+  if (!pickMarker) { toast("Please set your pin on the map"); return; }
+  if (!pass) { toast("Please enter the group passcode"); return; }
+  var p = pickMarker.getLatLng();
+  if (p.distanceTo(L.latLng(24.535, 54.483)) > 5000) {
+    if (!window.confirm("Your pin looks far from Jubail Island — are you sure it's placed on your home?\n\nOK = keep this pin anyway\nCancel = go back and fix it (tip: zoom the map to your villa, or paste your home's Google Maps coordinates)")) return;
+  }
+  var btn = document.getElementById("submitBtn");
+  btn.disabled = true; btn.textContent = "Adding…";
+  rpc("jh_signup", { p_passcode: pass, p_home_type: htype, p_unit: unit, p_village: village, p_details: details, p_handout: handout, p_lat: p.lat, p_lng: p.lng })
+    .then(function(res){
+      myHomes.push({ id: res.id, token: res.edit_token, unit: unit, village: village });
+      saveMine();
+      if (entrance !== "front") { rpc("jh_set_entrance", { p_id: res.id, p_token: res.edit_token, p_entrance: entrance }).catch(function(){}); }
+      var treats = document.querySelector('input[name=treats]:checked').value;
+      if (treats !== "candy") { rpc("jh_set_treats", { p_id: res.id, p_token: res.edit_token, p_treats: treats }).catch(function(){}); }
+      document.getElementById("signupForm").reset();
+      document.getElementById("villageOther").style.display = "none";
+      if (pickMarker) { pickMap.removeLayer(pickMarker); pickMarker = null; updateCoordStatus(); }
+      toast("You're on the map! Your control link is under 🏠 Mine");
+      loadHomes().then(function(){ show("mine"); });
+    })
+    .catch(function(err){
+      var m = String(err.message || "");
+      if (m.indexOf("BAD_PASSCODE") >= 0) toast("Wrong passcode — check the WhatsApp group");
+      else if (m.indexOf("DUPLICATE") >= 0) toast("This home is already on the map! Lost your controls? Message the organizers and we'll reset it for you.");
+      else if (m.indexOf("MISSING_LOCATION") >= 0) toast("Please set your pin on the map");
+      else if (m.indexOf("FULL") >= 0) toast("Sign-ups are full — contact the organizer");
+      else toast("Something went wrong — please try again");
+    })
+    .then(function(){ btn.disabled = false; btn.textContent = "Put us on the map 🍬"; });
+});
+
+/* ---------- my home actions ---------- */
+document.getElementById("minewrap").addEventListener("click", function(ev){
+  var el = ev.target.closest("[data-act]");
+  if (el) {
+    var m = myHomes[Number(el.getAttribute("data-i"))];
+    if (!m) return;
+    var act = el.getAttribute("data-act");
+    if (act === "toggle") {
+      var live = null; homes.forEach(function(h){ if (h.id === m.id) live = h; });
+      var newVal = live ? !live.out_of_candy : true;
+      el.disabled = true;
+      rpc("jh_set_candy", { p_id: m.id, p_token: m.token, p_out: newVal })
+        .then(function(ok){ if (!ok) toast("Couldn't update — entry not found"); return loadHomes(); })
+        .catch(function(){ toast("Couldn't update — try again"); });
+    } else if (act === "entrance") {
+      var le = null; homes.forEach(function(h){ if (h.id === m.id) le = h; });
+      var next = (!le || le.entrance === "front") ? "garden" : (le.entrance === "garden" ? "both" : "front");
+      el.disabled = true;
+      rpc("jh_set_entrance", { p_id: m.id, p_token: m.token, p_entrance: next })
+        .then(function(ok){ if (!ok) toast("Couldn't update — entry not found"); else toast("Updated ✓"); return loadHomes(); })
+        .catch(function(){ toast("Couldn't update — try again"); });
+    } else if (act === "handout") {
+      var lv = null; homes.forEach(function(h){ if (h.id === m.id) lv = h; });
+      var newMode = (lv && lv.handout === "door") ? "self_serve" : "door";
+      el.disabled = true;
+      rpc("jh_set_handout", { p_id: m.id, p_token: m.token, p_handout: newMode })
+        .then(function(ok){ if (!ok) toast("Couldn't update — entry not found"); else toast("Updated ✓"); return loadHomes(); })
+        .catch(function(){ toast("Couldn't update — try again"); });
+    } else if (act === "treats") {
+      var ln = null; homes.forEach(function(h){ if (h.id === m.id) ln = h; });
+      var cur = ln ? ln.treats : "candy";
+      var nxt = cur === "candy" ? "non_food" : (cur === "non_food" ? "both" : "candy");
+      el.disabled = true;
+      rpc("jh_set_treats", { p_id: m.id, p_token: m.token, p_treats: nxt })
+        .then(function(ok){ if (!ok) toast("Couldn't update — entry not found"); else toast("Updated ✓"); return loadHomes(); })
+        .catch(function(){ toast("Couldn't update — try again"); });
+    } else if (act === "acknote") {
+      el.disabled = true;
+      rpc("jh_ack_note", { p_id: m.id, p_token: m.token })
+        .then(function(){ orgNotes[m.id] = null; renderMine(); })
+        .catch(function(){ toast("Couldn't dismiss — try again"); });
+    } else if (act === "notes") {
+      editNotesId = (editNotesId === m.id) ? null : m.id;
+      renderMine();
+    } else if (act === "notescancel") {
+      editNotesId = null;
+      renderMine();
+    } else if (act === "notessave") {
+      var ta = document.getElementById("notesEdit-" + el.getAttribute("data-i"));
+      var txt = ta ? ta.value.trim() : "";
+      el.disabled = true;
+      rpc("jh_set_details", { p_id: m.id, p_token: m.token, p_details: txt })
+        .then(function(ok){
+          if (!ok) toast("Couldn't update — entry not found"); else toast("Notes updated ✓");
+          editNotesId = null;
+          return loadHomes();
+        })
+        .catch(function(){ el.disabled = false; toast("Couldn't save — try again"); });
+    } else if (act === "link") {
+      copyText(manageLink(m));
+    } else if (act === "walink") {
+      var wa = document.createElement("a");
+      wa.href = "https://wa.me/?text=" + encodeURIComponent("🎃 My Jubail Trick-or-Treat control link — open this to manage our home (" + m.unit + "): " + manageLink(m));
+      wa.target = "_blank"; wa.rel = "noopener";
+      document.body.appendChild(wa); wa.click(); document.body.removeChild(wa);
+    } else if (act === "move") {
+      moveMode = { id: m.id, token: m.token };
+      show("map");
+      document.getElementById("moveBanner").style.display = "block";
+    } else if (act === "remove") {
+      if (el.getAttribute("data-arm") !== "1") { el.setAttribute("data-arm","1"); el.textContent = "Tap again to confirm"; return; }
+      rpc("jh_remove", { p_id: m.id, p_token: m.token })
+        .then(function(){ myHomes = myHomes.filter(function(x){ return x.id !== m.id; }); saveMine(); toast("Removed from the map"); return loadHomes(); })
+        .catch(function(){ toast("Couldn't remove — try again"); });
+    } else if (act === "forget") {
+      myHomes = myHomes.filter(function(x){ return x.id !== m.id; }); saveMine(); renderMine();
+    }
+    return;
+  }
+  if (ev.target.id === "addAnother") show("signup");
+});
+document.getElementById("moveCancel").addEventListener("click", endMove);
+document.getElementById("baseToggle").addEventListener("click", function(){
+  baseMode = baseMode === "sat" ? "osm" : "sat";
+  applyBase();
+});
+document.getElementById("refreshBtn").addEventListener("click", function(){ loadHomes().then(function(){ toast("Updated ✓"); }); });
+
+/* ---------- my location ---------- */
+function onGeo(pos){
+  var first = !userPos;
+  userPos = L.latLng(pos.coords.latitude, pos.coords.longitude);
+  if (!userMarker) {
+    userMarker = L.marker(userPos, { icon: L.divIcon({ className: "", html: '<div class="me-dot"></div>', iconSize: [16,16], iconAnchor: [8,8] }), interactive: false, zIndexOffset: 1000 }).addTo(map);
+    userAcc = L.circle(userPos, { radius: pos.coords.accuracy || 30, color: "#4aa3ff", weight: 1, opacity: .4, fillOpacity: .08, interactive: false }).addTo(map);
+  } else {
+    userMarker.setLatLng(userPos);
+    userAcc.setLatLng(userPos).setRadius(pos.coords.accuracy || 30);
+  }
+  if (first) { map.setView(userPos, Math.max(map.getZoom(), 16)); renderMap(); }
+  if (!lastListPos || userPos.distanceTo(lastListPos) > 25) { lastListPos = userPos; renderList(); }
+}
+function stopLocate(){
+  if (geoWatchId !== null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
+  if (userMarker) { map.removeLayer(userMarker); userMarker = null; }
+  if (userAcc) { map.removeLayer(userAcc); userAcc = null; }
+  userPos = null; lastListPos = null;
+  document.getElementById("locBtn").classList.remove("on");
+  renderList(); renderMap();
+}
+document.getElementById("locBtn").addEventListener("click", function(){
+  if (geoWatchId !== null) { stopLocate(); return; }
+  if (!navigator.geolocation) { toast("Location not available on this device"); return; }
+  this.classList.add("on");
+  show("map");
+  geoWatchId = navigator.geolocation.watchPosition(onGeo, function(){
+    toast("Couldn't get your location — check location permission");
+    stopLocate();
+  }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
+});
+
+/* ---------- organizer panel ---------- */
+function adminLoad(){
+  if (!adminCode) return;
+  rpc("jh_admin_list", { p_code: adminCode })
+    .then(function(d){
+      adminData = d;
+      try { localStorage.setItem("jh_admin_code", adminCode); } catch(e){}
+      document.getElementById("tab-admin").style.display = "";
+      renderAdmin();
+    })
+    .catch(function(err){
+      var m = String(err.message || "");
+      if (m.indexOf("BAD_ADMIN") >= 0) {
+        adminCode = null; adminData = null;
+        try { localStorage.removeItem("jh_admin_code"); } catch(e){}
+        renderAdmin();
+        toast("Wrong organizer code");
+      } else toast("Couldn't load organizer data");
+    });
+}
+function renderAdmin(){
+  var lock = document.getElementById("adminLock");
+  var panel = document.getElementById("adminPanel");
+  if (!adminCode || !adminData) { lock.style.display = ""; panel.style.display = "none"; return; }
+  lock.style.display = "none"; panel.style.display = "";
+  var hs = adminData.homes || [];
+  var activeN = 0, outN = 0, rmN = 0;
+  hs.forEach(function(h){ if (h.removed) rmN++; else if (h.out_of_candy) outN++; else activeN++; });
+  var html = '<div class="card">' +
+    '<div class="t">Season ' + esc(adminData.season) + '</div>' +
+    '<div class="s">' + activeN + ' with treats · ' + outN + ' out · ' + rmN + ' removed</div>' +
+    '<div class="s">Sign-up passcode: <b style="color:var(--accent-soft)">' + esc(adminData.passcode) + '</b></div>' +
+    '<div class="adminbar">' +
+      '<button class="btn btn-ghost" data-aact="csv">⬇️ Export CSV</button>' +
+      '<button class="btn btn-ghost" data-aact="passform">🔑 Change passcode</button>' +
+      '<button class="btn btn-ghost" data-aact="seasonform">🗓️ New season</button>' +
+      '<button class="btn btn-ghost" data-aact="bcastform">📣 Broadcast</button>' +
+      '<button class="btn btn-ghost" data-aact="lock">Lock panel</button>' +
+    '</div>' +
+    '<div class="inlineform" id="passForm">' +
+      '<label for="newPass">New sign-up passcode</label>' +
+      '<input type="text" id="newPass" placeholder="e.g. PUMPKIN31">' +
+      '<button class="btn btn-ghost" style="margin-top:8px" data-aact="passsave">Save passcode</button>' +
+    '</div>' +
+    '<div class="inlineform" id="seasonForm">' +
+      '<label for="newSeason">New season label (archives all current entries — the map starts empty)</label>' +
+      '<input type="text" id="newSeason" placeholder="e.g. 2027">' +
+      '<button class="btn btn-ghost" style="margin-top:8px" data-aact="seasonsave">Start new season</button>' +
+    '</div>' +
+  '</div>';
+  html += '<h2 style="margin-top:16px">All entries</h2>';
+  if (hs.length === 0) html += '<div class="empty">No entries this season yet.</div>';
+  var byV = {};
+  hs.forEach(function(h){ (byV[h.village] = byV[h.village] || []).push(h); });
+  Object.keys(byV).sort().forEach(function(v){
+    html += '<div class="village"><h3>' + esc(v) + " · " + byV[v].length + '</h3>';
+    byV[v].forEach(function(h){
+    html += '<div class="row' + (h.removed ? " rmrow outrow" : (h.out_of_candy ? " outrow" : "")) + '">' +
+      '<span class="ic">' + typeIcon(h.home_type) + '</span>' +
+      '<div class="meta"><div class="u">' + esc(h.unit) + (h.treats === "non_food" ? " 🎃" : h.treats === "both" ? " 🍬🎃" : "") + (h.org_note ? " 📣" : "") + '</div>' +
+      '<div class="d">' + esc(h.village) + (h.details ? " · " + esc(h.details) : "") + '</div></div>' +
+      (h.removed ? '<span class="status st-off">REMOVED</span>' :
+        '<span class="status ' + (h.out_of_candy ? "st-off" : "st-on") + '">' + (h.out_of_candy ? "OUT" : treatGlyph(h)) + '</span>') +
+      (h.removed ?
+        '<button class="mini" data-aact="arestore" data-id="' + h.id + '">Restore</button>' :
+        '<button class="mini" data-aact="acandy" data-id="' + h.id + '" data-out="' + (h.out_of_candy ? "0" : "1") + '">' + (h.out_of_candy ? "🍬 Restock" : "🚫 Mark out") + '</button>' +
+        '<button class="mini" data-aact="anoteform" data-id="' + h.id + '">✉️ Note</button>' +
+        '<button class="mini" data-aact="alink" data-id="' + h.id + '">🔗 Link</button>' +
+        '<button class="mini" data-aact="apin" data-id="' + h.id + '">📍 Pin</button>' +
+        '<button class="mini" data-aact="aremove" data-id="' + h.id + '">Remove</button>') +
+      (adminNoteId === h.id ?
+        '<div style="width:100%; margin-top:8px">' +
+        '<input type="text" id="orgNoteInput" placeholder="e.g. Your pin looks misplaced — tap Fix pin under Mine" value="' + esc(h.org_note || "") + '">' +
+        '<div class="cardbtns" style="margin-top:8px">' +
+          '<button class="btn btn-ghost" data-aact="anotesave" data-id="' + h.id + '">💾 Save note</button>' +
+          '<button class="btn btn-ghost" data-aact="anoteform" data-id="' + h.id + '">Cancel</button>' +
+        '</div>' +
+        '<p class="hint" style="margin:6px 0 0">Shows as a banner on this home\'s Mine page until they dismiss it. Save empty to clear.</p>' +
+        '</div>'
+      : "") +
+      '</div>';
+    });
+    html += "</div>";
+  });
+  panel.innerHTML = html;
+}
+document.getElementById("adminUnlock").addEventListener("click", function(){
+  var v = document.getElementById("adminCodeInput").value.trim();
+  if (!v) { toast("Enter the organizer code"); return; }
+  adminCode = v;
+  adminLoad();
+});
+/* ---- auto-reload when a new version deploys ---- */
+var pageVersion = null, pendingReload = false;
+function uiBusy(){
+  try {
+    return !!(moveMode || editNotesId || pickMarker ||
+      (document.getElementById("unit") && document.getElementById("unit").value.trim()) ||
+      (document.getElementById("details") && document.getElementById("details").value.trim()));
+  } catch(e){ return false; }
+}
+function doReloadIfSafe(){
+  if (uiBusy()) { pendingReload = true; return; }
+  window.location.reload();
+}
+function checkVersion(){
+  fetch(window.location.pathname + "?v=" + Date.now(), { method: "HEAD", cache: "no-store" })
+    .then(function(r){
+      var e = r.headers.get("etag") || r.headers.get("last-modified");
+      if (!e) return;
+      if (pageVersion === null) { pageVersion = e; return; }
+      if (e !== pageVersion) {
+        pageVersion = e;
+        if (uiBusy()) { pendingReload = true; toast("Site updated — will refresh when you're done"); }
+        else { window.location.reload(); }
+      } else if (pendingReload) { doReloadIfSafe(); }
+    })
+    .catch(function(){});
+}
+checkVersion();
+setInterval(checkVersion, 120000);
+
+function checkBroadcast(){
+  rpc("jh_broadcast_get", {}).then(function(t){
+    var b = document.getElementById("bcast");
+    var msg = (t == null ? "" : String(t)).trim();
+    if (msg) { b.textContent = "⚠️ " + msg; b.style.display = "block"; }
+    else { b.style.display = "none"; }
+  }).catch(function(){});
+}
+checkBroadcast();
+setInterval(checkBroadcast, 60000);
+
+document.getElementById("printBtn").addEventListener("click", function(){ window.print(); });
+
+document.getElementById("listwrap").addEventListener("click", function(ev){
+  var el = ev.target.closest("[data-lsort]");
+  if (!el) return;
+  listSortMode = listSortMode === "near" ? "num" : "near";
+  renderList();
+});
+
+document.getElementById("adminPanel").addEventListener("click", function(ev){
+  var el = ev.target.closest("[data-aact]");
+  if (!el) return;
+  var act = el.getAttribute("data-aact");
+  var id = el.getAttribute("data-id");
+  if (act === "bcastform") {
+    rpc("jh_broadcast_get", {}).then(function(cur){
+      var txt = window.prompt("Site-wide alert banner — shows in red at the top of the site for EVERYONE within a minute. Leave empty and press OK to clear it.", cur || "");
+      if (txt === null) return;
+      rpc("jh_admin_set_broadcast", { p_code: adminCode, p_text: txt.trim() })
+        .then(function(){ toast(txt.trim() ? "Broadcast is live 📣" : "Broadcast cleared ✓"); checkBroadcast(); })
+        .catch(function(){ toast("Couldn't update broadcast — try again"); });
+    });
+  } else if (act === "lock") {
+    adminCode = null; adminData = null;
+    try { localStorage.removeItem("jh_admin_code"); } catch(e){}
+    renderAdmin();
+  } else if (act === "passform") {
+    document.getElementById("passForm").classList.toggle("open");
+  } else if (act === "seasonform") {
+    document.getElementById("seasonForm").classList.toggle("open");
+  } else if (act === "passsave") {
+    var np = document.getElementById("newPass").value.trim();
+    if (!np) { toast("Enter a new passcode"); return; }
+    rpc("jh_admin_set_passcode", { p_code: adminCode, p_new: np })
+      .then(function(){ toast("Passcode updated ✓"); adminLoad(); })
+      .catch(function(){ toast("Couldn't update passcode"); });
+  } else if (act === "seasonsave") {
+    if (el.getAttribute("data-arm") !== "1") { el.setAttribute("data-arm","1"); el.textContent = "Tap again to confirm — map will start empty"; return; }
+    var ns = document.getElementById("newSeason").value.trim();
+    if (!ns) { toast("Enter a season label, e.g. 2027"); return; }
+    rpc("jh_admin_new_season", { p_code: adminCode, p_label: ns })
+      .then(function(){ toast("Season " + ns + " started 🎃"); didFit = false; adminLoad(); loadHomes(); })
+      .catch(function(){ toast("Couldn't start new season"); });
+  } else if (act === "apin") {
+    var ph = null;
+    ((adminData && adminData.homes) || []).forEach(function(x){ if (x.id === id) ph = x; });
+    var raw = window.prompt("Fix pin for " + (ph ? ph.unit : "this home") + ":\n\nPaste their Google Maps coordinates or link — or leave this empty and press OK to tap the new spot on the map yourself.");
+    if (raw === null) return;
+    raw = raw.trim();
+    if (raw) {
+      var c = parseLatLng(raw);
+      if (!c) { toast("Couldn't read those coordinates"); return; }
+      if (!(c.lat > 22 && c.lat < 27 && c.lng > 51 && c.lng < 57)) { toast("Those coordinates don't look like Abu Dhabi — double-check"); return; }
+      rpc("jh_admin_set_location", { p_code: adminCode, p_id: id, p_lat: c.lat, p_lng: c.lng })
+        .then(function(ok){ if (ok) toast("Pin updated ✓"); else toast("Couldn't update — entry not found"); loadHomes(); adminLoad(); })
+        .catch(function(){ toast("Couldn't update — try again"); });
+    } else {
+      moveMode = { adminId: id };
+      show("map");
+      document.getElementById("moveBanner").style.display = "block";
+      if (ph && ph.lat && map) map.setView([ph.lat, ph.lng], 17);
+    }
+  } else if (act === "alink") {
+    var lh = null;
+    ((adminData && adminData.homes) || []).forEach(function(h){ if (h.id === id) lh = h; });
+    if (!lh || !lh.edit_token) { toast("Token not loaded — tap Refresh and try again"); return; }
+    copyText(BASE + "?m=" + lh.id + "~" + lh.edit_token);
+  } else if (act === "csv") {
+    var hs = (adminData && adminData.homes) || [];
+    var NL = String.fromCharCode(10);
+    function q(v){ v = v == null ? "" : String(v); return '"' + v.replace(/"/g, '""') + '"'; }
+    var lines = [["unit","village","type","handout","entrance","treats","out_of_candy","removed","lat","lng","notes","created_at"].join(",")];
+    hs.forEach(function(h){
+      lines.push([q(h.unit), q(h.village), q(h.home_type), q(h.handout), q(h.entrance), q(h.treats), q(h.out_of_candy), q(h.removed), q(h.lat), q(h.lng), q(h.details), q(h.created_at)].join(","));
+    });
+    var blob = new Blob([lines.join(NL)], { type: "text/csv" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "jubail-halloween-" + (adminData ? adminData.season : "export") + ".csv";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  } else if (act === "anoteform") {
+    adminNoteId = (adminNoteId === id) ? null : id;
+    renderAdmin();
+  } else if (act === "anotesave") {
+    var ni = document.getElementById("orgNoteInput");
+    rpc("jh_admin_set_note", { p_code: adminCode, p_id: id, p_note: ni ? ni.value : "" })
+      .then(function(){ toast("Note saved ✓"); adminNoteId = null; adminLoad(); })
+      .catch(function(){ toast("Couldn't save note"); });
+  } else if (act === "acandy") {
+    rpc("jh_admin_set_candy", { p_code: adminCode, p_id: id, p_out: el.getAttribute("data-out") === "1" })
+      .then(function(){ adminLoad(); loadHomes(); })
+      .catch(function(){ toast("Couldn't update"); });
+  } else if (act === "aremove") {
+    if (el.getAttribute("data-arm") !== "1") { el.setAttribute("data-arm","1"); el.textContent = "Confirm"; return; }
+    rpc("jh_admin_set_removed", { p_code: adminCode, p_id: id, p_removed: true })
+      .then(function(){ toast("Entry removed (restorable)"); adminLoad(); loadHomes(); })
+      .catch(function(){ toast("Couldn't remove"); });
+  } else if (act === "arestore") {
+    rpc("jh_admin_set_removed", { p_code: adminCode, p_id: id, p_removed: false })
+      .then(function(){ toast("Entry restored ✓"); adminLoad(); loadHomes(); })
+      .catch(function(){ toast("Couldn't restore"); });
+  }
+});
+
+/* ---------- add home from a pasted control link ---------- */
+document.getElementById("linkAdd").addEventListener("click", function(){
+  var raw = document.getElementById("linkPaste").value.trim();
+  var mm = raw.match(/m=([0-9a-fA-F-]{36})~([0-9a-fA-F-]{36})/) || raw.match(/^([0-9a-fA-F-]{36})~([0-9a-fA-F-]{36})$/);
+  if (!mm) { toast("That doesn't look like a control link — copy the whole link"); return; }
+  pendingManage = { id: mm[1], token: mm[2] };
+  document.getElementById("linkPaste").value = "";
+  loadHomes();
+});
+
+/* ---------- add to home screen ---------- */
+var deferredInstall = null;
+window.addEventListener("beforeinstallprompt", function(e){ e.preventDefault(); deferredInstall = e; });
+(function(){
+  var steps = document.getElementById("installSteps");
+  var btn = document.getElementById("installBtn");
+  var standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+  if (standalone) {
+    steps.textContent = "You're already using the app version 🎃";
+    btn.style.display = "none";
+    return;
+  }
+  var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent || "");
+  if (isIOS) {
+    steps.innerHTML = "On iPhone (in Safari): <b>1.</b> Sign up first, so the app remembers your home. <b>2.</b> Tap the <b>Share</b> button (the square with an arrow at the bottom). <b>3.</b> Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.<br><br>If the app's Mine tab comes up empty afterwards, paste your control link in the box above.";
+    btn.style.display = "none";
+  } else {
+    steps.innerHTML = "On Android: tap the button below, or open your browser's menu (⋮) and choose <b>Install app</b> or <b>Add to Home screen</b>. Your sign-up carries over automatically.";
+  }
+})();
+document.getElementById("installBtn").addEventListener("click", function(){
+  var hint = document.getElementById("installHint");
+  if (deferredInstall) {
+    deferredInstall.prompt();
+    deferredInstall = null;
+    return;
+  }
+  hint.textContent = "In your browser menu (⋮), choose “Install app” or “Add to Home screen”.";
+  hint.style.display = "block";
+});
+if ("serviceWorker" in navigator) { try { navigator.serviceWorker.register("sw.js"); } catch(e){} }
+
+/* ---------- boot ---------- */
+initMap();
+loadHomes();
+setInterval(function(){ if (!document.hidden) loadHomes(); }, 60000);
+document.addEventListener("visibilitychange", function(){ if (!document.hidden) loadHomes(); });
+</script>
+<footer>Made with 🎃 by <a href="https://zgauba.github.io/jubail/" target="_blank" rel="noopener" style="color:var(--accent-soft)">Zeeshan</a> — your neighbor in Ain Al Maha · Only unit numbers &amp; pin locations are stored · Data deleted after the season</footer>
+</body>
+</html>
