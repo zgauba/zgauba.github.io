@@ -11,6 +11,9 @@ Last groomed: 2026-11-02
 
 - [ ] **Backend hardening (private)** — scope and details tracked only in the
       private ops doc, deliberately not in this repo.
+- [ ] **Commons: edge-function gateway for admin/auth RPCs** — per-IP rate
+      limiting belongs in front of the API, not inside Postgres (a failed RPC
+      rolls back its own attempt counter). Design this into Commons from day one.
 - [ ] **Commons foundation** (`commons/`): per-community config (villages, map
       center, branding, WhatsApp links, zero-PII default) + per-module feature
       flags (events / bookings / pets — flags double as the compliance kill
@@ -65,3 +68,5 @@ Last groomed: 2026-11-02
       (`supabase/migrations/20261102160000_jh_stats_rls_lockdown.sql`).
 - [x] 2026-11-02 — dashboard.html escapes village names (stored-XSS hardening).
 - [x] 2026-11-02 — Stack Manifest rewritten for the monorepo.
+- [x] 2026-11-02 — jh_admin_* brute-force tar-pit + failure counter
+      (`supabase/migrations/20261102170000_jh_admin_tarpit.sql`).
