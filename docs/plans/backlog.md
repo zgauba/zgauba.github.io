@@ -28,9 +28,9 @@ Last groomed: 2026-11-02
       switch). New, dedicated Supabase project (decision 2026-11-02); `jc_`
       tables via migrations in `supabase/commons/migrations/`; folder-per-event URLs
       under /commons/; landing page.
-- [ ] **Halloween season close-out** (deferred, in order): bake final dashboard
-      numbers → Export CSV → delete season-2026 rows → new season label →
-      unschedule hourly snapshot cron.
+- [x] 2026-11-03 — **Halloween season close-out** (T1): dashboard baked,
+      final numbers in `docs/halloween-2026-final.md`, season-2026 rows deleted,
+      cron unscheduled. Private CSV export to be deleted 2026-11-17.
 - [ ] Update stale stats on `/` and `/jubail/` with final event numbers.
 
 ## Commons platform features
