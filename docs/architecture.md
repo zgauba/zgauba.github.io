@@ -33,8 +33,8 @@ SOURCE-OF-TRUTH POLICY:
 - [live] Supabase project **SignalPost** (`hrdmhifeynnokzjqtlsa`) — Jubail tables are prefixed `jh_`.
 - [live] All access via `security definer` RPCs (all pin `search_path=public`); REST base `https://hrdmhifeynnokzjqtlsa.supabase.co/rest/v1/rpc/`.
 - [live] Public RPCs (anon): jh_list, jh_signup (passcode-gated), jh_set_candy, jh_set_handout, jh_set_entrance, jh_set_treats, jh_set_details, jh_update_location, jh_remove, jh_get_note, jh_ack_note, jh_stats_list, jh_broadcast_get.
-- [live] Admin RPCs: organizer-code-gated; enumerated in the private ops doc, not here.
-- [live] Internal-only (no anon/authenticated execute): jh_snapshot (pg_cron), jh_backfill_prefixes, jh_set_nonfood (superseded).
+- [live] Admin RPCs: organizer-code-gated; enumerated in the private ops doc, not here. Failed code checks are tar-pitted (1.5s sleep before BAD_ADMIN) and counted via the `jh_admin_fail_count` sequence (sequences survive the failed transaction's rollback) — see `supabase/migrations/20261102170000_jh_admin_tarpit.sql`.
+- [live] Internal-only (no anon/authenticated execute): jh_snapshot (pg_cron), jh_assert_admin, jh_backfill_prefixes, jh_set_nonfood (superseded).
 - [live] pg_cron: `jh-hourly-snapshot` (minute 5, still active) → `jh_snapshot()` → `jh_stats`. Unschedule at season close-out.
 - ⚠ RULE: never change `jh_signup`'s signature — add follow-up RPCs instead.
 
