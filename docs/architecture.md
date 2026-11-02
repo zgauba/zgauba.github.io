@@ -1,9 +1,11 @@
-# Jubail Trick-or-Treat — Stack Manifest
+# zgauba.github.io — Jubail Commons monorepo — Stack Manifest
 
 ```
 APP: zgauba.github.io (Jubail Commons monorepo)
-PRIMARY PURPOSE: Community trick-or-treat sign-up/map for Jubail Island events
-LAST VERIFIED: 2026-11-02 (monorepo consolidation; Halloween layers verified, Commons not yet built)
+PRIMARY PURPOSE: Zee's networking pages + Jubail Island community tools
+  (Halloween trick-or-treat map live; Jubail Commons platform in rebuild)
+LAST VERIFIED: 2026-11-02 (post-monorepo-switchover; Halloween layers re-verified
+  against live Supabase; Commons not yet built)
 SOURCE-OF-TRUTH POLICY:
   [live] = queried from running infra. Re-query before assuming.
   [repo] = derived from source code at this commit.
@@ -12,42 +14,61 @@ SOURCE-OF-TRUTH POLICY:
 
 ---
 
-## LAYER — FRONTEND
-- [repo] Single-file app `index.html` (vanilla JS, string concat, no build) + `dashboard.html` (event stats).
+## SECTION — PERSONAL PAGES (`/`, `/jubail/`)
+
+- [repo] Static HTML, no backend, no JS beyond none — no layers needed. Same page differing only in the middle section (see CLAUDE.md section rules).
+- ⚠ Stats on `/jubail/` ("122 homes") predate the event's final numbers — update pending.
+
+## SECTION — HALLOWEEN SITE (`jubail-halloween/`) — legacy, live
+
+### LAYER — FRONTEND
+- [repo] `jubail-halloween/index.html` (single-file app, vanilla JS, string concat, no build) + `jubail-halloween/dashboard.html` (event stats; traffic chart baked, home tiles live via `jh_list`).
 - [repo] Leaflet map: Esri World Imagery default (no key) + OSM street toggle (dark CSS filter).
-- [repo] PWA: `manifest` + pass-through service worker; iOS home-screen storage is separate from Safari (control-link paste box exists for this).
+- [repo] PWA: manifest + pass-through service worker; iOS home-screen storage is separate from Safari (control-link paste box exists for this).
 - [repo] Auto-reload: pages HEAD-poll own URL every 2 min, compare ETag, reload when idle (deferred with toast mid-form).
 - [repo] Broadcast banner: polls `jh_broadcast_get` every 60s; red site-wide alert.
+- [repo] All user-supplied strings HTML-escaped at render (`esc()` in both pages).
 
-## LAYER — BACKEND / API
-- [live] Supabase project **SignalPost** (`hrdmhifeynnokzjqtlsa`), shared with unrelated systems — Jubail tables are prefixed `jh_`.
-- [live] All access via `security definer` RPCs granted to `anon`; REST base `https://hrdmhifeynnokzjqtlsa.supabase.co/rest/v1/rpc/`.
-- [live] Public RPCs: jh_list, jh_signup (passcode-gated), jh_set_candy, jh_set_handout, jh_set_entrance, jh_set_treats, jh_set_details, jh_update_location, jh_remove, jh_get_note, jh_ack_note, jh_stats_list, jh_broadcast_get.
-- [live] Admin RPCs (organizer-code-gated): jh_admin_list (returns edit tokens), jh_admin_set_candy, jh_admin_set_entrance, jh_admin_set_note, jh_admin_set_removed, jh_admin_set_location, jh_admin_set_broadcast, jh_admin_set_passcode, jh_admin_new_season.
-- [live] pg_cron: `jh-hourly-snapshot` (minute 5) → `jh_snapshot()` → `jh_stats`.
+### LAYER — BACKEND / API
+- [live] Supabase project **SignalPost** (`hrdmhifeynnokzjqtlsa`) — Jubail tables are prefixed `jh_`.
+- [live] All access via `security definer` RPCs (all pin `search_path=public`); REST base `https://hrdmhifeynnokzjqtlsa.supabase.co/rest/v1/rpc/`.
+- [live] Public RPCs (anon): jh_list, jh_signup (passcode-gated), jh_set_candy, jh_set_handout, jh_set_entrance, jh_set_treats, jh_set_details, jh_update_location, jh_remove, jh_get_note, jh_ack_note, jh_stats_list, jh_broadcast_get.
+- [live] Admin RPCs: organizer-code-gated; enumerated in the private ops doc, not here.
+- [live] Internal-only (no anon/authenticated execute): jh_snapshot (pg_cron), jh_backfill_prefixes, jh_set_nonfood (superseded).
+- [live] pg_cron: `jh-hourly-snapshot` (minute 5, still active) → `jh_snapshot()` → `jh_stats`. Unschedule at season close-out.
 - ⚠ RULE: never change `jh_signup`'s signature — add follow-up RPCs instead.
 
-## LAYER — DATABASE
-- [live] Tables: `jh_homes` (unit, village, lat/lng, candy/handout/entrance/treats, notes, season, edit_token, removed, created_at), `jh_settings` (passcode, organizer code, broadcast), `jh_stats` (hourly snapshots; `both_kinds` — `both` is a Postgres reserved word).
-- [live] RLS: deny-all on all tables; RPCs are the only access path.
-- [live] Season model: rows tagged by `season` ('2026'); "New season" archives by tag; 500-entry cap per season.
-- ⚠ GAP: schema SQL exists only as Supabase migration history + ops doc — not in git.
+### LAYER — DATABASE
+- [live] Tables: `jh_homes` (unit, village, lat/lng, candy/handout/entrance/treats, notes, season, edit_token, removed, created_at), `jh_settings` (key/value: passcode, admin_code, season, broadcast), `jh_stats` (hourly snapshots; `both_kinds` — `both` is a Postgres reserved word).
+- [live] RLS enabled, zero policies (deny-all) on all three `jh_` tables; no anon/authenticated table grants. RPCs are the only access path. (`jh_stats` brought into line 2026-11-02 — see `supabase/migrations/20261102160000_jh_stats_rls_lockdown.sql`.)
+- [live] Season model: rows tagged by `season` ('2026'); "New season" relabels the active season; 500-entry cap per season.
+- [live] Check constraints on home_type/handout/entrance; treats validated in RPC.
 
-## LAYER — AUTH & SESSIONS
+### LAYER — AUTH & SESSIONS
 - [repo] No accounts, no auth provider. Per-entry `edit_token` (control link `?m=<id>~<token>`), organizer code for admin RPCs, sign-up passcode. Zero-PII by design (see CLAUDE.md).
 - Secrets live in `jh_settings` and the private ops doc — never in this repo.
 
-## LAYER — EXTERNAL APIs
+### LAYER — EXTERNAL APIs
 - [repo] Esri World Imagery tiles (free, keyless); OSM tiles (street toggle). Nothing else third-party. No analytics/trackers by promise.
 
-## LAYER — OBSERVABILITY
-- [live] None by design on the client. Server proxy: Supabase edge logs (~24h retention) via ClickHouse SQL (`logs` table, `source='edge_logs'`, `log_attributes['request.headers.cf_connecting_ip']`).
-- [live] `jh_stats` hourly snapshots power time-series charts.
+### LAYER — OBSERVABILITY
+- [live] None by design on the client. Server-side: Supabase edge logs (~24h retention) are the only traffic proxy; query recipes live in the private ops doc.
+- [live] `jh_stats` hourly snapshots (read via `jh_stats_list`).
 
-## LAYER — CI / CD
-- [live] GitHub Actions Pages workflow; push to `main` → deploy; ~10 min CDN cache. Verify via `gh api .../actions/runs`.
+## SECTION — COMMONS (`commons/`) — not yet built
+
+- **Decision (2026-11-02): Commons gets its OWN Supabase project** — it does not share SignalPost. `jc_` prefix retained for clarity; migrations land in `supabase/migrations/` here before anything goes live.
+- Per-community config + per-module feature flags, EN/AR + RTL, optional-PII identity slots — see `docs/plans/backlog.md`.
+
+## LAYER — CI / CD (whole repo)
+
+- [live] GitHub Pages user site (legacy build) serving `main` root; push → deploy, ~10 min CDN cache. Verify via `gh api repos/zgauba/zgauba.github.io/actions/runs`.
+- [live] Old `zgauba/jubail-halloween` repo: Pages disabled + archived 2026-11-02; the `jubail-halloween/` folder now serves the identical URL.
+- [repo] One Pages build serves everything — career page shares blast radius with community-app pushes.
+- Note: the whole repo is served verbatim (this file is a public URL) — docs here must stay sanitized.
 
 ## LAYER — SECRETS & ENV VARS
+
 - [repo] Supabase publishable anon key embedded in HTML — public by design.
 - [live] Organizer code + passcode in `jh_settings` (organizer code changeable only via SQL).
 
@@ -55,13 +76,8 @@ SOURCE-OF-TRUTH POLICY:
 
 ## Known gaps & drift
 
-1. **Schema not in git** — Supabase SQL (tables, RPCs, cron) lives only in Supabase migration history; to be fixed in the `jubail-events` rebuild (supabase/migrations/ in-repo).
-2. **Print button hidden** (`display:none`, listener still bound) pending community privacy consensus.
-3. **Unused `non_food` column** on jh_homes (superseded by `treats`); `jh_set_nonfood` grant revoked but function may linger.
-4. **Repo will be superseded** by `jubail-events` (Nov 2026 rebuild); this page becomes a redirect stub — don't invest in structural changes here.
-
----
-
-## MONOREPO NOTE (2026-11-02)
-
-This manifest was written for the Halloween app, now at `jubail-halloween/` in this repo (moved from the retired `zgauba/jubail-halloween` repo — identical serving URL). The **Jubail Commons** rebuild (`commons/`, tables `jc_*`, migrations in `supabase/migrations/`) gets its own layers here as it's built. Personal pages (`/`, `/jubail/`) are static HTML with no backend — no layers needed.
+1. **Historical `jh_` schema not in git** — only migrations from 2026-11-02 onward are mirrored into `supabase/migrations/`; the ~24 earlier `jh_` migrations exist only in Supabase migration history. Backfill when convenient.
+2. **Season close-out pending** (deliberately deferred; do in this order): bake final village/treats numbers into dashboard.html → Export CSV → delete season-2026 rows (honors the "deleted after the season" promise) → new season label → unschedule `jh-hourly-snapshot`.
+3. **Print button hidden** (`display:none`, listener still bound) pending community privacy consensus.
+4. **Unused `non_food` column** on jh_homes (superseded by `treats`); `jh_set_nonfood` grant revoked but function lingers.
+5. **Bio-page stats stale** — `/jubail/` says 122 homes; reconcile final count (live DB: 124 active + 3 removed; note one-off "Marsa Al jubail" village spelling vs "Marfaa Al Jubail" before quoting a village count).
