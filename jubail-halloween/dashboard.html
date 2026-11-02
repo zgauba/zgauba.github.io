@@ -56,11 +56,11 @@ a{color:var(--c1soft)}
 <body>
 <main>
   <h1>🎃 Jubail Trick-or-Treat — Dashboard</h1>
-  <p class="sub">Halloween night, Oct 31 2026 · stats update hourly · <a href="index.html">back to the map</a></p>
+  <p class="sub">Halloween night, Oct 31 2026 · final numbers · <a href="index.html">back to the map</a></p>
 
   <div class="tiles">
-    <div class="tile"><div class="n" id="tHomes">—</div><div class="l">homes on the map</div></div>
-    <div class="tile outtile"><div class="n" id="tOut">—</div><div class="l">out of treats right now</div></div>
+    <div class="tile"><div class="n">124</div><div class="l">homes on the map</div></div>
+    <div class="tile outtile"><div class="n">33</div><div class="l">ran out of treats by night's end</div></div>
     <div class="tile"><div class="n">355</div><div class="l">unique visitors on the day*</div></div>
     <div class="tile"><div class="n">4,947</div><div class="l">map loads on the day*</div></div>
   </div>
@@ -75,13 +75,13 @@ a{color:var(--c1soft)}
 
   <section>
     <h2>Homes by village</h2>
-    <p class="note">Live from the map.</p>
+    <p class="note">Final, at season close.</p>
     <div id="villages"></div>
   </section>
 
   <section>
     <h2>What homes are handing out</h2>
-    <p class="note">Live from the map.</p>
+    <p class="note">Final, at season close.</p>
     <div id="treats"></div>
   </section>
 
@@ -91,9 +91,6 @@ a{color:var(--c1soft)}
 <footer>*Visitor counts are unique networks seen by the backend — an approximation, counted without cookies or tracking, consistent with the site's privacy promise. Only unit numbers &amp; pin locations are stored; data deleted after the season.</footer>
 
 <script>
-var API = "https://hrdmhifeynnokzjqtlsa.supabase.co/rest/v1/rpc/";
-var KEY = "sb_publishable_7sJZM9wi5XmXEU0_t4e5uQ_WdfF05_s";
-
 /* ---- baked traffic snapshot (Dubai hours), as of 7:15 PM Oct 31 ---- */
 var HOURS = ["4am","5am","6am","7am","8am","9am","10am","11am","12pm","1pm","2pm","3pm","4pm","5pm","6pm","7pm"];
 var VISITORS = [1,2,3,5,8,9,14,19,18,22,20,30,68,175,144,89];
@@ -140,7 +137,10 @@ function hideTip(){ tip.style.display = "none"; }
   });
 })();
 
-/* ---- live home stats ---- */
+/* ---- baked final home stats (season closed; entries deleted per the privacy promise) ---- */
+/* Marfaa Al Jubail includes 1 home entered as "Marsa Al Jubail" — the marina enclave inside Marfaa. */
+var FINAL_VILLAGES = [["Souk Al Jubail",44],["Nad Al Dhabi",31],["Seef Al Jubail",26],["Ain Al Maha",21],["Marfaa Al Jubail",2]];
+var FINAL_TREATS = { candy: 102, non_food: 3, both: 19 };
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 function hbar(label, value, max, color){
   var pct = max > 0 ? Math.max(Math.round(value / max * 100), 2) : 2;
@@ -150,37 +150,19 @@ function hbar(label, value, max, color){
     '<span class="hval">' + value + '</span></div></div>';
 }
 
-function refresh(){
-  fetch(API + "jh_list", { method: "POST", headers: { "apikey": KEY, "Authorization": "Bearer " + KEY, "Content-Type": "application/json" }, body: "{}" })
-    .then(function(r){ return r.json(); })
-    .then(function(homes){
-      if (!homes || !homes.length) return;
-      var out = homes.filter(function(h){ return h.out_of_candy; }).length;
-      document.getElementById("tHomes").textContent = homes.length;
-      document.getElementById("tOut").textContent = out;
+(function renderFinal(){
+  var vmax = FINAL_VILLAGES[0][1];
+  var html = "";
+  FINAL_VILLAGES.forEach(function(v){ html += hbar(v[0], v[1], vmax, "var(--c2)"); });
+  document.getElementById("villages").innerHTML = html;
 
-      var byV = Object.create(null); // null prototype: a village named "constructor" etc. must stay plain data
-      homes.forEach(function(h){ byV[h.village] = (byV[h.village] || 0) + 1; });
-      var names = Object.keys(byV).sort(function(a, b){ return byV[b] - byV[a]; });
-      var vmax = byV[names[0]] || 1;
-      var html = "";
-      names.forEach(function(v){ html += hbar(v, byV[v], vmax, "var(--c2)"); });
-      document.getElementById("villages").innerHTML = html;
-
-      var mix = { candy: 0, non_food: 0, both: 0 };
-      homes.forEach(function(h){ mix[h.treats === "non_food" ? "non_food" : h.treats === "both" ? "both" : "candy"]++; });
-      var tmax = Math.max(mix.candy, mix.non_food, mix.both, 1);
-      document.getElementById("treats").innerHTML =
-        hbar("🍬 Candy only", mix.candy, tmax, "var(--c1)") +
-        hbar("🎃 Non-food only", mix.non_food, tmax, "var(--c2)") +
-        hbar("🍬🎃 Both", mix.both, tmax, "var(--c3)");
-
-      document.getElementById("stamp").textContent = "Stats updated " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + " — updates hourly; reload the page for fresh numbers";
-    })
-    .catch(function(){});
-}
-refresh();
-setInterval(refresh, 3600000);
+  var t = FINAL_TREATS;
+  var tmax = Math.max(t.candy, t.non_food, t.both, 1);
+  document.getElementById("treats").innerHTML =
+    hbar("🍬 Candy only", t.candy, tmax, "var(--c1)") +
+    hbar("🎃 Non-food only", t.non_food, tmax, "var(--c2)") +
+    hbar("🍬🎃 Both", t.both, tmax, "var(--c3)");
+})();
 </script>
 </body>
 </html>
