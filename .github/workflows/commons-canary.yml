@@ -39,7 +39,7 @@ jobs:
           KEY: sb_publishable_cQKcp9tzYzeyrIO0Hzz6ZQ_jaxoq7QU
         run: |
           fail=0
-          for s in net cron vault jc_private; do
+          for s in net cron vault jc_private storage extensions supabase_functions; do
             code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 -X POST "$API" \
               -H "apikey: $KEY" -H "Content-Profile: $s" -H "Content-Type: application/json" -d '{}')
             echo "$s -> HTTP $code"

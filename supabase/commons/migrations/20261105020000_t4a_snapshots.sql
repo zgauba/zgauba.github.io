@@ -13,7 +13,10 @@
 -- after this point still add noise (known residual — run them sparingly post-launch).
 --
 -- Rollback: select cron.unschedule('jc-hourly-snapshot'); drop function
--- jc_admin_report(), jc_snapshot_run(timestamptz); drop table jc_counter_baseline.
+-- jc_admin_report() (after T4c: jc_admin_report_core()), jc_snapshot_run(timestamptz);
+-- drop table jc_counter_baseline.
+-- `enabled` is compared as text, never cast: one malformed modules row must not abort
+-- the run for every community.
 -- Snapshot rows are harmless to keep.
 
 -- Requires pg_cron: 20261105015000_t4a_enable_pg_cron.sql (applied first, on its own —
@@ -64,13 +67,13 @@ begin
                      where g.community_id = c.id and g.last_used_at > p_at - interval '60 days'))
          from jc_accounts a where a.community_id = c.id)),
     (c.id, 'events', v_bucket, jsonb_build_object(
-       'enabled', coalesce((c.modules -> 'events' ->> 'enabled')::boolean, false),
+       'enabled', (c.modules -> 'events' ->> 'enabled') is not distinct from 'true',
        'live_events', (select count(*) from jc_events e where e.community_id = c.id and e.status = 'live'),
        'entries_in', (select count(*) from jc_event_entries en join jc_events e on e.id = en.event_id
                        where en.community_id = c.id and e.status = 'live'
                          and en.status = 'in' and en.archived_at is null))),
     (c.id, 'bookings', v_bucket, jsonb_build_object(
-       'enabled', coalesce((c.modules -> 'bookings' ->> 'enabled')::boolean, false),
+       'enabled', (c.modules -> 'bookings' ->> 'enabled') is not distinct from 'true',
        'upcoming', (select count(*) from jc_bookings b where b.community_id = c.id
                      and b.status = 'booked' and b.starts_at > p_at),
        'next_24h', (select count(*) from jc_bookings b where b.community_id = c.id
@@ -79,7 +82,7 @@ begin
                         and b.created_at > p_at - interval '24 hours'))),
     (c.id, 'pets', v_bucket, (
        select jsonb_build_object(
-         'enabled', coalesce((c.modules -> 'pets' ->> 'enabled')::boolean, false),
+         'enabled', (c.modules -> 'pets' ->> 'enabled') is not distinct from 'true',
          'owned', count(*) filter (where p.kind = 'owned'),
          'strays', count(*) filter (where p.kind = 'stray'),
          'missing', count(*) filter (where p.missing))
@@ -109,13 +112,13 @@ declare v_comm text; v_last timestamptz; v_job record; v_fail record; v_last_run
 begin
   v_comm := jc_assert_admin('community');
   select max(taken_at) into v_last from jc_snapshots where community_id = v_comm;
+  -- Unconditional SELECT INTO: with no job (the case this report exists to catch) they
+  -- find no rows and assign NULLs; reading an unassigned record would raise instead.
   select jobid, active into v_job from cron.job where jobname = 'jc-hourly-snapshot';
-  if v_job.jobid is not null then
-    select status, end_time into v_last_run from cron.job_run_details
-     where jobid = v_job.jobid order by start_time desc limit 1;
-    select end_time, left(return_message, 200) as msg into v_fail from cron.job_run_details
-     where jobid = v_job.jobid and status = 'failed' order by start_time desc limit 1;
-  end if;
+  select status, end_time into v_last_run from cron.job_run_details
+   where jobid = v_job.jobid order by start_time desc limit 1;
+  select end_time, left(return_message, 200) as msg into v_fail from cron.job_run_details
+   where jobid = v_job.jobid and status = 'failed' order by start_time desc limit 1;
   select coalesce(sum(count), 0) into v_hits from jc_hits
    where community_id = v_comm and hour > now() - interval '24 hours';
   select count(*) into v_accounts from jc_accounts where community_id = v_comm;

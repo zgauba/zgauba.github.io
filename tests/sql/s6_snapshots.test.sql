@@ -9,7 +9,7 @@ declare
   t2 uuid := '00000000-0000-4000-8000-000000000602';
   v_at timestamptz := date_trunc('hour', now()) + interval '10 minutes';
   v_bucket timestamptz := date_trunc('hour', now());
-  v jsonb; v_err text; n int; k int := 0; v_h1 uuid; v_h2 uuid;
+  v jsonb; v_err text; n int; k int := 0; v_h1 uuid; v_h2 uuid; v_ev uuid; v_fac uuid;
 begin
   -- ---------- setup (as postgres) ----------
   insert into auth.users (id, email) values (t1, 't1@t4.test'), (t2, 't2@t4.test');
@@ -24,6 +24,25 @@ begin
   values ('testville6', 'north', 'villa', '2') returning id into v_h2;
   insert into jc_home_members (user_id, community_id, home_id, via) values (t1, 'testville6', v_h1, 'claim');
   insert into jc_hits (community_id, page, hour, count) values ('testville6', 'landing', v_bucket - interval '1 hour', 7);
+  -- one live event with one live entry + one withdrawn; one draft event with an entry
+  insert into jc_events (community_id, slug, title_en, status) values ('testville6', 'fair', 'Fair', 'live') returning id into v_ev;
+  insert into jc_event_entries (event_id, community_id, home_id) values (v_ev, 'testville6', v_h1);
+  insert into jc_event_entries (event_id, community_id, home_id, status) values (v_ev, 'testville6', v_h2, 'withdrawn');
+  insert into jc_events (community_id, slug, title_en, status) values ('testville6', 'later', 'Later', 'draft') returning id into v_ev;
+  insert into jc_event_entries (event_id, community_id, home_id) values (v_ev, 'testville6', v_h1);
+  -- bookings: one in 2 h, one in 3 days, one cancelled, one past
+  insert into jc_facilities (community_id, kind, name_en, status) values ('testville6', 'padel', 'Court 1', 'published') returning id into v_fac;
+  insert into jc_bookings (community_id, facility_id, home_id, starts_at, ends_at) values
+    ('testville6', v_fac, v_h1, v_at + interval '2 hours', v_at + interval '3 hours'),
+    ('testville6', v_fac, v_h1, v_at + interval '3 days', v_at + interval '3 days 1 hour'),
+    ('testville6', v_fac, v_h1, v_at - interval '1 day', v_at - interval '23 hours');
+  insert into jc_bookings (community_id, facility_id, home_id, starts_at, ends_at, status, cancelled_at) values
+    ('testville6', v_fac, v_h2, v_at + interval '4 hours', v_at + interval '5 hours', 'cancelled', now());
+  -- pets: owned + missing, a stray, an archived owned
+  insert into jc_pets (community_id, kind, home_id, species, name, missing, missing_since) values
+    ('testville6', 'owned', v_h1, 'cat', 'Mish', true, now());
+  insert into jc_pets (community_id, kind, species, name, care_state) values ('testville6', 'stray', 'dog', 'Rex', 'under_care');
+  insert into jc_pets (community_id, kind, home_id, species, name, status) values ('testville6', 'owned', v_h2, 'cat', 'Gone', 'archived');
   perform jc_code_set('testville6', 'community', 'T4-TV6-ADMIN-01');
 
   -- ---------- N01 one row per module per community per hour ----------
@@ -41,7 +60,15 @@ begin
   if (v ->> 'total')::int <> 2 or (v ->> 'joined_24h')::int <> 2 then raise exception 'FAIL N02b accounts: %', v; end if;
   v := (select metrics from jc_snapshots where community_id = 'testville6' and module = 'traffic' and bucket = v_bucket);
   if (v -> 'pages' ->> 'landing')::int <> 7 then raise exception 'FAIL N02c traffic: %', v; end if;
-  k := k + 3;
+  v := (select metrics from jc_snapshots where community_id = 'testville6' and module = 'events' and bucket = v_bucket);
+  if (v ->> 'live_events')::int <> 1 or (v ->> 'entries_in')::int <> 1 then raise exception 'FAIL N02d events: %', v; end if;
+  v := (select metrics from jc_snapshots where community_id = 'testville6' and module = 'bookings' and bucket = v_bucket);
+  if (v ->> 'upcoming')::int <> 2 or (v ->> 'next_24h')::int <> 1 or (v ->> 'created_24h')::int <> 4 then
+    raise exception 'FAIL N02e bookings: %', v; end if;
+  v := (select metrics from jc_snapshots where community_id = 'testville6' and module = 'pets' and bucket = v_bucket);
+  if (v ->> 'owned')::int <> 1 or (v ->> 'strays')::int <> 1 or (v ->> 'missing')::int <> 1 then
+    raise exception 'FAIL N02f pets: %', v; end if;
+  k := k + 6;
 
   -- ---------- N03 module flags are recorded, and off modules still get a row ----------
   if (select (metrics ->> 'enabled')::boolean from jc_snapshots
@@ -107,11 +134,25 @@ begin
   v := jc_health('testville6');
   if (v ->> 'ok')::boolean is not true or (v ->> 'cron_active')::boolean is not true then
     raise exception 'FAIL N09b fresh not ok: %', v; end if;
-  if (select count(*) from jsonb_object_keys(v)) <> 3 then raise exception 'FAIL N09c probe leaks more than ok/age: %', v; end if;
+  if exists (select 1 from jsonb_object_keys(v) x
+              where x not in ('ok', 'cron_active', 'snapshot_age_minutes', 'maintenance_ok')) then
+    raise exception 'FAIL N09c probe leaks more than flags/age: %', v; end if;
   v_err := null; begin perform jc_health('no-such-place'); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'NOT_FOUND' then raise exception 'FAIL N09d: %', v_err; end if;
   execute 'reset role';
   k := k + 4;
+
+  -- ---------- N10 the report survives the very thing it watches for: no cron job ----------
+  perform cron.unschedule('jc-hourly-snapshot');
+  perform set_config('request.jwt.claims', json_build_object('sub', t1, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  v_err := null; begin v := jc_admin_report(); exception when others then v_err := sqlerrm; end;
+  if v_err is not null then raise exception 'FAIL N10a report raised with no job: %', v_err; end if;
+  if (v -> 'cron' ->> 'job_present')::boolean is not false then raise exception 'FAIL N10b: %', v -> 'cron'; end if;
+  execute 'reset role'; execute 'set local role anon';
+  if (jc_health('testville6') ->> 'ok')::boolean is not false then raise exception 'FAIL N10c health ok with no job'; end if;
+  execute 'reset role';
+  k := k + 3;
 
   execute 'reset role';
   perform set_config('jc_test.checks', (coalesce(nullif(current_setting('jc_test.checks', true), ''), '0')::int + k)::text, true);

@@ -108,7 +108,17 @@ begin
   -- T4: pg_cron's functions carry PUBLIC execute; schema usage is what keeps them out of reach
   if has_schema_privilege('anon', 'cron', 'usage') or has_schema_privilege('authenticated', 'cron', 'usage') then
     raise exception 'FAIL G16 anon/authenticated can use schema cron'; end if;
-  k := k + 6;
+  -- T4: anon keeps EXECUTE on net.http_* and privileges on net's queue tables (Supabase
+  -- grants, unrevocable by postgres). Two pins keep that unreachable: no public function
+  -- touches net/vault at all, and only the named monitoring functions read cron. (The
+  -- third pin — net/cron/vault not API-exposed — is the canary's HTTP probe.)
+  select count(*) into n from pg_proc pr where pr.pronamespace = 'public'::regnamespace
+     and pr.prosrc ~* '\m(net|vault)\.';
+  if n <> 0 then raise exception 'FAIL G17 % public functions reference net./vault.', n; end if;
+  select count(*) into n from pg_proc pr where pr.pronamespace = 'public'::regnamespace
+     and pr.prosrc ~* '\mcron\.' and pr.proname not in ('jc_admin_report', 'jc_admin_report_core', 'jc_health');
+  if n <> 0 then raise exception 'FAIL G18 % unexpected public functions reference cron.', n; end if;
+  k := k + 8;
 
   -- anything created after the migrations (next slice, or by hand) must start closed
   execute 'create function public.jc_zz_probe() returns int language sql as $f$ select 1 $f$';
