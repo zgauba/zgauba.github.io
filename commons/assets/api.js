@@ -92,9 +92,26 @@ function jcState(){
   });
 }
 
-/* Post-sign-in destination: relative Commons paths only (never an open redirect). */
+/* Post-sign-in destination: relative Commons paths only (never an open redirect).
+   The one query allowed is a household invite token, so an invitee who must first
+   sign in or join lands back on the invite (T5.0b). */
 function jcSafeNext(next){
-  return (typeof next === "string" && /^\.\.?\/[a-z0-9\/_-]*$/.test(next)) ? next : "../";
+  return (typeof next === "string" &&
+          /^\.\.?\/[a-z0-9\/_-]*(\?invite=[A-Za-z0-9_-]{16,64})?$/.test(next)) ? next : "../";
+}
+
+/* "Villa 12" / "Townhouse 7" / "Apt 304, B2" — from a jc_me_get home object. */
+function jcHomeLabel(h){
+  if (!h) return "";
+  var key = h.type === "apartment" ? "home_apartment" : h.type === "townhouse" ? "home_townhouse" : "home_villa";
+  return jcFmt(key, { n: h.number, b: h.building });
+}
+
+/* Village display name from a jc_config_get config (falls back to the key). */
+function jcVillageName(cfg, key){
+  var v = ((cfg && cfg.villages) || []).filter(function(x){ return x.key === key; })[0];
+  if (!v) return key || "";
+  return (jcLang() === "ar" && v.ar) ? v.ar : v.en;
 }
 
 /* Anon-only RPCs (jc_config_get, jc_hit) skip the auth client on purpose: a broken

@@ -5,7 +5,7 @@
 <!-- CSP: scripts only from this site (vendored, no CDN); network only to the Commons
      Supabase project. Sessions live in localStorage on a shared origin — this is the
      guard against injected script reading them. Keep in sync across Commons pages. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://qrpxfssdeeuzmsmlbtbu.supabase.co wss://qrpxfssdeeuzmsmlbtbu.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://qrpxfssdeeuzmsmlbtbu.supabase.co wss://qrpxfssdeeuzmsmlbtbu.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="referrer" content="no-referrer">
@@ -28,5 +28,6 @@
 <script src="../assets/strings.js"></script>
 <script src="../assets/api.js"></script>
 <script src="account.js"></script>
+<script src="../assets/update.js"></script>
 </body>
 </html>

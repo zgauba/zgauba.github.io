@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <!-- CSP: keep in sync across Commons pages (see account/index.html) -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://qrpxfssdeeuzmsmlbtbu.supabase.co wss://qrpxfssdeeuzmsmlbtbu.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://qrpxfssdeeuzmsmlbtbu.supabase.co wss://qrpxfssdeeuzmsmlbtbu.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Jubail Commons</title>
@@ -13,6 +13,7 @@
 <!-- first, before anything renders: the github.io copy forwards to commons.ae -->
 <script src="assets/canonical.js"></script>
 <link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/tabbar.css">
 <style>
 *{box-sizing:border-box}
 body{margin:0; background:var(--jc-bg); color:var(--jc-ink);
@@ -61,6 +62,9 @@ footer a#archiveLink{white-space:nowrap}
 .card .ico{margin-bottom:2px}
 h2.choose{font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--jc-muted); margin:0 0 10px; text-align:center}
 /* signed-out hero: the mark large and centered above the wordmark (wireframe band 01) */
+/* hub: the community name fits on one line beside the language button */
+body:not(.mode-picker) h1{font-size:22px}
+body:not(.mode-picker) .brandrow svg{width:30px; height:30px}
 body.mode-picker header{flex-direction:column; align-items:center; text-align:center; position:relative; padding-top:46px}
 body.mode-picker .hdr-actions{position:absolute; top:0; inset-inline-end:0}
 body.mode-picker .brandrow{flex-direction:column; gap:14px}
@@ -119,7 +123,9 @@ a.go.ghost{background:transparent; color:var(--jc-ink); border:1px solid var(--j
 <script src="assets/vendor/supabase-2.118.0.js"></script>
 <script src="assets/strings.js"></script>
 <script src="assets/icons.js"></script>
+<script src="assets/nav.js"></script>
 <script src="assets/api.js"></script>
 <script src="assets/landing.js"></script>
+<script src="assets/update.js"></script>
 </body>
 </html>

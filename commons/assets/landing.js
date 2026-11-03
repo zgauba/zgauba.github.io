@@ -61,11 +61,10 @@ function applyBrandTokens(tokens){
   });
 }
 
-/* member → "Account"; not_member → "Finish joining". Signed out: hidden — the
-   community card's Sign in / Join buttons already say it (no duplicate CTA). */
+/* Only "Finish joining" (not_member) shows here. Signed out: the community card's
+   Sign in / Join say it; member: the My Home tab is the account page. No duplicates. */
 function renderAuth(){
-  var label = authStatus === "member" ? "nav_account"
-            : authStatus === "not_member" ? "nav_finish_join" : null;
+  var label = authStatus === "not_member" ? "nav_finish_join" : null;
   el("authLink").hidden = !label;
   if (label) el("authLink").textContent = jcT(label);
 }
@@ -95,15 +94,18 @@ function renderPicker(){
   el("yours").innerHTML = esc(jcT("your_community")) + ' <a href="https://zgauba.github.io/">' + esc(jcT("your_community_link")) + '</a>';
 }
 
+var hubHome = null;      /* the member's home (jc_me_get) — for the greeting */
 function renderHub(){
   var cfg = cfgFor(hubCommunity);
   document.title = nameOf(cfg);
   el("brand").textContent = nameOf(cfg);
-  el("tagline").textContent = jcT("tagline");
+  el("tagline").textContent = hubHome ? jcFmt("hub_hello", { h: jcHomeLabel(hubHome) }) : jcT("tagline");
   var mods = cfg.modules || {};
-  el("cards").innerHTML = ["events", "bookings", "pets"].map(function(k){
+  /* The Community (map + directory) has no module flag; it lands later in T5 */
+  el("cards").innerHTML = ["events", "bookings", "pets", "community"].map(function(k){
     return moduleCard(k, !!(mods[k] && mods[k].enabled));
   }).join("");
+  jcTabBar("", "commons", cfg);
   var b = (cfg.broadcast || "").trim();
   el("bcast").textContent = b ? "⚠️ " + b : "";
   el("bcast").style.display = b ? "block" : "none";
@@ -158,7 +160,10 @@ jcHit("landing");
 jcState().then(function(s){
   authStatus = s.status;
   if (s.status === "member" && s.me && s.me.community) {
+    /* onboarding isn't finished until the home is claimed (wireframe band 02) */
+    if (!s.me.home) { location.replace("home/"); return; }
     hubCommunity = s.me.community;
+    hubHome = s.me.home;
     return (cfgs[hubCommunity] ? Promise.resolve() : loadConfig(hubCommunity))
       .then(function(){ setMode("hub"); });
   }

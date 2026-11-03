@@ -30,7 +30,7 @@ function authCode(err){
   if (c === "weak_password" || /password should be/i.test(m)) return "WEAK_PASSWORD";
   if (c === "email_address_invalid" || /invalid.*email|email.*invalid/i.test(m)) return "BAD_EMAIL";
   if (c === "over_request_rate_limit" || c === "over_email_send_rate_limit" || err.status === 429) return "AUTH_LIMIT";
-  if (c === "email_not_confirmed") return "CONFIRM_REQUIRED";
+  if (c === "email_not_confirmed") return "EMAIL_CONFIRM_REQUIRED";
   if (err.name === "AuthRetryableFetchError" || err.status === 0 || /fetch/i.test(m)) return "NETWORK";
   return "UNKNOWN";
 }
@@ -186,7 +186,7 @@ function doSignUp(){
       if (r.error) throw jcErr(authCode(r.error), r.error);
       /* Email confirmation is OFF by decision (manifest, Auth layer). No session
          here means the dashboard drifted — say so instead of failing silently. */
-      if (!r.data || !r.data.session) throw jcErr("CONFIRM_REQUIRED");
+      if (!r.data || !r.data.session) throw jcErr("EMAIL_CONFIRM_REQUIRED");
       return doJoin("go");
     })
     .catch(function(e){ busy("go", false); showErr(e.code || "UNKNOWN"); });

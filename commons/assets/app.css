@@ -2,6 +2,8 @@
    Tokens only (assets/tokens.css) — never raw colors. Logical properties only
    (margin-inline, padding-inline, inset-inline) so RTL flows from dir=. */
 *{box-sizing:border-box}
+/* the hidden attribute must win over display rules below (label{display:flex} etc.) */
+[hidden]{display:none !important}
 body{margin:0; background:var(--jc-bg); color:var(--jc-ink);
   font:15px/1.6 var(--jc-font); -webkit-font-smoothing:antialiased; min-height:100vh}
 main{max-width:480px; margin:0 auto; padding:24px 18px 40px}

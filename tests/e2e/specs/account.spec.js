@@ -48,7 +48,7 @@ test("join: code first → account → jc_join with community + code → in", as
   await page.locator("#email").fill("a@example.com");
   await page.locator("#password").fill("long-enough-pw");
   await page.locator("#go").click();
-  await expect(page).toHaveURL(/\/commons\/$/);
+  await expect(page).toHaveURL(/\/commons\/home\/$/)  // new member → claim your home;
   const join = calls.find((c) => c.name === "jc_join");
   expect(join.args).toEqual({ p_community: "jubail", p_code: "ABCD-EFGH-JK" });
   expect(join.signedIn).toBe(true);
@@ -71,7 +71,7 @@ test("BAD_CODE (200 + error body) is a failure; retry with the same account work
   await expect(page.locator(".who")).toContainText("a@example.com");
   await page.locator("#code").fill("RIGHT-CODE");
   await page.locator("#go").click();
-  await expect(page).toHaveURL(/\/commons\/$/);
+  await expect(page).toHaveURL(/\/commons\/home\/$/)  // new member → claim your home;
   expect(calls.filter((c) => c.name === "signup").length).toBe(1);
   expect(calls.filter((c) => c.name === "jc_join").length).toBe(2);
 });

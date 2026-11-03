@@ -70,9 +70,9 @@ test("signed-in member: the hub (broadcast + enabled module), not the picker", a
   await expect(page.locator("#brand")).toHaveText("Jubail Commons");
   await expect(page.locator("#bcast")).toHaveText("⚠️ Road closed at Souk");
   await expect(page.locator("#cards a.go[href='events/']")).toHaveText("Sign your home up");
-  await expect(page.locator("#cards .card svg.ico")).toHaveCount(3);
+  await expect(page.locator("#cards .card svg.ico")).toHaveCount(4);  // + The Community
   await expect(page.locator("#picker")).toBeHidden();
-  await expect(page.locator("#authLink")).toHaveText("Account");
+  await expect(page.locator("#authLink")).toBeHidden();  // the My Home tab is the account page
 });
 
 test("config failure shows the error bar and the default community — never a blank page", async ({ page }) => {
