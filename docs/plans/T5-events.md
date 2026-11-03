@@ -23,6 +23,24 @@ residents until T6 (no codes set, all modules off).
 Deferred out of T5: UC-D4 route + km counter (`route` flag stays off); admin Homes
 queue (lands with the Community map module); UC-H2 rotation banner.
 
+### Halloween-site parity audit (2026-11-03) — decisions (Zee)
+
+Every feature of `jubail-halloween/` mapped to Commons. Outcome:
+
+- **Into T5.1 (PR #24):** directions + "view pin" per home; tap-a-pin details (answers,
+  note); distance from me + sort by distance / house number (natural sort); find me
+  and satellite/streets on the event map; the organizer's note to a home shown to that
+  home; WhatsApp "message the organizers" link (config `links.whatsapp`); paste Google
+  Maps coordinates on the pin screen.
+- **Into T5.2 (with event day + admin):** meaningful pin encoding + legend (each event
+  declares which answer drives fill / ring / glyph — fill stays availability, per the
+  Halloween rule); organizer **broadcast** — an admin RPC to set it (migration) + a
+  banner polled on every page; **organizer can move a home's pin** (Zee 2026-11-03 —
+  needs an admin pin RPC, admin-logged, migration) and override an entry's live state.
+- **Separate small PR after #24:** "Save as an app" (web manifest + icons).
+- **Dropped on purpose:** "Other…" free-text village; delete-after-Halloween (archive
+  model); print list (KG3, parked); "this week!" banner.
+
 ## Decisions
 
 | # | Decision |

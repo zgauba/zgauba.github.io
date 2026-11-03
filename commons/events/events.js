@@ -45,6 +45,12 @@ function valueLabel(spec, v){
   return (m && m[v]) || human(v);
 }
 function goList(){ location.href = "./"; }
+/* The community's WhatsApp group (config links.whatsapp). Config is admin data, but a
+   link must still be a real WhatsApp address — never javascript:/data:/elsewhere. */
+function whatsappUrl(){
+  var u = cfg && cfg.links && cfg.links.whatsapp;
+  return (typeof u === "string" && /^https:\/\/(chat\.whatsapp\.com|wa\.me)\/[A-Za-z0-9_\/+-]+$/.test(u)) ? u : null;
+}
 
 function show(name){
   if (map) { map.remove(); map = null; }
@@ -111,6 +117,12 @@ var VIEWS = {
     } else {
       cta = '<p class="help">' + esc(jcT("err_SIGNUPS_CLOSED")) + '</p>';
     }
+    /* the organizers' note to MY home (Halloween parity: "your pin looks misplaced…") */
+    if (mine && mine.org_note) {
+      cta = '<div class="orgnote" role="note"><b>' + esc(jcT("ev_org_note")) + '</b><p>' + esc(mine.org_note) + '</p></div>' + cta;
+    }
+    var wa = whatsappUrl();
+    if (wa) cta += '<a class="btn ghost" target="_blank" rel="noopener" href="' + esc(wa) + '">' + esc(jcT("ev_whatsapp")) + '</a>';
     el("cta").innerHTML = cta;
     on("toSignup", function(){ show("signup"); });
     on("withdraw", function(){
@@ -222,39 +234,111 @@ var VIEWS = {
   }
 };
 
+/* ---------- map + list (Halloween-site parity, plan audit 2026-11-03) ---------- */
+var TILES = {
+  sat: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+         opts: { maxNativeZoom: 19, maxZoom: 20, attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics" } },
+  street: { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+            opts: { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" } }
+};
+var layer = "sat";
+var listSort = "number";   /* number | distance */
+/* The visitor's own position — held in memory only, never sent or stored. Used for
+   "≈ 120 m from you" and sort-by-distance, exactly as the Halloween site did. */
+var userPos = null;
+
+function locate(done){
+  if (!navigator.geolocation) return showErr("LOCATE_FAILED");
+  navigator.geolocation.getCurrentPosition(function(p){
+    userPos = L.latLng(p.coords.latitude, p.coords.longitude);
+    done();
+  }, function(err){ showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED"); },
+  { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+}
+function dist(e){ return userPos && e.lat != null ? userPos.distanceTo(L.latLng(e.lat, e.lng)) : null; }
+function fmtDist(m){ return m < 1000 ? Math.round(m / 10) * 10 + " m" : (m / 1000).toFixed(1) + " km"; }
+/* house-number order: building, then the number's digits numerically (9 before 10), then the rest */
+function byNumber(a, b){
+  var ba = String(a.building || ""), bb = String(b.building || "");
+  if (ba !== bb) return ba.localeCompare(bb, "en", { numeric: true });
+  return String(a.number).localeCompare(String(b.number), "en", { numeric: true, sensitivity: "base" });
+}
+function directionsUrl(e){
+  return "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(e.lat + "," + e.lng) + "&travelmode=walking";
+}
+function pinUrl(e){ return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(e.lat + "," + e.lng); }
+function answers(e){
+  var bits = [];
+  Object.keys(e.payload || {}).forEach(function(k){
+    var spec = ((data.event.payload_schema || {}).fields || {})[k];
+    if (spec && spec.type !== "text") bits.push(valueLabel(spec, e.payload[k]));
+  });
+  return bits;
+}
+/* Popup = HTML, so EVERYTHING resident-typed is escaped (numbers, buildings, notes). */
+function popupHtml(e){
+  var d = dist(e);
+  return '<div class="pop"><b>' + esc(jcHomeLabel(e)) + '</b><div class="meta">' + esc(jcVillageName(cfg, e.village)) + '</div>' +
+    (answers(e).length ? '<div>' + esc(answers(e).join(" · ")) + '</div>' : '') +
+    (e.note ? '<div class="note">' + esc(e.note) + '</div>' : '') +
+    (d !== null ? '<div class="meta">' + esc(jcFmt("ev_dist_from_you", { d: fmtDist(d) })) + '</div>' : '') +
+    '<div class="popacts"><a target="_blank" rel="noopener" href="' + esc(directionsUrl(e)) + '">' + esc(jcT("ev_directions")) + '</a>' +
+    '<a target="_blank" rel="noopener" href="' + esc(pinUrl(e)) + '">' + esc(jcT("ev_view_pin")) + '</a></div></div>';
+}
+
 function renderMap(entries){
-  el("body").innerHTML = '<div class="evmap" id="map"></div>' +
-    (entries.some(function(e){ return e.lat == null; })
-      ? '<p class="help" style="margin-top:8px">' + esc(entries.filter(function(e){ return e.lat == null; }).length) + ' · ' +
-        esc(jcT("ev_unpinned")) + ' — <a href="#" id="seeList">' + esc(jcT("ev_list")) + '</a></p>' : '');
+  var unpinned = entries.filter(function(e){ return e.lat == null; }).length;
+  el("body").innerHTML =
+    '<div class="evmapwrap"><div class="evmap" id="map"></div>' +
+      '<button type="button" class="lang maplayer" id="layerBtn">' + esc(jcT(layer === "sat" ? "pin_street" : "pin_sat")) + '</button>' +
+      '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
+    (unpinned ? '<p class="help" style="margin-top:8px">' + esc(unpinned) + ' · ' + esc(jcT("ev_unpinned")) +
+      ' — <a href="#" id="seeList">' + esc(jcT("ev_list")) + '</a></p>' : '');
   on("seeList", function(e){ e.preventDefault(); mode = "list"; show("detail"); });
   var c = (cfg && cfg.map) || {};
   map = L.map("map", { zoomControl: true }).setView([c.lat || 24.53, c.lng || 54.43], c.zoom || 14);
-  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    { maxNativeZoom: 19, maxZoom: 20, attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics" }).addTo(map);
+  var tiles = L.tileLayer(TILES[layer].url, TILES[layer].opts).addTo(map);
+  on("layerBtn", function(){
+    layer = layer === "sat" ? "street" : "sat";
+    map.removeLayer(tiles);
+    tiles = L.tileLayer(TILES[layer].url, TILES[layer].opts).addTo(map);
+    el("layerBtn").textContent = jcT(layer === "sat" ? "pin_street" : "pin_sat");
+  });
   var styles = getComputedStyle(document.documentElement);
   var accent = styles.getPropertyValue("--jc-accent").trim() || "#3e9b76";
   var ink = styles.getPropertyValue("--jc-ink").trim() || "#f6f2e9";
-  var pts = [];
+  var markers = [], pts = [], me = null;
   entries.forEach(function(e){
     if (e.lat == null) return;
     pts.push([e.lat, e.lng]);
-    L.circleMarker([e.lat, e.lng], {
-      radius: e.mine ? 10 : 7, weight: e.mine ? 3 : 2, color: e.mine ? ink : accent,
-      fillColor: accent, fillOpacity: .85
-    /* Leaflet renders tooltip STRINGS as HTML — house numbers / buildings are
-       resident-typed, so escape (a 20-char building name can carry a tag) */
-    }).addTo(map).bindTooltip(esc(jcHomeLabel(e) + " · " + jcVillageName(cfg, e.village)));
+    var m = L.circleMarker([e.lat, e.lng], {
+      radius: e.mine ? 10 : 7, weight: e.mine ? 3 : 2, color: e.mine ? ink : accent, fillColor: accent, fillOpacity: .85
+    }).addTo(map).bindPopup(function(){ return popupHtml(e); });   /* rebuilt on open: distance stays current */
+    markers.push(m);
+  });
+  on("locateBtn", function(){
+    locate(function(){
+      if (!map) return;
+      if (me) me.setLatLng(userPos);
+      else me = L.circleMarker(userPos, { radius: 6, weight: 3, color: "#fff", fillColor: "#3a86ff", fillOpacity: 1 }).addTo(map);
+      map.setView(userPos, Math.max(map.getZoom(), 17));
+    });
   });
   if (pts.length > 1) map.fitBounds(pts, { padding: [30, 30], maxZoom: 18 });
   else if (pts.length === 1) map.setView(pts[0], 18);
 }
 
 function renderList(entries, q){
-  el("body").innerHTML = '<label class="field"><input type="text" id="q" placeholder="' + esc(jcT("ev_search")) + '" autocomplete="off"></label>' +
+  el("body").innerHTML =
+    '<label class="field"><input type="text" id="q" placeholder="' + esc(jcT("ev_search")) + '" autocomplete="off"></label>' +
+    '<div class="seg2" role="group">' +
+      '<button type="button" id="sortNum" aria-pressed="' + (listSort === "number") + '">' + esc(jcT("ev_sort_number")) + '</button>' +
+      '<button type="button" id="sortDist" aria-pressed="' + (listSort === "distance") + '">' + esc(jcT("ev_sort_distance")) + '</button></div>' +
     '<div id="groups"></div>';
   var input = el("q");
   input.value = input.defaultValue = q || "";
+  on("sortNum", function(){ listSort = "number"; renderList(entries, input.value); });
+  on("sortDist", function(){ locate(function(){ listSort = "distance"; renderList(entries, input.value); }); });
   function draw(){
     var needle = input.value.trim().toLowerCase();
     var groups = {};
@@ -263,18 +347,26 @@ function renderList(entries, q){
       if (needle && label.toLowerCase().indexOf(needle) === -1 && String(e.number).toLowerCase().indexOf(needle) === -1) return;
       (groups[e.village] = groups[e.village] || []).push(e);
     });
-    el("groups").innerHTML = Object.keys(groups).map(function(v){
-      return '<h2 class="group">' + esc(jcVillageName(cfg, v)) + '</h2><ul class="entries">' + groups[v].map(function(e){
-        var bits = [];
-        Object.keys(e.payload || {}).forEach(function(k){
-          var spec = ((data.event.payload_schema || {}).fields || {})[k];
-          if (spec && spec.type !== "text") bits.push(valueLabel(spec, e.payload[k]));
-        });
+    var byDist = listSort === "distance" && userPos;
+    function nearest(v){ return Math.min.apply(null, groups[v].map(function(e){ var d = dist(e); return d === null ? Infinity : d; })); }
+    var villages = Object.keys(groups).sort(function(a, b){
+      return byDist ? nearest(a) - nearest(b) : jcVillageName(cfg, a).localeCompare(jcVillageName(cfg, b));
+    });
+    el("groups").innerHTML = villages.map(function(v){
+      var list = groups[v].slice().sort(byDist
+        ? function(a, b){ var da = dist(a), db = dist(b); return (da === null ? Infinity : da) - (db === null ? Infinity : db); }
+        : byNumber);
+      return '<h2 class="group">' + esc(jcVillageName(cfg, v)) + ' · ' + esc(list.length) + '</h2><ul class="entries">' + list.map(function(e){
+        var bits = answers(e);
         if (e.lat == null) bits.push(jcT("ev_unpinned"));
+        var d = dist(e);
         return '<li class="' + (e.mine ? "mine" : "") + '"><b>' + esc(jcHomeLabel(e)) + '</b>' +
           (e.mine ? ' <span class="meta">· ' + esc(jcT("ev_mine")) + '</span>' : '') +
+          (d !== null ? ' <span class="meta">· ' + esc(fmtDist(d)) + '</span>' : '') +
           (bits.length ? '<div class="meta">' + esc(bits.join(" · ")) + '</div>' : '') +
-          (e.note ? '<div class="note">' + esc(e.note) + '</div>' : '') + '</li>';
+          (e.note ? '<div class="note">' + esc(e.note) + '</div>' : '') +
+          (e.lat != null ? '<div class="popacts"><a target="_blank" rel="noopener" href="' + esc(directionsUrl(e)) + '">' +
+            esc(jcT("ev_directions")) + '</a></div>' : '') + '</li>';
       }).join("") + '</ul>';
     }).join("");
   }

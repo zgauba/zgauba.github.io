@@ -332,3 +332,25 @@ test("language toggle keeps what you typed", async ({ page }) => {
   await expect(page.locator("h1")).toHaveText("منزلك");
   await expect(page.locator("#number")).toHaveValue("42");
 });
+
+test("pin: paste coordinates (plain or Google Maps link) moves the map; junk is refused", async ({ page }) => {
+  const hb = homeBackend(MEMBER);
+  const { calls } = await stubBackend(page, { rpc: hb.rpc });
+  await signIn(page);
+  await page.goto("home/?view=pin");
+  await page.locator("#coords").fill("hello");
+  await page.locator("#coordsGo").click();
+  await expect(page.locator("#msg")).toContainText("don't look like coordinates");
+  await page.locator("#coords").fill("https://www.google.com/maps/place/Villa+12/@24.5512,54.4123,17z");
+  await page.locator("#coordsGo").click();
+  await page.locator("#savePin").click();
+  let a = calls.filter((c) => c.name === "jc_home_pin_set").pop().args;
+  expect(Math.abs(a.p_lat - 24.5512)).toBeLessThan(0.0002);
+  expect(Math.abs(a.p_lng - 54.4123)).toBeLessThan(0.0002);
+  await page.goto("home/?view=pin");
+  await page.locator("#coords").fill("24.5301° N, 54.4312° E");
+  await page.locator("#coordsGo").click();
+  await page.locator("#savePin").click();
+  a = calls.filter((c) => c.name === "jc_home_pin_set").pop().args;
+  expect(Math.abs(a.p_lat - 24.5301)).toBeLessThan(0.0002);
+});

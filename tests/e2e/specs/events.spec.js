@@ -97,7 +97,7 @@ test("detail: map pins only pinned homes; list groups by village, search, unpinn
   await expect(page.locator("h1")).toHaveText("National Day Gathering");
   await expect(page.locator("#map path.leaflet-interactive")).toHaveCount(1);   // e2 has no pin
   await page.locator("#modeList").click();
-  await expect(page.locator("h2.group")).toHaveText(["Seef Al Jubail", "Ain Al Maha"]);
+  await expect(page.locator("h2.group")).toHaveText(["Ain Al Maha · 1", "Seef Al Jubail · 1"]);  // alphabetical, with counts
   await expect(page.locator(".entries li").filter({ hasText: "Townhouse 40" })).toContainText("Not on the map yet");
   await expect(page.locator(".entries li").filter({ hasText: "Villa 3" })).toContainText("Ring twice");
   await page.locator("#q").fill("40");
@@ -197,8 +197,9 @@ test("hostile note / house number rendered as text (list + map tooltip)", async 
     await stubBackend(page, { rpc: eb.rpc });
     await signIn(page);
     await page.goto("events/?id=" + LIVE_ID);
-    await page.locator("#map path.leaflet-interactive").nth(1).hover();
-    await expect(page.locator(".leaflet-tooltip")).toContainText("<svg");
+    await page.locator("#map path.leaflet-interactive").nth(1).click();
+    await expect(page.locator(".leaflet-popup-content")).toContainText("<svg");
+    await expect(page.locator(".leaflet-popup-content")).toContainText("<img");
     await page.locator("#modeList").click();
     await expect(page.locator(".entries .note").filter({ hasText: "<img" })).toHaveCount(1);
     expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
@@ -236,4 +237,80 @@ test("events page: tab bar marks Events; no CSP violations; Arabic", async ({ pa
   await page.locator("#langBtn").click();
   await expect(page.locator("h1")).toHaveText("اليوم الوطني");
   expect(csp).toEqual([]);
+});
+
+// ---- Halloween-site parity (plan audit 2026-11-03) ----
+
+test("tap a pin: answers, note, walking directions + view pin; distance after Find me", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 24.5300, longitude: 54.4300 });
+  const eb = eventsBackend();
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await page.locator("#locateBtn").click();
+  await page.waitForTimeout(300);
+  await page.locator("#map path.leaflet-interactive").first().click({ force: true });
+  const pop = page.locator(".leaflet-popup-content");
+  await expect(pop).toContainText("Villa 3");
+  await expect(pop).toContainText("Candy · Door");
+  await expect(pop).toContainText("Ring twice");
+  await expect(pop).toContainText(/≈ \d+ m from you/);
+  await expect(pop.getByRole("link", { name: "Directions" })).toHaveAttribute("href",
+    "https://www.google.com/maps/dir/?api=1&destination=24.531%2C54.431&travelmode=walking");
+  await expect(pop.getByRole("link", { name: "View pin" })).toHaveAttribute("href", /maps\/search\/\?api=1&query=24\.531%2C54\.431/);
+});
+
+test("list: house numbers in natural order (9 before 10); nearest-first after locating", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 24.5400, longitude: 54.4400 });
+  ENTRIES.push(
+    { id: "n10", mine: false, village: "seef-al-jubail", type: "villa", building: null, number: "10", lat: 24.5399, lng: 54.4399, payload: {}, note: null },
+    { id: "n9", mine: false, village: "seef-al-jubail", type: "villa", building: null, number: "9", lat: 24.520, lng: 54.420, payload: {}, note: null });
+  try {
+    const eb = eventsBackend();
+    await stubBackend(page, { rpc: eb.rpc });
+    await signIn(page);
+    await page.goto("events/?id=" + LIVE_ID);
+    await page.locator("#modeList").click();
+    const seef = page.locator("h2.group:has-text('Seef') + ul.entries li b");
+    await expect(seef).toHaveText(["Villa 3", "Villa 9", "Villa 10"]);
+    await page.locator("#sortDist").click();
+    await expect(page.locator("#sortDist")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("h2.group").first()).toContainText("Seef");               // nearest village first
+    await expect(page.locator("h2.group:has-text('Seef') + ul.entries li b").first()).toHaveText("Villa 10");  // ~15 m away
+  } finally { ENTRIES.splice(-2, 2); }
+});
+
+test("event map: satellite / streets toggle", async ({ page }) => {
+  const eb = eventsBackend();
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await expect(page.locator("#layerBtn")).toHaveText("Street");
+  await page.locator("#layerBtn").click();
+  await expect(page.locator("#layerBtn")).toHaveText("Satellite");
+});
+
+test("the organizers' note to my home is shown on the event", async ({ page }) => {
+  const eb = eventsBackend({ mine: { id: "m", status: "in", payload: { treats: "candy", handout: "door" }, note: null,
+    org_note: "Your pin looks misplaced — tap Pin my home" } });
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await expect(page.locator(".orgnote")).toContainText("Message from the organizers");
+  await expect(page.locator(".orgnote")).toContainText("Your pin looks misplaced");
+});
+
+test("WhatsApp link: shown when configured, never for a non-WhatsApp URL", async ({ page }) => {
+  const eb = eventsBackend();
+  let wa = "https://chat.whatsapp.com/AbC123xyz";
+  await stubBackend(page, { rpc: Object.assign(eb.rpc, { jc_config_get: () => ok(Object.assign({}, CONFIG, { links: { whatsapp: wa } })) }) });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await expect(page.getByRole("link", { name: "Message the organizers on WhatsApp" })).toHaveAttribute("href", wa);
+  wa = "javascript:alert(1)";
+  await page.goto("events/?id=" + LIVE_ID);
+  await expect(page.locator("h1")).toHaveText("National Day Gathering");
+  await expect(page.getByRole("link", { name: "Message the organizers on WhatsApp" })).toHaveCount(0);
 });

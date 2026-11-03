@@ -20,6 +20,22 @@ h2.group{font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:v
 .entries .meta{color:var(--jc-muted); font-size:12.5px}
 .entries .note{color:var(--jc-ink); font-size:13px; margin-top:3px; white-space:pre-wrap; overflow-wrap:anywhere}
 .cta{margin:14px 0 4px; display:flex; flex-direction:column; gap:8px}
+.orgnote{background:var(--jc-surface-2); border:1px solid var(--jc-warn); border-radius:10px; padding:10px 12px; font-size:14px}
+.orgnote b{color:var(--jc-warn); font-size:12.5px; text-transform:uppercase; letter-spacing:.04em}
+.orgnote p{margin:4px 0 0; white-space:pre-wrap; overflow-wrap:anywhere}
+.evmapwrap{position:relative}
+.evmapwrap .maplayer{position:absolute; top:10px; inset-inline-end:10px; z-index:600}
+.evmapwrap .maplocate{position:absolute; bottom:40px; left:50%; transform:translateX(-50%); z-index:600;
+  background:var(--jc-accent); color:var(--jc-accent-ink); border-color:var(--jc-accent); padding:9px 18px; font-size:14px}
+.popacts{display:flex; gap:12px; margin-top:6px}
+.popacts a{font-weight:700; color:var(--jc-accent)}
+/* Leaflet's popup chrome, re-skinned with tokens (no raw colors) */
+.leaflet-popup-content-wrapper, .leaflet-popup-tip{background:var(--jc-surface); color:var(--jc-ink);
+  border:1px solid var(--jc-line)}
+.leaflet-container a.leaflet-popup-close-button{color:var(--jc-muted)}
+.pop{font:13px/1.45 var(--jc-font); min-width:170px}
+.pop .meta{color:var(--jc-muted)}
+.pop .note{margin-top:3px; white-space:pre-wrap; overflow-wrap:anywhere}
 .status{font-size:13.5px; margin:0}
 .status.ok{color:var(--jc-good)}
 .field{display:flex; flex-direction:column; gap:6px}
