@@ -163,9 +163,23 @@ el("langBtn").addEventListener("click", function(){
   render(currentCfg);
 });
 
+/* First-party visit counter: page × hour totals only — no cookies, no IPs.
+   Fire-and-forget: a failed count must never affect the page. A counter that
+   stops is caught by the admin report (accounts > 0 but no hits in 24 h). */
+function countVisit(page){
+  try {
+    fetch(API + "jc_hit", {
+      method: "POST", keepalive: true,
+      headers: { "apikey": KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ p_community: COMMUNITY, p_page: page })
+    }).catch(function(){});
+  } catch(e){}
+}
+
 jcSetLang(jcLang());
 render(DEFAULT_CFG);
 loadConfig();
+countVisit("landing");
 </script>
 </body>
 </html>
