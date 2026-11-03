@@ -52,7 +52,7 @@ first formal `/qa-feature` runs per module post-ship; KG-creation rate is up
 |---|---|---|---|---|
 | T1 | Halloween season close-out & SignalPost retirement | KG2, KG4 rides, part of KG9 | S | export + village split recorded before any delete |
 | T2 | Commons schema batch (one migration, empty tables) | KG6, DB-review findings, decisions set | L | database-reviewer + security-reviewer before apply |
-| T3 | Edge gateway (per-IP limits on auth/admin RPCs) | security residual (rate-limit) | M | must merge before invites; tar-pit stays as depth |
+| T3 | ~~Edge gateway (per-IP)~~ → account-keyed rate limits (amended 2026-11-03) | security residual (rate-limit) | S | must merge before invites; tar-pit stays as depth |
 | T4 | Day-one instrumentation wiring | retro lessons, KG9 | S–M | snapshot-age canary visible in Reports |
 | T5 | Module builds: Events(+event-day) → Courts → Community map → Pets | wireframes/use-cases build-out | L (per-module PRs) | Playwright stub harness with first module; /qa-feature after each |
 | T6 | Launch gate | KG7, KG8, policy, AR review, codes | S | all items checked before invites go to the group |
@@ -95,7 +95,13 @@ changes go through `/plan-change`, no drive-by migrations (sequencing-failure
 mode). Context-split mode: the plan doc may subdivide, the migration ships
 as one reviewed unit.
 
-### T3 — Edge gateway
+### T3 — Edge gateway → account-keyed rate limits
+> **Amended 2026-11-03 at plan time** (`docs/plans/T3-rate-limits.md`): per-IP edge
+> gateway replaced by account-keyed limits in Postgres + Supabase Auth's own per-IP
+> limits. Why: a gateway is bypassable unless direct grants are revoked, per-IP keys
+> misfire behind shared NAT, IPs would be new PII, and H1 (T2) already shrank the
+> threat. Theme order unchanged. Original text kept below.
+
 Per-IP rate limiting in front of community-code, auth-adjacent, and admin
 RPCs — the designed answer to the tar-pit's pool-exhaustion residual.
 Tar-pit remains as defense-in-depth (mitigation-becomes-permanent mode:

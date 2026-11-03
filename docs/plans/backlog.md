@@ -19,9 +19,10 @@ Last groomed: 2026-11-02
 
 - [ ] **Backend hardening (private)** — scope and details tracked only in the
       private ops doc, deliberately not in this repo.
-- [ ] **Commons: edge-function gateway for admin/auth RPCs** — per-IP rate
-      limiting belongs in front of the API, not inside Postgres (a failed RPC
-      rolls back its own attempt counter). Design this into Commons from day one.
+- [x] 2026-11-03 — ~~**Commons: edge-function gateway for admin/auth RPCs**~~ —
+      superseded by T3: account-keyed limits in Postgres (failures return instead
+      of raise, so the counter commits) + Supabase Auth per-IP limits. See
+      `docs/plans/T3-rate-limits.md`.
 - [ ] **Commons foundation** (`commons/`): per-community config (villages, map
       center, branding, WhatsApp links, zero-PII default) + per-module feature
       flags (events / bookings / pets — flags double as the compliance kill

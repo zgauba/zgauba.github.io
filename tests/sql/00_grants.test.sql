@@ -5,13 +5,13 @@
 do $t$
 declare
   k int := 0; n int; v_actual text[];
-  v_anon_expected text[] := array['jc_code_check', 'jc_config_get', 'jc_hit'];
+  v_anon_expected text[] := array['jc_config_get', 'jc_hit'];  -- T3 retired jc_code_check
   v_auth_expected text[] := array[
     -- S1
     'jc_account_delete', 'jc_admin_code_rotate', 'jc_admin_exit', 'jc_admin_home_edit',
     'jc_admin_home_suppress', 'jc_admin_homes_list', 'jc_admin_invite_decide', 'jc_admin_log_list',
     'jc_admin_member_remove', 'jc_admin_notice_resolve', 'jc_admin_notices_list', 'jc_admin_unlock',
-    'jc_code_check', 'jc_config_get', 'jc_directory_list', 'jc_display_name_set', 'jc_home_claim',
+    'jc_config_get', 'jc_directory_list', 'jc_display_name_set', 'jc_home_claim',
     'jc_home_edit', 'jc_home_leave', 'jc_home_pin_set', 'jc_invite_accept', 'jc_invite_create',
     'jc_join', 'jc_me_get', 'jc_prefs_set',
     -- S2
