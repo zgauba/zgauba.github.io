@@ -1,0 +1,11 @@
+{
+  "name": "commons-e2e",
+  "private": true,
+  "description": "Dev-only browser tests for commons/ (stubbed backend). The site itself has no build and no dependencies.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1"
+  }
+}
