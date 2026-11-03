@@ -29,3 +29,20 @@ jobs:
           echo "$body"
           echo "$body" | jq -e '.ok == true' > /dev/null || {
             echo "::error::Commons snapshots are stale or cron is off: $body"; exit 1; }
+
+      # Out-of-band drift: these schemas hold the cron jobs, outbound HTTP (pg_net grants
+      # anon EXECUTE and Postgres can't revoke it), Vault secrets and storage predicates.
+      # They are safe only while the API does not expose them (dashboard → API settings).
+      - name: Internal schemas are not exposed by the API
+        env:
+          API: https://qrpxfssdeeuzmsmlbtbu.supabase.co/rest/v1/rpc/jc_health
+          KEY: sb_publishable_cQKcp9tzYzeyrIO0Hzz6ZQ_jaxoq7QU
+        run: |
+          fail=0
+          for s in net cron vault jc_private; do
+            code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 -X POST "$API" \
+              -H "apikey: $KEY" -H "Content-Profile: $s" -H "Content-Type: application/json" -d '{}')
+            echo "$s -> HTTP $code"
+            if [ "$code" != "406" ]; then echo "::error::schema $s may be exposed by the API (HTTP $code)"; fail=1; fi
+          done
+          exit $fail
