@@ -1,6 +1,6 @@
--- T2 / S1 tests — run AFTER the S1 migration text, in the same execute_sql call,
--- against JubailCommons (tables empty). The block always ends by raising, so the
--- whole script (migration included) rolls back:
+-- T2 / S1 behaviour tests. Run via tests/sql/build_dryrun.sh, which wraps
+-- [pending migration] + 00_grants + every slice test + zz_finish into one paste.
+-- zz_finish always raises, so everything rolls back:
 --   success  →  ERROR: ALL_TESTS_PASSED (n checks)
 --   failure  →  ERROR: FAIL Txx: ...
 -- Impersonation: request.jwt.claims + SET LOCAL ROLE, exactly what PostgREST does.
@@ -20,14 +20,7 @@ declare
   I uuid := '00000000-0000-4000-8000-000000000012';
   J uuid := '00000000-0000-4000-8000-000000000013';
   v jsonb; v_err text; v_tok text; v_code text; n int; k int := 0;
-  v_home uuid; v_home2 uuid; v_inv uuid; v_actual text[]; v_join text; v_t timestamptz;
-  v_auth_expected text[] := array[
-    'jc_account_delete','jc_admin_code_rotate','jc_admin_exit','jc_admin_home_edit',
-    'jc_admin_home_suppress','jc_admin_homes_list','jc_admin_invite_decide','jc_admin_log_list',
-    'jc_admin_member_remove','jc_admin_notice_resolve','jc_admin_notices_list',
-    'jc_admin_unlock','jc_code_check','jc_config_get','jc_directory_list',
-    'jc_display_name_set','jc_home_claim','jc_home_edit','jc_home_leave',
-    'jc_home_pin_set','jc_invite_accept','jc_invite_create','jc_join','jc_me_get','jc_prefs_set'];
+  v_home uuid; v_home2 uuid; v_inv uuid; v_join text; v_t timestamptz;
 begin
   -- ---------- setup (as postgres) ----------
   insert into auth.users (id, email) values
@@ -46,45 +39,7 @@ begin
   if char_length(jc_code_bootstrap('testville', 'community')) <> 10 then raise exception 'FAIL T00b bootstrap'; end if;
   k := k + 2;
 
-  -- ---------- T01 function allowlist ----------
-  select array_agg(pr.proname::text order by pr.proname) into v_actual
-    from pg_proc pr join pg_namespace ns on ns.oid = pr.pronamespace
-   where ns.nspname = 'public' and has_function_privilege('anon', pr.oid, 'execute');
-  if v_actual is distinct from (select array_agg(x order by x) from unnest(array['jc_code_check','jc_config_get']) x) then
-    raise exception 'FAIL T01a anon-executable functions: %', v_actual; end if;
-  select array_agg(pr.proname::text order by pr.proname) into v_actual
-    from pg_proc pr join pg_namespace ns on ns.oid = pr.pronamespace
-   where ns.nspname = 'public' and has_function_privilege('authenticated', pr.oid, 'execute');
-  if v_actual is distinct from (select array_agg(x order by x) from unnest(v_auth_expected) x) then
-    raise exception 'FAIL T01b authenticated-executable functions: %', v_actual; end if;
-  k := k + 2;
-
-  -- ---------- T02 no table/sequence privileges; RLS everywhere; future functions closed ----------
-  select count(*) into n from pg_class cl join pg_namespace ns on ns.oid = cl.relnamespace
-   where ns.nspname = 'public' and cl.relkind in ('r', 'p', 'v', 'm')
-     and (has_table_privilege('anon', cl.oid, 'select,insert,update,delete')
-       or has_table_privilege('authenticated', cl.oid, 'select,insert,update,delete'));
-  if n <> 0 then raise exception 'FAIL T02a % tables grant anon/authenticated access', n; end if;
-  select count(*) into n from pg_class cl join pg_namespace ns on ns.oid = cl.relnamespace
-   where ns.nspname = 'public' and cl.relkind = 'S'
-     and (has_sequence_privilege('anon', cl.oid, 'usage,select,update')
-       or has_sequence_privilege('authenticated', cl.oid, 'usage,select,update'));
-  if n <> 0 then raise exception 'FAIL T02b % sequences grant access', n; end if;
-  select count(*) into n from pg_class cl join pg_namespace ns on ns.oid = cl.relnamespace
-   where ns.nspname = 'public' and cl.relkind = 'r' and not cl.relrowsecurity;
-  if n <> 0 then raise exception 'FAIL T02c % tables without RLS', n; end if;
-  -- a function created AFTER this migration (S2-S4, or by hand) must start closed
-  execute 'create function public.jc_zz_probe() returns int language sql as $f$ select 1 $f$';
-  execute 'create table public.jc_zz_probe_t (x int)';
-  if has_function_privilege('anon', 'public.jc_zz_probe()', 'execute')
-     or has_function_privilege('authenticated', 'public.jc_zz_probe()', 'execute') then
-    raise exception 'FAIL T02d new functions default to callable'; end if;
-  if has_table_privilege('anon', 'public.jc_zz_probe_t', 'select')
-     or has_table_privilege('authenticated', 'public.jc_zz_probe_t', 'select') then
-    raise exception 'FAIL T02e new tables default to readable'; end if;
-  execute 'drop function public.jc_zz_probe()';
-  execute 'drop table public.jc_zz_probe_t';
-  k := k + 5;
+  -- (grant allowlists + default-privilege probes live in 00_grants.test.sql — cumulative across slices)
 
   -- ---------- T03 direct reads denied (anon + authenticated) ----------
   execute 'set local role anon';
@@ -382,6 +337,8 @@ begin
     raise exception 'FAIL T29d a code leaked into the log'; end if;
   k := k + 4;
 
-  raise exception 'ALL_TESTS_PASSED (% checks)', k;
+  execute 'reset role';
+  perform set_config('jc_test.checks', (coalesce(nullif(current_setting('jc_test.checks', true), ''), '0')::int + k)::text, true);
+  raise notice 's1_identity_homes: % checks passed', k;
 end
 $t$;
