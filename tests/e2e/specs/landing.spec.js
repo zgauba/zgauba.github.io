@@ -29,7 +29,8 @@ test("signed out: platform entry with Sign in + Join, no hub, visit counted, no 
   await expect(page.locator("#feats li").nth(3)).toContainText("The Community");
   await expect(page.locator("#feats li").nth(2).locator("b")).toHaveText("Pets");  // not "Pets of Jubail" — signed-out page is community-agnostic
   await expect(page.locator(".community svg.ico")).toHaveCount(1);
-  for (const id of ["#privacy", "#yours"]) {
+  await expect(page.getByText(/Zero-PII/)).toHaveCount(0);  // removed 2026-11-03
+  for (const id of ["#yours"]) {
     expect(await page.locator(id).evaluate((n) => getComputedStyle(n).textAlign)).toBe("center");
   }
   expect(await page.locator("footer").evaluate((n) => getComputedStyle(n).textAlign)).toBe("center");

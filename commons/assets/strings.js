@@ -3,7 +3,8 @@
    Arabic: native-speaker review approved 2026-11-03 (sheet "Jubail Commons —
    Arabic review"). Style: singular address (احجز، سجّل), Western digits —
    both match jubailisland.ae. Any new or changed AR string needs review again;
-   privacy_line is NOT reviewed (rewritten with the privacy policy — T6, KG7).
+   The landing's old zero-PII privacy_line was removed 2026-11-03 (Zee): the
+   join screen's join_privacy states what we keep, where the email is collected.
    Gotcha (learned Oct 2026): never place "·" directly after Arabic-Indic
    digits — it reads like ٠ (zero). Use "،" or parentheses in AR strings. */
 
@@ -33,7 +34,6 @@ var JC_STRINGS = {
     archive_halloween: "Halloween 2026",
     archive_halloween_desc: "Where it all started — the trick-or-treat map.",
     archive_open: "Open the map",
-    privacy_line: "Zero-PII by default: no names, emails or phone numbers unless a feature asks, per-feature and opt-in.",
     error_config: "Couldn't load community settings — showing defaults. Try again shortly.",
     /* credit = before + <linked name → career page> + after (split so AR word order works) */
     credit_before: "Made by ",
@@ -124,7 +124,6 @@ var JC_STRINGS = {
     archive_halloween: "هالوين 2026",
     archive_halloween_desc: "من هنا كانت البداية — خريطة الحلوى.",
     archive_open: "افتح الخريطة",
-    privacy_line: "الخصوصية أولاً: لا نحفظ أسماء أو أرقام هواتف أو بريداً إلكترونياً إلا بموافقتكم ولكل ميزة على حدة.",
     error_config: "تعذّر تحميل إعدادات المجتمع — نعرض الإعدادات الافتراضية. حاول مرة أخرى بعد قليل.",
     /* T5.0a draft — name transliteration + phrasing pending native review */
     credit_before: "من ",
