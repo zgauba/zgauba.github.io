@@ -18,7 +18,12 @@ declare
     'jc_hit', 'jc_events_list', 'jc_event_get', 'jc_event_signup', 'jc_entry_withdraw',
     'jc_entry_live_set', 'jc_entry_report', 'jc_entry_reports_clear', 'jc_my_history',
     'jc_event_stats_get', 'jc_admin_events_list', 'jc_admin_event_save', 'jc_admin_event_publish',
-    'jc_admin_event_signups', 'jc_admin_entries_list', 'jc_admin_entry_moderate', 'jc_event_close'];
+    'jc_admin_event_signups', 'jc_admin_entries_list', 'jc_admin_entry_moderate', 'jc_event_close',
+    -- S3
+    'jc_facilities_list', 'jc_facility_day', 'jc_booking_create', 'jc_booking_cancel', 'jc_my_bookings',
+    'jc_admin_facilities_list', 'jc_admin_facility_save', 'jc_admin_facility_status',
+    'jc_admin_facility_day', 'jc_admin_booking_cancel', 'jc_admin_booking_name_clear',
+    'jc_admin_block_create', 'jc_admin_block_remove'];
 begin
   -- Pre-launch suite: fixtures are written into 'jubail' and rolled back. Refuse to run
   -- once real residents exist — post-launch tests must move to a test community.
