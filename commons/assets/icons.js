@@ -23,6 +23,13 @@ var JC_ICONS = {
     '<circle cx="48" cy="48" r="15"/><g opacity=".75"><circle cx="48" cy="11" r="9"/><circle cx="80" cy="29.5" r="9"/>' +
     '<circle cx="80" cy="66.5" r="9"/><circle cx="48" cy="85" r="9"/><circle cx="16" cy="66.5" r="9"/>' +
     '<circle cx="16" cy="29.5" r="9"/></g>' },
+  /* NEW in T5.0b (not in the wireframes — review): My Home. Dots only; the door is
+     the accented anchor dot (the form earns it, brand.md). */
+  house: { vb: 120, body:
+    '<circle cx="60" cy="14" r="9"/><circle cx="38" cy="34" r="9"/><circle cx="82" cy="34" r="9"/>' +
+    '<circle cx="18" cy="54" r="9"/><circle cx="102" cy="54" r="9"/><circle cx="30" cy="80" r="9"/>' +
+    '<circle cx="90" cy="80" r="9"/><circle cx="30" cy="106" r="9"/><circle cx="90" cy="106" r="9"/>' +
+    '<circle cx="60" cy="96" r="14"/>' },
   community: { vb: 96, body:
     '<circle cx="48" cy="48" r="11"/><g opacity=".55"><circle cx="48" cy="14" r="6"/><circle cx="78" cy="31" r="6"/>' +
     '<circle cx="78" cy="65" r="6"/><circle cx="48" cy="82" r="6"/><circle cx="18" cy="65" r="6"/>' +

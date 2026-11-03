@@ -39,12 +39,22 @@ function session(email) {
 const ok = (body) => ({ status: 200, body });
 const raise = (code) => ({ status: 400, body: { code: "P0001", message: code, details: null, hint: null } });
 
-const MEMBER_NO_HOME = { community: "jubail", account: { email: "a@example.com" }, home: null, admin_scopes: [] };
+const MEMBER_NO_HOME = { community: "jubail", account: { email: "a@example.com", display_name: null }, home: null, admin_scopes: [] };
+const HOME_V12 = { id: "h1", village: "ain-al-maha", type: "villa", building: null, number: "12",
+                   lat: null, lng: null, pin_set_at: null,
+                   members: [{ you: true, name: "a***@example.com", joined_at: "2026-11-03T00:00:00Z" }] };
+const MEMBER = Object.assign({}, MEMBER_NO_HOME, { home: HOME_V12 });
 
 const CONFIG = {
   id: "jubail", name_en: "Jubail Commons", name_ar: "كومنز الجبيل",
   modules: { events: { enabled: false }, bookings: { enabled: false }, pets: { enabled: false } },
   links: { halloween_archive: "https://zgauba.github.io/jubail-halloween/" }, broadcast: "",
+  map: { lat: 24.53, lng: 54.43, zoom: 15 },
+  villages: [
+    { key: "ain-al-maha", en: "Ain Al Maha", ar: "عين المها", status: "delivered", delivery: null, parent: null },
+    { key: "bada-al-jubail", en: "Bada Al Jubail", ar: null, status: "upcoming", delivery: "Late 2027", parent: null },
+    { key: "seef-al-jubail", en: "Seef Al Jubail", ar: null, status: "delivered", delivery: null, parent: null },
+  ],
 };
 
 /**
@@ -58,7 +68,7 @@ async function stubBackend(page, opts = {}) {
   const rpcHandlers = Object.assign({
     jc_config_get: () => ok(CONFIG),
     jc_hit: () => ({ status: 204, body: null }),
-    jc_me_get: (args, ctx) => (ctx.signedIn ? ok(MEMBER_NO_HOME) : raise("NOT_SIGNED_IN")),
+    jc_me_get: (args, ctx) => (ctx.signedIn ? ok(MEMBER) : raise("NOT_SIGNED_IN")),
   }, opts.rpc || {});
   const authHandlers = Object.assign({
     signup: (b) => ok(session(b.email)),
@@ -72,6 +82,10 @@ async function stubBackend(page, opts = {}) {
 
   await page.route(/^https?:\/\/(?!localhost|127\.0\.0\.1)/, async (route) => {
     const req = route.request();
+    // map tiles (Esri / OSM): answered empty, never fetched, not counted as escapes
+    if (/^https:\/\/(server\.arcgisonline\.com|tile\.openstreetmap\.org)\//.test(req.url())) {
+      return route.fulfill({ status: 204, body: "" });
+    }
     if (!req.url().startsWith(SB)) {
       escaped.push(req.url());
       return route.abort();
@@ -120,4 +134,4 @@ async function stubBackend(page, opts = {}) {
   return { calls, escaped };
 }
 
-module.exports = { stubBackend, ok, raise, session, fakeJwt, CONFIG, MEMBER_NO_HOME };
+module.exports = { stubBackend, ok, raise, session, fakeJwt, CONFIG, MEMBER_NO_HOME, MEMBER, HOME_V12 };

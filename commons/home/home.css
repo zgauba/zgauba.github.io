@@ -1,0 +1,40 @@
+/* My Home page (claim, pin, household). Tokens only; logical properties only. */
+.villages{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.choice{font:inherit; text-align:start; cursor:pointer; color:var(--jc-ink);
+  background:var(--jc-surface-2); border:1px solid var(--jc-line); border-radius:10px; padding:10px 12px}
+.choice small{display:block; color:var(--jc-muted); font-size:12px}
+.choice[aria-pressed="true"]{border-color:var(--jc-accent); box-shadow:inset 0 0 0 1px var(--jc-accent)}
+.choice[disabled]{opacity:.5; cursor:not-allowed}
+.seg{display:flex; gap:6px}
+.seg .choice{flex:1; text-align:center}
+fieldset{border:0; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
+legend{font-size:13px; font-weight:700; color:var(--jc-muted); margin-bottom:6px; padding:0}
+/* pin drop: the ring is fixed at the map's center; the resident pans the map */
+.pinmap{position:relative; height:44vh; min-height:280px; border-radius:var(--jc-radius); overflow:hidden;
+  border:1px solid var(--jc-line)}
+.pinmap .map{position:absolute; inset:0}
+.pinmap .ring{position:absolute; top:50%; left:50%; width:34px; height:34px; margin:-17px 0 0 -17px;
+  border:3px solid var(--jc-accent); border-radius:50%; box-shadow:0 0 0 2px rgba(0,0,0,.55); pointer-events:none; z-index:500}
+.pinmap .ring::after{content:""; position:absolute; top:50%; left:50%; width:6px; height:6px; margin:-3px 0 0 -3px;
+  background:var(--jc-accent); border-radius:50%}
+.pinmap .layers{position:absolute; top:10px; inset-inline-end:10px; z-index:600}
+.pinmap .locate{position:absolute; bottom:40px;  /* clear of the map credits line */
+  left:50%; transform:translateX(-50%); z-index:600;
+  background:var(--jc-accent); color:var(--jc-accent-ink); border-color:var(--jc-accent); padding:9px 18px; font-size:14px}
+.row{display:flex; gap:8px; flex-wrap:wrap}
+.row .btn{flex:1}
+.section{margin-top:18px}
+.section h2{font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--jc-muted); margin:0 0 8px}
+.members{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
+.members li{display:flex; justify-content:space-between; gap:8px; font-size:14px}
+.members .tag{color:var(--jc-faint); font-size:12px}
+.homehead{display:flex; align-items:center; gap:12px}
+.homehead b{font-size:20px; display:block}
+.homehead span{color:var(--jc-muted); font-size:14px}
+.status{font-size:13.5px; margin:0}
+.status.ok{color:var(--jc-good)}
+.status.warn{color:var(--jc-warn)}
+.invitebox{word-break:break-all; font-size:13px; background:var(--jc-surface-2); border:1px dashed var(--jc-line);
+  border-radius:10px; padding:10px 12px; color:var(--jc-ink)}
+.danger{color:var(--jc-danger); border-color:var(--jc-danger)}
+.links a{color:var(--jc-accent)}
