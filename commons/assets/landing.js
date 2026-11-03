@@ -94,7 +94,7 @@ function renderPicker(){
         '<a class="go ghost" href="account/' + q + '&amp;view=join">' + esc(jcT("community_join")) + '</a>' +
       '</div></div>';
   }).join("");
-  el("yours").innerHTML = esc(jcT("your_community")) + ' <a href="https://zgauba.github.io/">' + esc(jcT("your_community_link")) + '</a>';
+  el("yours").textContent = jcT("your_community");
 }
 
 var hubHome = null;      /* the member's home (jc_me_get) — for the greeting */

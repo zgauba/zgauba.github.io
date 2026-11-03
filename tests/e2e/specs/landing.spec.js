@@ -30,6 +30,8 @@ test("signed out: platform entry with Sign in + Join, no hub, visit counted, no 
   await expect(page.locator("#feats li").nth(2).locator("b")).toHaveText("Pets");  // not "Pets of Jubail" — signed-out page is community-agnostic
   await expect(page.locator(".community svg.ico")).toHaveCount(1);
   await expect(page.getByText(/Zero-PII/)).toHaveCount(0);  // removed 2026-11-03
+  await expect(page.locator("#yours")).toHaveText("Commons is starting small: for now it's just Jubail Island. More neighborhoods may follow one day.");
+  await expect(page.locator("#yours a")).toHaveCount(0);  // no call to action
   for (const id of ["#yours"]) {
     expect(await page.locator(id).evaluate((n) => getComputedStyle(n).textAlign)).toBe("center");
   }
