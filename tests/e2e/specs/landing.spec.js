@@ -33,6 +33,9 @@ test("signed out: platform entry with Sign in + Join, no hub, visit counted, no 
     expect(await page.locator(id).evaluate((n) => getComputedStyle(n).textAlign)).toBe("center");
   }
   expect(await page.locator("footer").evaluate((n) => getComputedStyle(n).textAlign)).toBe("center");
+  await expect(page.locator("#credit")).toHaveText("Made by Zeeshan, your neighbor in Ain Al Maha");
+  await expect(page.locator("#credit a")).toHaveText("Zeeshan");
+  await expect(page.locator("#credit a")).toHaveAttribute("href", "https://zgauba.github.io/");
   const card = page.locator(".community[data-community=jubail]");
   await expect(card.locator(".names b")).toHaveText("Jubail Commons");
   await expect(card.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "account/?community=jubail");

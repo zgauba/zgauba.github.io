@@ -35,7 +35,10 @@ var JC_STRINGS = {
     archive_open: "Open the map",
     privacy_line: "Zero-PII by default: no names, emails or phone numbers unless a feature asks, per-feature and opt-in.",
     error_config: "Couldn't load community settings — showing defaults. Try again shortly.",
-    footer_credit: "Made by your neighbor in Ain Al Maha",
+    /* credit = before + <linked name → career page> + after (split so AR word order works) */
+    credit_before: "Made by ",
+    credit_name: "Zeeshan",
+    credit_after: ", your neighbor in Ain Al Maha",
     /* nav (T5) */
     nav_home: "Commons",
     nav_my_home: "My Home",
@@ -123,7 +126,10 @@ var JC_STRINGS = {
     archive_open: "افتح الخريطة",
     privacy_line: "الخصوصية أولاً: لا نحفظ أسماء أو أرقام هواتف أو بريداً إلكترونياً إلا بموافقتكم ولكل ميزة على حدة.",
     error_config: "تعذّر تحميل إعدادات المجتمع — نعرض الإعدادات الافتراضية. حاول مرة أخرى بعد قليل.",
-    footer_credit: "من جارك في عين المها",
+    /* T5.0a draft — name transliteration + phrasing pending native review */
+    credit_before: "من ",
+    credit_name: "ذيشان",
+    credit_after: "، جارك في عين المها",
     nav_home: "الرئيسية",
     nav_my_home: "منزلي",
     nav_community: "المجتمع",
