@@ -1,6 +1,6 @@
 # T2 — Commons schema batch (plan)
 
-> Status: **APPROVED 2026-11-03** — S1 + S2 live; S3 in review/apply. Source of truth for scope:
+> Status: **APPROVED 2026-11-03** — S1–S3 live; S4 in review/apply. Source of truth for scope:
 > Use Cases traceability table + Wireframes v4.1 (both frozen 2026-11-03),
 > `docs/qa/SYNTHESIS-2026-11-03.md` T2, the 2026-11-02 DB review findings.
 > Target: JubailCommons (`qrpxfssdeeuzmsmlbtbu`) only.
@@ -221,3 +221,16 @@ the slot starts; an admin block cancels the bookings it covers (reason shown);
 no cap on total upcoming bookings per home for launch (revisit with real usage).
 Launch checklist adds a two-tab run: block creation while a booking is in flight
 (expect the booking cancelled by the block, never live inside it).
+
+**S4 notes (2026-11-03):** storage is the one RLS exception — private bucket `pet-photos`
+(2 MB, jpeg/png/webp), exactly two policies (INSERT, SELECT) delegating to SECURITY
+DEFINER predicates in `jc_private` (verified NOT exposed by the API: only public +
+graphql_public). Offboarding now also fires from a BEFORE DELETE trigger on
+`auth.users`, so a dashboard delete vacates the home properly (a trigger on
+`jc_accounts` would run after the auth row is already gone).
+**Handed to T4:** purge storage objects for `jc_pet_photos` rows that are `retired`, or
+`pending` > 1 h (Storage API delete, then stamp `purged_at`); storage-usage alert vs the
+1 GB free tier; sightings/care-log retention. **Accepted residual until then:** a signed
+photo URL minted before a pet was archived works until its TTL or the purge — clients
+mint short TTLs. **Launch checklist:** one real Storage API smoke test (JWT upload,
+createSignedUrl, upsert denied, list scoping) — SQL-level tests can't prove the API path.
