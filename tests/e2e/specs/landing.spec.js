@@ -24,7 +24,15 @@ test("signed out: platform entry with Sign in + Join, no hub, visit counted, no 
   await page.goto("./");
   await expect(page.locator("#brand")).toHaveText("Commons");
   await expect(page.locator("#tagline")).toHaveText("Neighborhood software, run by neighbors.");
-  await expect(page.locator("#feats li")).toHaveCount(3);
+  await expect(page.locator("#feats li")).toHaveCount(4);
+  await expect(page.locator("#feats li svg.ico")).toHaveCount(4);
+  await expect(page.locator("#feats li").nth(3)).toContainText("The Community");
+  await expect(page.locator("#feats li").nth(2).locator("b")).toHaveText("Pets");  // not "Pets of Jubail" — signed-out page is community-agnostic
+  await expect(page.locator(".community svg.ico")).toHaveCount(1);
+  for (const id of ["#privacy", "#yours"]) {
+    expect(await page.locator(id).evaluate((n) => getComputedStyle(n).textAlign)).toBe("center");
+  }
+  expect(await page.locator("footer").evaluate((n) => getComputedStyle(n).textAlign)).toBe("center");
   const card = page.locator(".community[data-community=jubail]");
   await expect(card.locator(".names b")).toHaveText("Jubail Commons");
   await expect(card.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "account/?community=jubail");
@@ -56,6 +64,7 @@ test("signed-in member: the hub (broadcast + enabled module), not the picker", a
   await expect(page.locator("#brand")).toHaveText("Jubail Commons");
   await expect(page.locator("#bcast")).toHaveText("⚠️ Road closed at Souk");
   await expect(page.locator("#cards a.go[href='events/']")).toHaveText("Sign your home up");
+  await expect(page.locator("#cards .card svg.ico")).toHaveCount(3);
   await expect(page.locator("#picker")).toBeHidden();
   await expect(page.locator("#authLink")).toHaveText("Account");
 });

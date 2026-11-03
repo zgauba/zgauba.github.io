@@ -20,6 +20,11 @@ var JC_STRINGS = {
     module_bookings_desc: "Book community courts and facilities.",
     module_pets: "Pets of Jubail",
     module_pets_desc: "The neighborhood pet directory.",
+    module_community: "The Community",
+    /* platform entry (signed out) is community-agnostic: generic titles where the
+       module title names a community ("Pets of Jubail" → "Pets") */
+    feat_pets: "Pets",
+    module_community_desc: "Find any home and get directions — no addresses needed.",
     /* nouns in the nav, verbs on the buttons (ratified 2026-11-02) */
     cta_events: "Sign your home up",
     cta_bookings: "Book a court",
@@ -105,6 +110,10 @@ var JC_STRINGS = {
     module_bookings_desc: "احجز ملاعب ومرافق المجتمع.",
     module_pets: "حيوانات الجبيل الأليفة",
     module_pets_desc: "دليل حيوانات الحي الأليفة.",
+    /* T5.0a draft — pending native review */
+    module_community: "المجتمع",
+    feat_pets: "الحيوانات الأليفة",
+    module_community_desc: "اعثر على أي منزل واحصل على الاتجاهات — دون الحاجة إلى عناوين.",
     cta_events: "سجّل منزلك",
     cta_bookings: "احجز ملعباً",
     cta_pets: "أضف حيوانك الأليف",

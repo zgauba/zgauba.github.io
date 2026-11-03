@@ -40,7 +40,7 @@ function hasStoredSession(){
 }
 
 function moduleCard(key, enabled){
-  return '<div class="card"><h2>' + esc(jcT("module_" + key)) + '</h2>' +
+  return '<div class="card">' + jcIcon(key, 26) + '<h2>' + esc(jcT("module_" + key)) + '</h2>' +
     '<p>' + esc(jcT("module_" + key + "_desc")) + '</p>' +
     (enabled ? '<a class="go" href="' + esc(key) + '/">' + esc(jcT("cta_" + key)) + '</a>'
              : '<span class="pill">' + esc(jcT("coming_soon")) + '</span>') + '</div>';
@@ -72,15 +72,19 @@ function renderPicker(){
   document.title = jcT("platform_brand");
   el("brand").textContent = jcT("platform_brand");
   el("tagline").textContent = jcT("platform_lede");
-  el("feats").innerHTML = ["events", "bookings", "pets"].map(function(k){
-    return '<li><b>' + esc(jcT("module_" + k)) + '</b>' + esc(jcT("module_" + k + "_desc")) + '</li>';
+  /* the four things a resident gets — The Community (map + directory) has no module
+     flag: every member has it once their home is pinned */
+  el("feats").innerHTML = ["events", "bookings", "pets", "community"].map(function(k){
+    var title = JC_STRINGS.en["feat_" + k] ? jcT("feat_" + k) : jcT("module_" + k);
+    return '<li>' + jcIcon(k, 24) + '<div><b>' + esc(title) + '</b>' + esc(jcT("module_" + k + "_desc")) + '</div></li>';
   }).join("");
   el("chooseTitle").textContent = jcT("choose_community");
   el("communities").innerHTML = LISTED.map(function(id){
     var cfg = cfgFor(id), q = "?community=" + encodeURIComponent(id);
     var other = jcLang() === "ar" ? cfg.name_en : cfg.name_ar;
     return '<div class="community" data-community="' + esc(id) + '">' +
-      '<div class="names"><b>' + esc(nameOf(cfg)) + '</b>' + (other ? '<span>' + esc(other) + '</span>' : '') + '</div>' +
+      '<div class="who">' + jcIcon("mark", 34) +
+        '<div class="names"><b>' + esc(nameOf(cfg)) + '</b>' + (other ? '<span>' + esc(other) + '</span>' : '') + '</div></div>' +
       '<div class="acts">' +
         '<a class="go" href="account/' + q + '">' + esc(jcT("community_signin")) + '</a>' +
         '<a class="go ghost" href="account/' + q + '&amp;view=join">' + esc(jcT("community_join")) + '</a>' +
@@ -134,6 +138,7 @@ function loadConfig(id){
 
 function setMode(m){
   mode = m;
+  document.body.classList.toggle("mode-picker", m === "picker");
   if (m === "hub") applyBrandTokens(cfgFor(hubCommunity).tokens);
   render();
 }

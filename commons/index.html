@@ -40,7 +40,8 @@ h1{font-size:26px; font-weight:800; letter-spacing:-.01em; margin:0}
   color:var(--jc-muted); border:1px solid var(--jc-line); text-transform:uppercase}
 a.go{align-self:flex-start; background:var(--jc-accent); color:var(--jc-accent-ink);
   text-decoration:none; font-weight:800; font-size:13.5px; padding:9px 16px; border-radius:10px}
-.notice{color:var(--jc-faint); font-size:12px; margin:26px 0 0; line-height:1.7}
+.notice{color:var(--jc-faint); font-size:12px; margin:26px auto 0; line-height:1.7; text-align:center; max-width:62ch}
+.notice a{color:var(--jc-muted)}
 .errbar{display:none; background:var(--jc-surface-2); border:1px solid var(--jc-line);
   color:var(--jc-warn); border-radius:var(--jc-radius); padding:9px 13px; font-size:13px; margin:0 0 16px}
 footer{color:var(--jc-faint); font-size:12px; text-align:center; padding:10px 16px 24px}
@@ -51,9 +52,20 @@ footer a{color:var(--jc-muted)}
 .feats{list-style:none; padding:0; margin:14px 0 30px; display:grid; gap:10px;
   grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
 .feats li{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius);
-  padding:13px 14px; font-size:13.5px; color:var(--jc-muted)}
+  padding:14px; font-size:13.5px; color:var(--jc-muted); display:flex; gap:12px; align-items:flex-start}
 .feats b{display:block; color:var(--jc-ink); font-size:15px; margin-bottom:2px}
-h2.choose{font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--jc-muted); margin:0 0 10px}
+.ico{color:var(--jc-accent); flex:0 0 auto}
+.feats .ico{margin-top:3px}
+.card .ico{margin-bottom:2px}
+h2.choose{font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--jc-muted); margin:0 0 10px; text-align:center}
+/* signed-out hero: the mark large and centered above the wordmark (wireframe band 01) */
+body.mode-picker header{flex-direction:column; align-items:center; text-align:center; position:relative; padding-top:46px}
+body.mode-picker .hdr-actions{position:absolute; top:0; inset-inline-end:0}
+body.mode-picker .brandrow{flex-direction:column; gap:14px}
+body.mode-picker .brandrow svg{width:76px; height:76px}
+body.mode-picker h1{font-size:34px}
+body.mode-picker .tagline{margin:6px auto 22px; font-size:17px; color:var(--jc-ink)}
+.community .who{display:flex; align-items:center; gap:12px}
 .community{background:var(--jc-surface); border:1px solid var(--jc-accent); border-radius:var(--jc-radius);
   padding:18px 16px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px}
 .community .names b{display:block; font-size:18px}
@@ -68,7 +80,7 @@ a.go.ghost{background:transparent; color:var(--jc-ink); border:1px solid var(--j
     <div>
       <div class="brandrow">
         <!-- the mark, full cut (on-dark colorway) — dots are homes, the center is the commons -->
-        <svg width="36" height="36" viewBox="0 0 96 96" role="img" aria-label="Jubail Commons mark: eight dots encircling a center">
+        <svg width="36" height="36" viewBox="0 0 96 96" role="img" aria-label="Commons mark: eight dots encircling a center">
           <circle cx="48" cy="48" r="9" fill="#6FCF8F"></circle>
           <g fill="#3E9B76">
             <circle cx="82" cy="48" r="5.5"></circle><circle cx="72.04" cy="23.96" r="5.5"></circle>
@@ -105,6 +117,7 @@ a.go.ghost{background:transparent; color:var(--jc-ink); border:1px solid var(--j
 
 <script src="assets/vendor/supabase-2.118.0.js"></script>
 <script src="assets/strings.js"></script>
+<script src="assets/icons.js"></script>
 <script src="assets/api.js"></script>
 <script src="assets/landing.js"></script>
 </body>
