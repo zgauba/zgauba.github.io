@@ -50,8 +50,8 @@ var JC_STRINGS = {
     choose_community: "Choose your community",
     community_signin: "Sign in",
     community_join: "Join",
-    your_community: "Your community isn't here? Commons is run by neighbors.",
-    your_community_link: "Talk to us",
+    /* honest scope, no call to action (Zee 2026-11-03: one community; expansion is far off) */
+    your_community: "Commons is starting small: for now it's just Jubail Island. More neighborhoods may follow one day.",
     /* account + join (T5.0a) */
     nav_sign_in: "Sign in",
     nav_account: "Account",
@@ -267,8 +267,7 @@ var JC_STRINGS = {
     choose_community: "اختر مجتمعك",
     community_signin: "تسجيل الدخول",
     community_join: "انضم",
-    your_community: "مجتمعك غير موجود هنا؟ كومنز يديره الجيران.",
-    your_community_link: "تواصل معنا",
+    your_community: "كومنز يبدأ صغيراً: حالياً جزيرة الجبيل فقط. قد تنضم أحياء أخرى يوماً ما.",
     nav_sign_in: "تسجيل الدخول",
     nav_account: "حسابي",
     nav_finish_join: "أكمل الانضمام",
