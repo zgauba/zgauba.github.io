@@ -145,3 +145,14 @@ test("without ?community=, only Jubail is listed (e2e never public)", async ({ p
   await expect(page.locator(".community")).toHaveCount(1);
   await expect(page.locator('.community[data-community="e2e"]')).toHaveCount(0);
 });
+
+test("module boxes are equal height; community cards are spaced apart", async ({ page }) => {
+  await stubBackend(page, { rpc: { jc_config_get: (a) => ok(a.p_community === "e2e"
+    ? { id: "e2e", name_en: "E2E Test Commons", modules: {} } : CONFIG) } });
+  await page.goto("./?community=e2e");
+  await expect(page.locator(".community")).toHaveCount(2);
+  const hs = await page.locator("#feats li").evaluateAll((ns) => ns.map((n) => Math.round(n.getBoundingClientRect().height)));
+  expect(new Set(hs).size).toBe(1);
+  const [a, b] = await page.locator(".community").evaluateAll((ns) => ns.map((n) => n.getBoundingClientRect()));
+  expect(b.top - a.bottom).toBeGreaterThanOrEqual(10);
+});

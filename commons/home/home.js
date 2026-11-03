@@ -56,7 +56,8 @@ var VIEWS = {
       (h.pin_set_at ? '' : '<p class="sub">' + esc(jcT("pin_step")) + '</p>') +
       '<p class="sub">' + esc(jcT("pin_help")) + '</p>' +
       '<div class="pinmap" data-no-autoreload><div class="map" id="map"></div><div class="ring" aria-hidden="true"></div>' +
-        '<div class="layers"><button type="button" class="lang" id="layerBtn">' + esc(jcT("pin_street")) + '</button></div></div>' +
+        '<div class="layers"><button type="button" class="lang" id="layerBtn">' + esc(jcT("pin_street")) + '</button></div>' +
+        '<button type="button" class="lang locate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
       '<p class="help" style="margin-top:8px">' + esc(jcT("pin_privacy")) + '</p>' +
       msgBox() +
       '<div class="row section"><button class="btn" id="savePin" type="button">' + esc(jcT("pin_save")) + '</button>' +
@@ -72,6 +73,19 @@ var VIEWS = {
       map.removeLayer(tiles);
       tiles = L.tileLayer(TILES[layer].url, TILES[layer].opts).addTo(map);
       el("layerBtn").textContent = jcT(layer === "sat" ? "pin_street" : "pin_sat");
+    });
+    /* "Find me": the phone's location only moves the map — it is never sent or
+       stored; the resident still confirms the spot under the ring. */
+    on("locateBtn", function(){
+      if (!navigator.geolocation) return showErr("LOCATE_FAILED");
+      busy("locateBtn", true);
+      navigator.geolocation.getCurrentPosition(function(pos){
+        busy("locateBtn", false);
+        if (map) map.setView([pos.coords.latitude, pos.coords.longitude], 19);
+      }, function(err){
+        busy("locateBtn", false);
+        showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED");
+      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
     });
     on("skipPin", function(){ show("myhome"); });
     on("savePin", function(){

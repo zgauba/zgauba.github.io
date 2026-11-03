@@ -211,3 +211,39 @@ test("My Home page: no CSP violations, Arabic + RTL", async ({ page }) => {
   expect(csp).toEqual([]);
   expect(escaped).toEqual([]);
 });
+
+test("Find me: centers the map on the phone's location; saving pins that spot", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 24.5555, longitude: 54.4444 });
+  const hb = homeBackend(MEMBER);
+  const { calls } = await stubBackend(page, { rpc: hb.rpc });
+  await signIn(page);
+  await page.goto("home/?view=pin");
+  await page.locator("#locateBtn").click();
+  await page.waitForTimeout(300);
+  await page.locator("#savePin").click();
+  await expect(page.locator(".status.ok")).toHaveText("Pinned on the map");
+  const a = calls.find((c) => c.name === "jc_home_pin_set").args;
+  expect(Math.abs(a.p_lat - 24.5555)).toBeLessThan(0.0005);
+  expect(Math.abs(a.p_lng - 54.4444)).toBeLessThan(0.0005);
+});
+
+test("Find me with location refused → explains, map stays usable", async ({ page }) => {
+  const hb = homeBackend(MEMBER);
+  await stubBackend(page, { rpc: hb.rpc });
+  await signIn(page);
+  await page.goto("home/?view=pin");
+  await page.locator("#locateBtn").click();
+  await expect(page.locator("#msg")).toContainText(/Location is off|Couldn't find your location/);
+  await expect(page.locator("#savePin")).toBeEnabled();
+});
+
+test("My Home header: the mark + community name, like the hub", async ({ page }) => {
+  const hb = homeBackend(MEMBER);
+  await stubBackend(page, { rpc: hb.rpc });
+  await signIn(page);
+  await page.goto("home/");
+  await expect(page.locator(".topbar a.home svg")).toHaveCount(1);
+  await expect(page.locator("#homeLink")).toHaveText("Jubail Commons");
+  expect(await page.locator(".topbar a.home").evaluate((n) => getComputedStyle(n).fontSize)).toBe("22px");
+});

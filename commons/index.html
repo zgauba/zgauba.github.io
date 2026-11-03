@@ -31,7 +31,7 @@ h1{font-size:26px; font-weight:800; letter-spacing:-.01em; margin:0}
   border-bottom:1px solid var(--jc-line); padding-block:2px; white-space:nowrap}
 #bcast{display:none; background:var(--jc-danger); color:#2d0808; border-radius:var(--jc-radius);
   padding:10px 14px; font-weight:700; margin-bottom:16px}
-.cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px}
+.cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); grid-auto-rows:1fr; gap:14px}
 .card{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius);
   padding:18px 16px; display:flex; flex-direction:column; gap:8px}
 .card h2{font-size:17px; margin:0}
@@ -52,8 +52,10 @@ footer a#archiveLink{white-space:nowrap}
 [hidden]{display:none !important}
 /* signed-out platform entry (wireframe v4.1 band 01) */
 .lede{font-size:17px; color:var(--jc-ink); margin:0 0 6px; max-width:56ch}
+/* grid-auto-rows:1fr — every box as tall as the tallest, so the set reads as one row/column of equals */
 .feats{list-style:none; padding:0; margin:14px 0 30px; display:grid; gap:10px;
-  grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); grid-auto-rows:1fr}
+#communities{display:flex; flex-direction:column; gap:12px}
 .feats li{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius);
   padding:14px; font-size:13.5px; color:var(--jc-muted); display:flex; gap:12px; align-items:flex-start}
 .feats b{display:block; color:var(--jc-ink); font-size:15px; margin-bottom:2px}

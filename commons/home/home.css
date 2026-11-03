@@ -10,7 +10,7 @@
 fieldset{border:0; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
 legend{font-size:13px; font-weight:700; color:var(--jc-muted); margin-bottom:6px; padding:0}
 /* pin drop: the ring is fixed at the map's center; the resident pans the map */
-.pinmap{position:relative; height:52vh; min-height:300px; border-radius:var(--jc-radius); overflow:hidden;
+.pinmap{position:relative; height:44vh; min-height:280px; border-radius:var(--jc-radius); overflow:hidden;
   border:1px solid var(--jc-line)}
 .pinmap .map{position:absolute; inset:0}
 .pinmap .ring{position:absolute; top:50%; left:50%; width:34px; height:34px; margin:-17px 0 0 -17px;
@@ -18,6 +18,9 @@ legend{font-size:13px; font-weight:700; color:var(--jc-muted); margin-bottom:6px
 .pinmap .ring::after{content:""; position:absolute; top:50%; left:50%; width:6px; height:6px; margin:-3px 0 0 -3px;
   background:var(--jc-accent); border-radius:50%}
 .pinmap .layers{position:absolute; top:10px; inset-inline-end:10px; z-index:600}
+.pinmap .locate{position:absolute; bottom:40px;  /* clear of the map credits line */
+  left:50%; transform:translateX(-50%); z-index:600;
+  background:var(--jc-accent); color:var(--jc-accent-ink); border-color:var(--jc-accent); padding:9px 18px; font-size:14px}
 .row{display:flex; gap:8px; flex-wrap:wrap}
 .row .btn{flex:1}
 .section{margin-top:18px}

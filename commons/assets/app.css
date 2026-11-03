@@ -8,7 +8,9 @@ body{margin:0; background:var(--jc-bg); color:var(--jc-ink);
   font:15px/1.6 var(--jc-font); -webkit-font-smoothing:antialiased; min-height:100vh}
 main{max-width:480px; margin:0 auto; padding:24px 18px 40px}
 .topbar{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:22px}
-.topbar a.home{color:var(--jc-ink); text-decoration:none; font-weight:800; font-size:17px}
+.topbar a.home{color:var(--jc-ink); text-decoration:none; font-weight:800; font-size:22px; letter-spacing:-.01em;
+  display:flex; align-items:center; gap:10px; line-height:1.2}
+.topbar a.home svg{flex:0 0 auto}
 .lang{border:1px solid var(--jc-line); background:var(--jc-surface); color:var(--jc-ink);
   border-radius:var(--jc-radius-pill); padding:6px 14px; font-size:13px; font-weight:700; cursor:pointer}
 h1{font-size:22px; font-weight:800; margin:0 0 6px}
