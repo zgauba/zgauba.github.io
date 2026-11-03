@@ -18,10 +18,14 @@ test("idle page reloads itself after a deploy", async ({ page }) => {
   const deploy = await fakeDeploy(page, "assets/landing.js");
   await page.goto("./");
   await expect(page.locator("#brand")).toHaveText("Commons");
-  await page.evaluate(() => { window.__before = true; });
+  let reloads = 0;
+  page.on("framenavigated", (f) => { if (f === page.mainFrame()) reloads++; });
   await page.waitForTimeout(800);            // baseline fingerprint taken
+  expect(reloads).toBe(0);                   // nothing changed yet → no reload
+  const reloaded = page.waitForEvent("load", { timeout: 5000 });
   deploy();
-  await expect.poll(() => page.evaluate(() => window.__before === undefined), { timeout: 5000 }).toBe(true);
+  await reloaded;                            // waiting for the event, not peeking mid-navigation
+  expect(reloads).toBeGreaterThanOrEqual(1);
 });
 
 test("mid-form: no reload, a tappable banner instead", async ({ page }) => {

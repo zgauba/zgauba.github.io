@@ -11,6 +11,9 @@
    show the `e2e` test community. Replace with an anon list RPC + a `listed` flag
    when a second community arrives (UC-I1: new community = config row, no code). */
 var LISTED = ["jubail"];
+/* A community named in the link (?community=e2e — the smoke-test community) gets a
+   card for THIS visitor only; it is never listed publicly. */
+if (LISTED.indexOf(jcCommunity()) === -1) LISTED.push(jcCommunity());
 
 var DEFAULT_CFG = {
   name_en: "Jubail Commons", name_ar: "كومنز الجبيل",

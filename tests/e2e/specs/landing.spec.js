@@ -128,3 +128,20 @@ test("canonical redirect: only the github.io copy forwards, path/query/fragment 
     "https://commons.ae/commonsfoo/",
   ]);
 });
+
+test("?community=e2e adds that community's card for this visitor only", async ({ page }) => {
+  await stubBackend(page, { rpc: { jc_config_get: (a) => ok(a.p_community === "e2e"
+    ? { id: "e2e", name_en: "E2E Test Commons", name_ar: null, modules: {} } : CONFIG) } });
+  await page.goto("./?community=e2e");
+  await expect(page.locator(".community")).toHaveCount(2);
+  const card = page.locator('.community[data-community="e2e"]');
+  await expect(card.locator(".names b")).toHaveText("E2E Test Commons");
+  await expect(card.getByRole("link", { name: "Join" })).toHaveAttribute("href", "account/?community=e2e&view=join");
+});
+
+test("without ?community=, only Jubail is listed (e2e never public)", async ({ page }) => {
+  await stubBackend(page);
+  await page.goto("./");
+  await expect(page.locator(".community")).toHaveCount(1);
+  await expect(page.locator('.community[data-community="e2e"]')).toHaveCount(0);
+});
