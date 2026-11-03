@@ -237,11 +237,20 @@ function doSignOut(){
 }
 
 /* ---------- boot ---------- */
+/* Header = the chosen community's name from its config (falls back to the
+   strings brand); the link goes back to the platform entry. */
+var communityCfg = null;
 function paint(){
-  el("homeLink").textContent = jcT("brand");
+  var name = communityCfg
+    ? (jcLang() === "ar" ? (communityCfg.name_ar || communityCfg.name_en) : communityCfg.name_en)
+    : jcT("brand");
+  el("homeLink").textContent = name;
   el("langBtn").textContent = jcT("toggle_label");
-  document.title = jcT("brand");
+  document.title = name;
 }
+jcAnon("jc_config_get", { p_community: jcCommunity() })
+  .then(function(cfg){ if (cfg) { communityCfg = cfg; paint(); } })
+  .catch(function(){});
 
 el("langBtn").addEventListener("click", function(){
   jcSetLang(jcLang() === "ar" ? "en" : "ar");
@@ -273,17 +282,21 @@ function routeNormally(){
 }
 
 /* A reset link: let the client finish the code exchange (getSession awaits its
-   init), then one more tick for its deferred PASSWORD_RECOVERY notice. No recovery
-   and no session ⇒ the link was expired, reused, or opened in another browser
-   (PKCE has no verifier there) — say so and offer a fresh link. */
+   init). The only ?code= Commons ever issues is a password reset (no magic links,
+   no OAuth), so code + session = recovery — decided here, not by waiting for the
+   client's PASSWORD_RECOVERY notice, whose timing varies (it lost the race under
+   load: flaky in tests, a stuck screen on a slow phone). If magic links or OAuth
+   are ever added, this must learn the redirect type. No session ⇒ the link was
+   expired, reused, or opened in another browser (no PKCE verifier there). */
 function routeFromLink(){
   el("view").innerHTML = '<p class="sub">' + esc(jcT("working")) + '</p>';
   return jcDb.auth.getSession().then(function(r){
-    return new Promise(function(res){ setTimeout(function(){ res(r); }, 0); });
-  }).then(function(r){
     try { history.replaceState(null, "", location.pathname); } catch(e){}
-    if (RECOVERING) { if (current !== "recover") show("recover"); return; }
-    if (r.data && r.data.session) return routeNormally();
+    if (r.data && r.data.session) {
+      RECOVERING = true;
+      if (current !== "recover") show("recover");
+      return;
+    }
     show("forgot");
     showErr("LINK_EXPIRED");
   });

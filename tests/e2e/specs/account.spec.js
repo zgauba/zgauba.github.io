@@ -182,9 +182,9 @@ test("a crafted link with someone else's session is NOT adopted", async ({ page 
   const now = Math.floor(Date.now() / 1000);
   await page.goto("./#access_token=" + fakeJwt("attacker@example.com") +
     "&expires_in=3600&expires_at=" + (now + 3600) + "&refresh_token=rt&token_type=bearer");
-  await expect(page.locator("#brand")).toHaveText("Jubail Commons");
+  await expect(page.locator("#brand")).toHaveText("Commons");  // signed-out platform entry
   await page.waitForTimeout(300);
-  await expect(page.locator("#authLink")).toHaveText("Sign in");
+  await expect(page.locator("#authLink")).toBeHidden();  // still signed out — an adopted session would show Account/Finish joining
   expect(calls.some((c) => c.name === "getUser")).toBe(false);
   const stored = await page.evaluate(() => Object.keys(localStorage).filter((k) => /auth-token$/.test(k)));
   expect(stored).toEqual([]);

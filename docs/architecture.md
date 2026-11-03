@@ -64,7 +64,7 @@ SOURCE-OF-TRUTH POLICY:
 - **Decision (2026-11-02): Commons gets its OWN Supabase project** — **JubailCommons** (`qrpxfssdeeuzmsmlbtbu`, ap-south-1, free tier). `jc_` prefix; migrations in `supabase/commons/migrations/`, one dir per remote project so a migration can never hit the wrong database. Plan + decisions: `docs/plans/T2-schema-batch.md`.
 
 ### LAYER — FRONTEND
-- [repo] `commons/index.html` landing: renders from `jc_config_get('jubail')` with an explicit error fallback; counts a visit via `jc_hit('jubail','landing')` (fire-and-forget); EN/AR strings (`commons/assets/strings.js` — Arabic native-reviewed 2026-11-03: «كومنز الجبيل», singular address, Western digits; `privacy_line` unreviewed until T6) + RTL; three-layer tokens. No module screens yet (T5).
+- [repo] `commons/index.html` landing: renders from `jc_config_get('jubail')` with an explicit error fallback; counts a visit via `jc_hit('jubail','landing')` (fire-and-forget); EN/AR strings (`commons/assets/strings.js` — Arabic native-reviewed 2026-11-03: «كومنز الجبيل», singular address, Western digits; the old zero-PII `privacy_line` removed 2026-11-03 — the join screen's `join_privacy` is the only privacy copy until the T6 policy) + RTL; three-layer tokens. No module screens yet (T5).
 
 ### LAYER — DATABASE / API (JubailCommons)
 - [live] Migrations applied (history rows present): `foundation_tables_and_config`, `20261103120000 s1_identity_homes`, `20261103180000 s2_events`, `20261103210000 s3_courts`, `20261104000000 s4_pets`, `t3_rate_limits` (applied via the Supabase tool, so its history version is `20261103062032` vs repo filename `…20261105000000` — same migration), `arabic_names`, `t4a_enable_pg_cron`, `t4a_snapshots`, `t4b_health`, `t4c_enable_pg_net`, `t4c_cleanup` (tool-applied: history versions are apply timestamps, names match repo filenames). S1–S4 were pasted via the SQL editor (local tooling declines drop/delete-bearing SQL); history rows added by hand. Note: foundation's history version (`20261102165811`) differs from its repo filename (`…180000`) — same migration.
@@ -106,6 +106,15 @@ SOURCE-OF-TRUTH POLICY:
 ### LAYER — TESTS
 - [repo] `tests/sql/build_dryrun.sh [pending migrations]` assembles ONE paste: migrations + `00_grants` (allowlists + structural checks: definer/search_path, FK delete rules, storage policies, `jc_private`) + every slice test + `zz_finish`, which always raises ⇒ **everything rolls back**. 371 checks as of T4 (`s6_snapshots`, `s7_cleanup` added; those use test communities `testville6/7`). Run in the SQL editor; success = `ERROR: ALL_TESTS_PASSED (n checks)`.
 - [repo] Fixtures are written into `jubail` and rolled back; `00_grants` **aborts once jubail has real residents** — post-launch, tests must move to test communities before they can run again.
+
+## LAYER — HOSTING: commons.ae (Cloudflare Pages) — added 2026-11-03
+- [live] **commons.ae** = Cloudflare Pages project `commons` (default URL `commons-7ii.pages.dev`), Git-connected to this repo, production branch `main`, **build output directory `commons/`**, no build command. Every push to `main` deploys in ~1 min; `cache-control: max-age=0, must-revalidate` (no 10-min CDN lag — event-day hotfixes land fast). Every other branch gets a preview at `<branch>.commons-7ii.pages.dev`.
+- [live] DNS for commons.ae is on Cloudflare (nameservers `asa`/`bryce.ns.cloudflare.com`, Free plan): apex CNAME → Pages (proxied); `TXT v=spf1 -all` + `_dmarc` `p=reject` (the domain sends no mail — anti-spoofing). No `www`.
+- [repo] Why not a GitHub Pages custom domain: on the `zgauba.github.io` user-site repo it would also move every project site (Varzish, Thrivepoint) under commons.ae. Why Cloudflare over Vercel: free tier allows commercial use (productization).
+- [repo] The SAME `commons/` folder is still served at zgauba.github.io/commons/ by GitHub Pages; `commons/assets/canonical.js` (first script on every Commons page) forwards that copy to commons.ae, keeping path/query/fragment. **Every new Commons page must load it first.**
+- [repo] `commons/404.html` — Cloudflare serves it (HTTP 404) for unknown paths; without it Pages answers any path with the landing + 200.
+- [live] Supabase Auth Site URL `https://commons.ae/`; Redirect URLs include `https://commons.ae/**` (+ the github.io entry until no longer needed).
+- ⚠ Cloudflare labels Pages "legacy" in favour of Workers static assets; Pages remains supported. Migration = one small Wrangler config pointing at `commons/`.
 
 ## LAYER — CI / CD (whole repo)
 

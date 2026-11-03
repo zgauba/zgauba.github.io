@@ -31,7 +31,7 @@ queue (lands with the Community map module); UC-H2 rotation banner.
 | D2 | **supabase-js vendored** at `commons/assets/vendor/` (pinned, integrity checked against npm, served first-party — no CDN). Chosen over raw fetch for: token refresh across tabs/sleep, Storage (Pets photos), Realtime (event-day egress option), future auth methods. Every RPC still goes through our `rpc()` wrapper. |
 | D3 | Leaflet 1.9.4 vendored (T5.0b). Tiles stay Esri/OSM. |
 | D4 | `tests/e2e/` with its own dev-only `package.json` (Playwright pinned); `node_modules` ignored; stubbed RPC + auth. CI job added in T5.1, once stable. |
-| D5 | Sign-up screen states the post-pivot privacy posture; the landing's `privacy_line` stays for T6 (KG7). |
+| D5 | Sign-up screen states the post-pivot privacy posture. The landing's old zero-PII `privacy_line` was **removed** 2026-11-03 (Zee: no public line until the privacy policy, T6/KG7). |
 | D6 | Real-backend smoke test runs in a dedicated `e2e` community, never in `jubail` — `00_grants` aborts once jubail has residents. `?community=<slug>` is accepted on any page (server authz derives the community from membership, so it only picks which config/join code the screens use) and is always shown on the join step, never silent. |
 | D7 | **Auth uses the PKCE flow** (PR #18 review): the default implicit flow adopts any session handed to it in a URL fragment (login CSRF). PKCE exchanges a reset `?code=` only in the browser that requested it — so reset links must be opened in that browser; the copy says so. |
 

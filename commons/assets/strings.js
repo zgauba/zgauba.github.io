@@ -3,7 +3,8 @@
    Arabic: native-speaker review approved 2026-11-03 (sheet "Jubail Commons —
    Arabic review"). Style: singular address (احجز، سجّل), Western digits —
    both match jubailisland.ae. Any new or changed AR string needs review again;
-   privacy_line is NOT reviewed (rewritten with the privacy policy — T6, KG7).
+   The landing's old zero-PII privacy_line was removed 2026-11-03 (Zee): the
+   join screen's join_privacy states what we keep, where the email is collected.
    Gotcha (learned Oct 2026): never place "·" directly after Arabic-Indic
    digits — it reads like ٠ (zero). Use "،" or parentheses in AR strings. */
 
@@ -20,6 +21,11 @@ var JC_STRINGS = {
     module_bookings_desc: "Book community courts and facilities.",
     module_pets: "Pets of Jubail",
     module_pets_desc: "The neighborhood pet directory.",
+    module_community: "The Community",
+    /* platform entry (signed out) is community-agnostic: generic titles where the
+       module title names a community ("Pets of Jubail" → "Pets") */
+    feat_pets: "Pets",
+    module_community_desc: "Find any home and get directions — no addresses needed.",
     /* nouns in the nav, verbs on the buttons (ratified 2026-11-02) */
     cta_events: "Sign your home up",
     cta_bookings: "Book a court",
@@ -28,14 +34,24 @@ var JC_STRINGS = {
     archive_halloween: "Halloween 2026",
     archive_halloween_desc: "Where it all started — the trick-or-treat map.",
     archive_open: "Open the map",
-    privacy_line: "Zero-PII by default: no names, emails or phone numbers unless a feature asks, per-feature and opt-in.",
     error_config: "Couldn't load community settings — showing defaults. Try again shortly.",
-    footer_credit: "Made by your neighbor in Ain Al Maha",
+    /* credit = before + <linked name → career page> + after (split so AR word order works) */
+    credit_before: "Made by ",
+    credit_name: "Zeeshan",
+    credit_after: ", your neighbor in Ain Al Maha",
     /* nav (T5) */
     nav_home: "Commons",
     nav_my_home: "My Home",
     nav_community: "The Community",
     nav_admin: "Admin",
+    /* platform entry, signed out (T5.0a, wireframe band 01) */
+    platform_brand: "Commons",
+    platform_lede: "Neighborhood software, run by neighbors.",
+    choose_community: "Choose your community",
+    community_signin: "Sign in",
+    community_join: "Join",
+    your_community: "Your community isn't here? Commons is run by neighbors.",
+    your_community_link: "Talk to us",
     /* account + join (T5.0a) */
     nav_sign_in: "Sign in",
     nav_account: "Account",
@@ -97,6 +113,10 @@ var JC_STRINGS = {
     module_bookings_desc: "احجز ملاعب ومرافق المجتمع.",
     module_pets: "حيوانات الجبيل الأليفة",
     module_pets_desc: "دليل حيوانات الحي الأليفة.",
+    /* T5.0a draft — pending native review */
+    module_community: "المجتمع",
+    feat_pets: "الحيوانات الأليفة",
+    module_community_desc: "اعثر على أي منزل واحصل على الاتجاهات — دون الحاجة إلى عناوين.",
     cta_events: "سجّل منزلك",
     cta_bookings: "احجز ملعباً",
     cta_pets: "أضف حيوانك الأليف",
@@ -104,15 +124,24 @@ var JC_STRINGS = {
     archive_halloween: "هالوين 2026",
     archive_halloween_desc: "من هنا كانت البداية — خريطة الحلوى.",
     archive_open: "افتح الخريطة",
-    privacy_line: "الخصوصية أولاً: لا نحفظ أسماء أو أرقام هواتف أو بريداً إلكترونياً إلا بموافقتكم ولكل ميزة على حدة.",
     error_config: "تعذّر تحميل إعدادات المجتمع — نعرض الإعدادات الافتراضية. حاول مرة أخرى بعد قليل.",
-    footer_credit: "من جارك في عين المها",
+    /* T5.0a draft — name transliteration + phrasing pending native review */
+    credit_before: "من ",
+    credit_name: "ذيشان",
+    credit_after: "، جارك في عين المها",
     nav_home: "الرئيسية",
     nav_my_home: "منزلي",
     nav_community: "المجتمع",
     nav_admin: "الإدارة",
-    /* account + join (T5.0a) — DRAFT, not yet native-reviewed: batch into the
-       review sheet before T6 */
+    /* platform entry + account + join (T5.0a) — DRAFT, not yet native-reviewed:
+       batch into the review sheet before T6 */
+    platform_brand: "كومنز",
+    platform_lede: "برمجيات الحي، يديرها الجيران.",
+    choose_community: "اختر مجتمعك",
+    community_signin: "تسجيل الدخول",
+    community_join: "انضم",
+    your_community: "مجتمعك غير موجود هنا؟ كومنز يديره الجيران.",
+    your_community_link: "تواصل معنا",
     nav_sign_in: "تسجيل الدخول",
     nav_account: "حسابي",
     nav_finish_join: "أكمل الانضمام",
