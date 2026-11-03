@@ -74,26 +74,28 @@ begin
   if v_err is distinct from 'NOT_MEMBER' then raise exception 'FAIL T06: %', v_err; end if;
   k := k + 2;
 
-  -- ---------- T07 code pre-check (anon, case/space-insensitive) ----------
+  -- ---------- T07 code pre-check retired by T3 (no anon or authenticated access) ----------
   execute 'reset role'; execute 'set local role anon';
-  v_t := clock_timestamp();
-  v_err := null; begin perform jc_code_check('jubail', 'wrong-code'); exception when others then v_err := sqlerrm; end;
-  if clock_timestamp() - v_t > interval '0.5 seconds' then raise exception 'FAIL T07c join-code failure is tar-pitted (H1: must be fast)'; end if;
-  if v_err is distinct from 'BAD_CODE' then raise exception 'FAIL T07a: %', v_err; end if;
-  if not jc_code_check('jubail', ' join-test-1 ') then raise exception 'FAIL T07b'; end if;
+  v_err := null; begin perform jc_code_check('jubail', 'join-test-1'); exception when others then v_err := sqlerrm; end;
+  if v_err not like 'permission denied%' then raise exception 'FAIL T07a anon jc_code_check: %', v_err; end if;
+  execute 'reset role'; execute 'set local role authenticated';
+  v_err := null; begin perform jc_code_check('jubail', 'join-test-1'); exception when others then v_err := sqlerrm; end;
+  if v_err not like 'permission denied%' then raise exception 'FAIL T07b authenticated jc_code_check: %', v_err; end if;
   execute 'reset role';
-  k := k + 3;
+  k := k + 2;
 
-  -- ---------- T08 join ----------
+  -- ---------- T08 join (wrong code returns an error object, fast — H1; case/space-insensitive) ----------
   execute 'set local role authenticated';
-  v_err := null; begin perform jc_join('jubail', 'nope-nope'); exception when others then v_err := sqlerrm; end;
-  if v_err is distinct from 'BAD_CODE' then raise exception 'FAIL T08a: %', v_err; end if;
-  v := jc_join('jubail', 'JOIN-TEST-1');
+  v_t := clock_timestamp();
+  v := jc_join('jubail', 'nope-nope');
+  if clock_timestamp() - v_t > interval '0.5 seconds' then raise exception 'FAIL T08d join-code failure is tar-pitted (H1: must be fast)'; end if;
+  if v ->> 'error' is distinct from 'BAD_CODE' then raise exception 'FAIL T08a: %', v; end if;
+  v := jc_join('jubail', ' JOIN-TEST-1 ');
   if v ->> 'community' <> 'jubail' then raise exception 'FAIL T08b: %', v; end if;
   v := jc_join('jubail', 'anything');  -- idempotent for an existing member
   v_err := null; begin perform jc_join('testville', 'tv-join-test'); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'ALREADY_MEMBER_ELSEWHERE' then raise exception 'FAIL T08c: %', v_err; end if;
-  k := k + 3;
+  k := k + 4;
 
   -- ---------- T09 claim rules ----------
   v_err := null; begin perform jc_home_claim('bada-al-jubail', 'villa', null, '3'); exception when others then v_err := sqlerrm; end;
@@ -160,8 +162,8 @@ begin
   if jsonb_array_length(jc_directory_list()) <> 0 then raise exception 'FAIL T14a testville sees jubail homes'; end if;
   v_err := null; begin perform jc_invite_accept(v_tok); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'BAD_INVITE' then raise exception 'FAIL T14b cross-community invite: %', v_err; end if;
-  v_err := null; begin perform jc_admin_unlock('Admin Test 1'); exception when others then v_err := sqlerrm; end;
-  if v_err is distinct from 'BAD_ADMIN' then raise exception 'FAIL T14c jubail admin code in testville: %', v_err; end if;
+  v := jc_admin_unlock('Admin Test 1');
+  if v ->> 'error' is distinct from 'BAD_ADMIN' then raise exception 'FAIL T14c jubail admin code in testville: %', v; end if;
   k := k + 3;
 
   -- ---------- T15 admin unlock + scope ----------
@@ -170,9 +172,9 @@ begin
   if v_err is distinct from 'NOT_ADMIN' then raise exception 'FAIL T15a: %', v_err; end if;
   perform set_config('request.jwt.claims', json_build_object('sub', A, 'role', 'authenticated')::text, true);
   v_t := clock_timestamp();
-  v_err := null; begin perform jc_admin_unlock('wrong'); exception when others then v_err := sqlerrm; end;
+  v := jc_admin_unlock('wrong');
   if clock_timestamp() - v_t < interval '1.4 seconds' then raise exception 'FAIL T15e admin failure is not tar-pitted'; end if;
-  if v_err is distinct from 'BAD_ADMIN' then raise exception 'FAIL T15b: %', v_err; end if;
+  if v ->> 'error' is distinct from 'BAD_ADMIN' then raise exception 'FAIL T15b: %', v; end if;
   if jc_admin_unlock('admin test 1') <> '["community"]'::jsonb then raise exception 'FAIL T15c'; end if;
   v := jc_admin_homes_list();
   if jsonb_array_length(v -> 'homes') <> 1 or jsonb_array_length(v -> 'pending') <> 1 then raise exception 'FAIL T15d: %', v; end if;
