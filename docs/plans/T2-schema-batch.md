@@ -1,6 +1,6 @@
 # T2 — Commons schema batch (plan)
 
-> Status: **APPROVED 2026-11-03** — S1 live; S2 in review/apply. Source of truth for scope:
+> Status: **APPROVED 2026-11-03** — S1 + S2 live; S3 in review/apply. Source of truth for scope:
 > Use Cases traceability table + Wireframes v4.1 (both frozen 2026-11-03),
 > `docs/qa/SYNTHESIS-2026-11-03.md` T2, the 2026-11-02 DB review findings.
 > Target: JubailCommons (`qrpxfssdeeuzmsmlbtbu`) only.
@@ -214,3 +214,10 @@ sign up at once (one row, last write wins).
 
 **Accepted residuals (S2 reviews):** signup/withdraw churn writes one state-log row per
 call (T3 rate limits); a deleted account's crowd reports vanish with it (its data).
+
+**S3 product calls (ratified 2026-11-03):** daily quota counts across ALL courts
+(`modules.bookings.per_home_per_day`, default 1); residents cancel any time before
+the slot starts; an admin block cancels the bookings it covers (reason shown);
+no cap on total upcoming bookings per home for launch (revisit with real usage).
+Launch checklist adds a two-tab run: block creation while a booking is in flight
+(expect the booking cancelled by the block, never live inside it).
