@@ -1,13 +1,43 @@
-/* Landing (moved out of index.html for the CSP's script-src 'self').
-   Config comes from the community's row in the Commons backend (DB is the only
-   source of truth). These defaults render instantly and are overwritten — or
-   kept, with a visible notice — if the fetch fails. */
+/* Landing — two modes (wireframe v4.1 band 01):
+   - signed out (or not yet a member): PLATFORM ENTRY — what Commons is, then
+     "choose your community" with Sign in / Join per community.
+   - signed-in member: the community HUB (module cards; T5.0b rebuilds it with
+     the tab bar).
+   Config comes from each community's row (DB is the only source of truth); the
+   defaults render instantly and are kept, with a visible notice, if the fetch fails. */
+
+/* SHORTCUT (approved 2026-11-03): the picker's community list is written here, not
+   fetched — there is no public "list communities" RPC yet, and listing must never
+   show the `e2e` test community. Replace with an anon list RPC + a `listed` flag
+   when a second community arrives (UC-I1: new community = config row, no code). */
+var LISTED = ["jubail"];
+
 var DEFAULT_CFG = {
   name_en: "Jubail Commons", name_ar: "كومنز الجبيل",
   modules: { events:{enabled:false}, bookings:{enabled:false}, pets:{enabled:false} },
   links: { halloween_archive: "https://zgauba.github.io/jubail-halloween/" },
   broadcast: ""
 };
+
+var cfgs = {};          /* community id → loaded config */
+var mode = null;        /* null (deciding) | "picker" | "hub" */
+var hubCommunity = null;
+var authStatus = "signed_out";
+var configFailed = false;
+
+function cfgFor(id){ return cfgs[id] || (id === "jubail" ? DEFAULT_CFG : { name_en: id, modules: {} }); }
+function nameOf(cfg){ return jcLang() === "ar" ? (cfg.name_ar || cfg.name_en) : cfg.name_en; }
+
+/* A stored session exists → wait for jcState before choosing a mode (no flash of
+   the picker for residents). None → the picker renders immediately, no network. */
+function hasStoredSession(){
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      if (/-auth-token$/.test(localStorage.key(i) || "")) return true;
+    }
+  } catch(e){}
+  return false;
+}
 
 function moduleCard(key, enabled){
   return '<div class="card"><h2>' + esc(jcT("module_" + key)) + '</h2>' +
@@ -31,66 +61,102 @@ function applyBrandTokens(tokens){
   });
 }
 
-/* signed_out → "Sign in"; not_member → "Finish joining"; member → "Account".
-   Unknown (network) → "Sign in": the account page sorts it out. */
-var authStatus = "signed_out";
+/* signed_out → "Sign in"; not_member → "Finish joining"; member → "Account". */
 function renderAuth(){
   var label = authStatus === "member" ? "nav_account"
             : authStatus === "not_member" ? "nav_finish_join" : "nav_sign_in";
   el("authLink").textContent = jcT(label);
 }
 
-function render(cfg){
-  var lang = jcLang();
-  document.title = lang === "ar" ? cfg.name_ar || cfg.name_en : cfg.name_en;
-  el("brand").textContent = lang === "ar" ? (cfg.name_ar || cfg.name_en) : cfg.name_en;
+function renderPicker(){
+  document.title = jcT("platform_brand");
+  el("brand").textContent = jcT("platform_brand");
+  el("tagline").textContent = jcT("platform_lede");
+  el("feats").innerHTML = ["events", "bookings", "pets"].map(function(k){
+    return '<li><b>' + esc(jcT("module_" + k)) + '</b>' + esc(jcT("module_" + k + "_desc")) + '</li>';
+  }).join("");
+  el("chooseTitle").textContent = jcT("choose_community");
+  el("communities").innerHTML = LISTED.map(function(id){
+    var cfg = cfgFor(id), q = "?community=" + encodeURIComponent(id);
+    var other = jcLang() === "ar" ? cfg.name_en : cfg.name_ar;
+    return '<div class="community" data-community="' + esc(id) + '">' +
+      '<div class="names"><b>' + esc(nameOf(cfg)) + '</b>' + (other ? '<span>' + esc(other) + '</span>' : '') + '</div>' +
+      '<div class="acts">' +
+        '<a class="go" href="account/' + q + '">' + esc(jcT("community_signin")) + '</a>' +
+        '<a class="go ghost" href="account/' + q + '&amp;view=join">' + esc(jcT("community_join")) + '</a>' +
+      '</div></div>';
+  }).join("");
+  el("yours").innerHTML = esc(jcT("your_community")) + ' <a href="https://zgauba.github.io/">' + esc(jcT("your_community_link")) + '</a>';
+}
+
+function renderHub(){
+  var cfg = cfgFor(hubCommunity);
+  document.title = nameOf(cfg);
+  el("brand").textContent = nameOf(cfg);
   el("tagline").textContent = jcT("tagline");
-  el("langBtn").textContent = jcT("toggle_label");
-  el("privacy").textContent = jcT("privacy_line");
-  el("credit").textContent = jcT("footer_credit");
-  renderAuth();
   var mods = cfg.modules || {};
-  var html = "";
-  ["events","bookings","pets"].forEach(function(k){
-    html += moduleCard(k, !!(mods[k] && mods[k].enabled));
-  });
-  /* config-sourced links must be https — blocks javascript:/data: schemes if a
-     config row were ever compromised (this page shares the github.io origin) */
-  var archiveUrl = (cfg.links && cfg.links.halloween_archive) || "";
-  if (!/^https:\/\//.test(archiveUrl)) archiveUrl = DEFAULT_CFG.links.halloween_archive;
-  html += '<div class="card"><h2>' + esc(jcT("archive_halloween")) + '</h2>' +
-    '<p>' + esc(jcT("archive_halloween_desc")) + '</p>' +
-    '<a class="go" target="_blank" rel="noopener" href="' + esc(archiveUrl) + '">' + esc(jcT("archive_open")) + '</a></div>';
-  el("cards").innerHTML = html;
+  el("cards").innerHTML = ["events", "bookings", "pets"].map(function(k){
+    return moduleCard(k, !!(mods[k] && mods[k].enabled));
+  }).join("");
   var b = (cfg.broadcast || "").trim();
   el("bcast").textContent = b ? "⚠️ " + b : "";
   el("bcast").style.display = b ? "block" : "none";
 }
 
-var currentCfg = DEFAULT_CFG;
+function render(){
+  el("langBtn").textContent = jcT("toggle_label");
+  el("privacy").textContent = jcT("privacy_line");
+  el("credit").textContent = jcT("footer_credit");
+  /* config-sourced links must be https — blocks javascript:/data: schemes if a
+     config row were ever compromised */
+  var archiveUrl = (cfgFor("jubail").links || {}).halloween_archive || "";
+  if (!/^https:\/\//.test(archiveUrl)) archiveUrl = DEFAULT_CFG.links.halloween_archive;
+  el("archiveLink").href = archiveUrl;
+  el("archiveLink").textContent = jcT("archive_halloween");
+  el("errbar").textContent = jcT("error_config");
+  el("errbar").style.display = configFailed ? "block" : "none";
+  renderAuth();
+  el("picker").hidden = mode !== "picker";
+  el("hub").hidden = mode !== "hub";
+  if (mode === "picker") renderPicker();
+  if (mode === "hub") renderHub();
+}
 
-function loadConfig(){
-  return jcAnon("jc_config_get", { p_community: jcCommunity() }).then(function(cfg){
+function loadConfig(id){
+  return jcAnon("jc_config_get", { p_community: id }).then(function(cfg){
     if (!cfg) throw new Error("empty");
-    currentCfg = cfg;
-    applyBrandTokens(cfg.tokens);
-    el("errbar").style.display = "none";
-    render(currentCfg);
+    cfgs[id] = cfg;
   }).catch(function(){
     /* explicit failure state — never a silently blank page */
-    el("errbar").textContent = jcT("error_config");
-    el("errbar").style.display = "block";
-    render(currentCfg);
+    configFailed = true;
   });
+}
+
+function setMode(m){
+  mode = m;
+  if (m === "hub") applyBrandTokens(cfgFor(hubCommunity).tokens);
+  render();
 }
 
 el("langBtn").addEventListener("click", function(){
   jcSetLang(jcLang() === "ar" ? "en" : "ar");
-  render(currentCfg);
+  render();
 });
 
 jcSetLang(jcLang());
-render(DEFAULT_CFG);
-loadConfig();
+if (!hasStoredSession()) setMode("picker"); else render();
+var listedLoaded = Promise.all(LISTED.map(loadConfig));
+listedLoaded.then(function(){ if (mode === "picker") render(); });
 jcHit("landing");
-jcState().then(function(s){ authStatus = s.status; renderAuth(); }, function(){});
+jcState().then(function(s){
+  authStatus = s.status;
+  if (s.status === "member" && s.me && s.me.community) {
+    hubCommunity = s.me.community;
+    return (cfgs[hubCommunity] ? Promise.resolve() : loadConfig(hubCommunity))
+      .then(function(){ setMode("hub"); });
+  }
+  return listedLoaded.then(function(){ setMode("picker"); });
+}, function(){
+  /* can't tell who this is (network) — the public entry is always safe to show */
+  listedLoaded.then(function(){ setMode("picker"); });
+});

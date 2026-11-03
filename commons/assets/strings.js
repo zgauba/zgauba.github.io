@@ -36,6 +36,14 @@ var JC_STRINGS = {
     nav_my_home: "My Home",
     nav_community: "The Community",
     nav_admin: "Admin",
+    /* platform entry, signed out (T5.0a, wireframe band 01) */
+    platform_brand: "Commons",
+    platform_lede: "Neighborhood software, run by neighbors.",
+    choose_community: "Choose your community",
+    community_signin: "Sign in",
+    community_join: "Join",
+    your_community: "Your community isn't here? Commons is run by neighbors.",
+    your_community_link: "Talk to us",
     /* account + join (T5.0a) */
     nav_sign_in: "Sign in",
     nav_account: "Account",
@@ -111,8 +119,15 @@ var JC_STRINGS = {
     nav_my_home: "منزلي",
     nav_community: "المجتمع",
     nav_admin: "الإدارة",
-    /* account + join (T5.0a) — DRAFT, not yet native-reviewed: batch into the
-       review sheet before T6 */
+    /* platform entry + account + join (T5.0a) — DRAFT, not yet native-reviewed:
+       batch into the review sheet before T6 */
+    platform_brand: "كومنز",
+    platform_lede: "برمجيات الحي، يديرها الجيران.",
+    choose_community: "اختر مجتمعك",
+    community_signin: "تسجيل الدخول",
+    community_join: "انضم",
+    your_community: "مجتمعك غير موجود هنا؟ كومنز يديره الجيران.",
+    your_community_link: "تواصل معنا",
     nav_sign_in: "تسجيل الدخول",
     nav_account: "حسابي",
     nav_finish_join: "أكمل الانضمام",

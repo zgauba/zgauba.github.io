@@ -10,6 +10,8 @@
 <meta name="description" content="Jubail Island community platform — events, bookings, pets. By neighbors, for neighbors.">
 <!-- favicon = the reduced mark cut (6 dots, fatter, bigger center — the 8-dot full cut turns to mush below ~24px) -->
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><circle cx='48' cy='48' r='15' fill='%231C6B52'/><g fill='%233E9B76'><circle cx='48' cy='11' r='9'/><circle cx='80.05' cy='29.5' r='9'/><circle cx='80.05' cy='66.5' r='9'/><circle cx='48' cy='85' r='9'/><circle cx='15.95' cy='66.5' r='9'/><circle cx='15.95' cy='29.5' r='9'/></g></svg>">
+<!-- first, before anything renders: the github.io copy forwards to commons.ae -->
+<script src="assets/canonical.js"></script>
 <link rel="stylesheet" href="assets/tokens.css">
 <style>
 *{box-sizing:border-box}
@@ -42,6 +44,22 @@ a.go{align-self:flex-start; background:var(--jc-accent); color:var(--jc-accent-i
 .errbar{display:none; background:var(--jc-surface-2); border:1px solid var(--jc-line);
   color:var(--jc-warn); border-radius:var(--jc-radius); padding:9px 13px; font-size:13px; margin:0 0 16px}
 footer{color:var(--jc-faint); font-size:12px; text-align:center; padding:10px 16px 24px}
+footer a{color:var(--jc-muted)}
+[hidden]{display:none !important}
+/* signed-out platform entry (wireframe v4.1 band 01) */
+.lede{font-size:17px; color:var(--jc-ink); margin:0 0 6px; max-width:56ch}
+.feats{list-style:none; padding:0; margin:14px 0 30px; display:grid; gap:10px;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.feats li{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius);
+  padding:13px 14px; font-size:13.5px; color:var(--jc-muted)}
+.feats b{display:block; color:var(--jc-ink); font-size:15px; margin-bottom:2px}
+h2.choose{font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--jc-muted); margin:0 0 10px}
+.community{background:var(--jc-surface); border:1px solid var(--jc-accent); border-radius:var(--jc-radius);
+  padding:18px 16px; display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px}
+.community .names b{display:block; font-size:18px}
+.community .names span{color:var(--jc-muted); font-size:14px}
+.community .acts{display:flex; gap:8px; flex-wrap:wrap}
+a.go.ghost{background:transparent; color:var(--jc-ink); border:1px solid var(--jc-line)}
 </style>
 </head>
 <body>
@@ -68,12 +86,22 @@ footer{color:var(--jc-faint); font-size:12px; text-align:center; padding:10px 16
       <button id="langBtn" type="button"></button>
     </div>
   </header>
-  <div id="bcast" role="alert"></div>
   <p class="errbar" id="errbar"></p>
-  <div class="cards" id="cards"></div>
+  <!-- signed out: what Commons is + choose your community (sign in / join) -->
+  <section id="picker" hidden>
+    <ul class="feats" id="feats"></ul>
+    <h2 class="choose" id="chooseTitle"></h2>
+    <div id="communities"></div>
+    <p class="notice" id="yours"></p>
+  </section>
+  <!-- signed in: the community hub (T5.0b rebuilds this with the tab bar) -->
+  <section id="hub" hidden>
+    <div id="bcast" role="alert"></div>
+    <div class="cards" id="cards"></div>
+  </section>
   <p class="notice" id="privacy"></p>
 </main>
-<footer id="credit"></footer>
+<footer><span id="credit"></span> · <a id="archiveLink" target="_blank" rel="noopener"></a></footer>
 
 <script src="assets/vendor/supabase-2.118.0.js"></script>
 <script src="assets/strings.js"></script>

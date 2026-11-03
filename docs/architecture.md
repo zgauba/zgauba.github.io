@@ -107,6 +107,15 @@ SOURCE-OF-TRUTH POLICY:
 - [repo] `tests/sql/build_dryrun.sh [pending migrations]` assembles ONE paste: migrations + `00_grants` (allowlists + structural checks: definer/search_path, FK delete rules, storage policies, `jc_private`) + every slice test + `zz_finish`, which always raises ⇒ **everything rolls back**. 371 checks as of T4 (`s6_snapshots`, `s7_cleanup` added; those use test communities `testville6/7`). Run in the SQL editor; success = `ERROR: ALL_TESTS_PASSED (n checks)`.
 - [repo] Fixtures are written into `jubail` and rolled back; `00_grants` **aborts once jubail has real residents** — post-launch, tests must move to test communities before they can run again.
 
+## LAYER — HOSTING: commons.ae (Cloudflare Pages) — added 2026-11-03
+- [live] **commons.ae** = Cloudflare Pages project `commons` (default URL `commons-7ii.pages.dev`), Git-connected to this repo, production branch `main`, **build output directory `commons/`**, no build command. Every push to `main` deploys in ~1 min; `cache-control: max-age=0, must-revalidate` (no 10-min CDN lag — event-day hotfixes land fast). Every other branch gets a preview at `<branch>.commons-7ii.pages.dev`.
+- [live] DNS for commons.ae is on Cloudflare (nameservers `asa`/`bryce.ns.cloudflare.com`, Free plan): apex CNAME → Pages (proxied); `TXT v=spf1 -all` + `_dmarc` `p=reject` (the domain sends no mail — anti-spoofing). No `www`.
+- [repo] Why not a GitHub Pages custom domain: on the `zgauba.github.io` user-site repo it would also move every project site (Varzish, Thrivepoint) under commons.ae. Why Cloudflare over Vercel: free tier allows commercial use (productization).
+- [repo] The SAME `commons/` folder is still served at zgauba.github.io/commons/ by GitHub Pages; `commons/assets/canonical.js` (first script on every Commons page) forwards that copy to commons.ae, keeping path/query/fragment. **Every new Commons page must load it first.**
+- [repo] `commons/404.html` — Cloudflare serves it (HTTP 404) for unknown paths; without it Pages answers any path with the landing + 200.
+- [live] Supabase Auth Site URL `https://commons.ae/`; Redirect URLs include `https://commons.ae/**` (+ the github.io entry until no longer needed).
+- ⚠ Cloudflare labels Pages "legacy" in favour of Workers static assets; Pages remains supported. Migration = one small Wrangler config pointing at `commons/`.
+
 ## LAYER — CI / CD (whole repo)
 
 - [live] GitHub Pages user site (legacy build) serving `main` root; push → deploy, ~10 min CDN cache. Verify via `gh api repos/zgauba/zgauba.github.io/actions/runs`.
