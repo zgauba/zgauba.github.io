@@ -1,0 +1,40 @@
+/* Events page (list, detail map/list, signup, stats). Tokens only; logical properties. */
+.evlist{display:flex; flex-direction:column; gap:10px; margin:0 0 22px; padding:0; list-style:none}
+.evlist a{display:flex; align-items:center; justify-content:space-between; gap:12px; text-decoration:none;
+  color:var(--jc-ink); background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius); padding:14px}
+.evlist b{display:block; font-size:16px}
+.evlist small{color:var(--jc-muted); font-size:13px}
+.pill{flex:0 0 auto; font-size:11px; font-weight:800; letter-spacing:.04em; text-transform:uppercase;
+  border-radius:var(--jc-radius-pill); padding:4px 10px; border:1px solid var(--jc-line); color:var(--jc-muted)}
+.pill.open{color:var(--jc-good); border-color:var(--jc-good)}
+h2.group{font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--jc-muted); margin:18px 0 8px}
+.evhead .sub{margin-bottom:10px}
+.seg2{display:flex; gap:6px; margin:6px 0 12px}
+.seg2 button{flex:1; font:inherit; font-weight:700; cursor:pointer; color:var(--jc-muted); background:var(--jc-surface);
+  border:1px solid var(--jc-line); border-radius:10px; padding:8px}
+.seg2 button[aria-pressed="true"]{color:var(--jc-ink); border-color:var(--jc-accent)}
+.evmap{height:46vh; min-height:280px; border-radius:var(--jc-radius); overflow:hidden; border:1px solid var(--jc-line)}
+.entries{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
+.entries li{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:10px; padding:10px 12px; font-size:14px}
+.entries li.mine{border-color:var(--jc-accent)}
+.entries .meta{color:var(--jc-muted); font-size:12.5px}
+.entries .note{color:var(--jc-ink); font-size:13px; margin-top:3px; white-space:pre-wrap; overflow-wrap:anywhere}
+.cta{margin:14px 0 4px; display:flex; flex-direction:column; gap:8px}
+.status{font-size:13.5px; margin:0}
+.status.ok{color:var(--jc-good)}
+.field{display:flex; flex-direction:column; gap:6px}
+.field .req{color:var(--jc-faint); font-weight:400; font-size:12px}
+.opts{display:flex; flex-wrap:wrap; gap:6px}
+.opts button{font:inherit; cursor:pointer; color:var(--jc-ink); background:var(--jc-surface-2); border:1px solid var(--jc-line);
+  border-radius:var(--jc-radius-pill); padding:7px 14px}
+.opts button[aria-pressed="true"]{border-color:var(--jc-accent); box-shadow:inset 0 0 0 1px var(--jc-accent)}
+textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-surface-2); border:1px solid var(--jc-line);
+  border-radius:10px; padding:10px 12px; width:100%; min-height:80px; resize:vertical}
+.big{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:6px 0 16px}
+.big div{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius); padding:12px; text-align:center}
+.big b{display:block; font-size:24px}
+.big span{color:var(--jc-muted); font-size:12px}
+.bars{display:flex; flex-direction:column; gap:8px; margin-bottom:18px}
+.bar{display:grid; grid-template-columns:minmax(90px,38%) 1fr auto; align-items:center; gap:8px; font-size:13.5px}
+.bar i{display:block; height:10px; border-radius:6px; background:var(--jc-accent)}
+.bar em{font-style:normal; color:var(--jc-muted); font-variant-numeric:tabular-nums}

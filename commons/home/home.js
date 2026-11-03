@@ -135,6 +135,8 @@ var VIEWS = {
         '<button class="btn" type="button" id="invite">' + esc(jcT("mh_invite")) + '</button>' +
       '</div></div>' +
 
+      '<div class="section" id="historySec" hidden><h2>' + esc(jcT("mh_history")) + '</h2><div class="panel" id="history"></div></div>' +
+
       '<div class="section"><h2>' + esc(jcT("mh_account")) + '</h2><div class="panel">' +
         '<p class="who"><b>' + esc(acct.email || state.email || "") + '</b></p>' +
         '<label>' + esc(jcT("mh_name")) +
@@ -153,6 +155,7 @@ var VIEWS = {
 
     /* defaultValue too: a prefilled field is not "being typed in" (update.js busy()) */
     el("dname").value = el("dname").defaultValue = acct.display_name || "";
+    loadHistory();
     on("toPin", function(){ show("pin"); });
     on("toEdit", function(){ show("edit"); });
     on("invite", doInvite);
@@ -261,6 +264,22 @@ function claimForm(editing){
       show(editing ? "myhome" : "pin");
     }, function(e){ busy("go", false); showErr(e.code); });
   });
+}
+
+/* "Our year" (UC-C3): events this home joined. Needs the Events module — while it
+   is off (MODULE_OFF) the section simply stays hidden. */
+function loadHistory(){
+  rpc("jc_my_history").then(function(rows){
+    if (current !== "myhome" || !el("history")) return;
+    el("history").innerHTML = rows.length
+      ? '<ul class="members">' + rows.map(function(r){
+          var t = jcLang() === "ar" && r.title_ar ? r.title_ar : r.title_en;
+          return '<li><a href="../events/?id=' + esc(r.event_id) + '">' + esc(t) + '</a><span class="tag">' +
+            esc(r.starts_at ? new Date(r.starts_at).getFullYear() : "") + '</span></li>';
+        }).join("") + '</ul>'
+      : '<p class="help">' + esc(jcT("mh_history_none")) + '</p>';
+    el("historySec").hidden = false;
+  }, function(){ /* module off or offline: nothing to show */ });
 }
 
 function doInvite(){

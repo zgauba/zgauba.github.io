@@ -17,7 +17,7 @@ residents until T6 (no codes set, all modules off).
 |---|---|---|
 | **T5.0a** Harness + auth | Playwright stub harness; vendored supabase-js; shared `api.js` (client, `rpc()` error contract, `jc_me` state); account page (sign in, join = code → account → `jc_join`, reset); CSP; landing regressions | A1–A3 |
 | **T5.0b** Home + shell (PR #21) | Home claim (village, type, number), pin drop (vendored Leaflet), My Home (members, invite/accept, leave, delete, display name), tab bar + hub | B1, B2, H1 |
-| **T5.1** Events — resident | List, detail (map + list), schema-driven signup, withdraw, "Our year", archived stats (Halloween 2026 baseline); CI job for the harness | C1–C3 |
+| **T5.1** Events — resident (PR #24) | List, detail (map + list), schema-driven signup, withdraw, "Our year", archived stats (Halloween 2026 baseline); CI job for the harness | C1–C3 |
 | **T5.2** Event day + admin | Giant switch, supply, crowd reports/clear, safety, theme; admin unlock/exit, Admin tab, event editor/publish/signups/moderate/close, Reports panel (`jc_admin_report`) | D1–D3, D5, A4, F1–F5 |
 
 Deferred out of T5: UC-D4 route + km counter (`route` flag stays off); admin Homes

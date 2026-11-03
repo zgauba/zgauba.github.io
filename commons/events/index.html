@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<!-- CSP: keep in sync across Commons pages (see account/index.html). This page also
+     loads map tiles: Esri World Imagery + OpenStreetMap (keyless). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://server.arcgisonline.com https://tile.openstreetmap.org; connect-src 'self' https://qrpxfssdeeuzmsmlbtbu.supabase.co wss://qrpxfssdeeuzmsmlbtbu.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<!-- nothing secret in these URLs, but keep the policy uniform across Commons pages -->
+<meta name="referrer" content="no-referrer">
+<title>Commons — Events</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><circle cx='48' cy='48' r='15' fill='%231C6B52'/><g fill='%233E9B76'><circle cx='48' cy='11' r='9'/><circle cx='80.05' cy='29.5' r='9'/><circle cx='80.05' cy='66.5' r='9'/><circle cx='48' cy='85' r='9'/><circle cx='15.95' cy='66.5' r='9'/><circle cx='15.95' cy='29.5' r='9'/></g></svg>">
+<!-- first, before anything renders: the github.io copy forwards to commons.ae -->
+<script src="../assets/canonical.js"></script>
+<link rel="stylesheet" href="../assets/tokens.css">
+<link rel="stylesheet" href="../assets/app.css">
+<link rel="stylesheet" href="../assets/tabbar.css">
+<link rel="stylesheet" href="../assets/vendor/leaflet-1.9.4/leaflet.css">
+<link rel="stylesheet" href="events.css">
+</head>
+<body>
+<main>
+  <div class="topbar">
+    <!-- same header as the hub: the mark (full cut, on-dark colorway) + community name -->
+    <a class="home" href="../">
+        <svg width="30" height="30" viewBox="0 0 96 96" aria-hidden="true">
+          <circle cx="48" cy="48" r="9" fill="#6FCF8F"></circle>
+          <g fill="#3E9B76">
+            <circle cx="82" cy="48" r="5.5"></circle><circle cx="72.04" cy="23.96" r="5.5"></circle>
+            <circle cx="48" cy="14" r="5.5"></circle><circle cx="23.96" cy="23.96" r="5.5"></circle>
+            <circle cx="14" cy="48" r="5.5"></circle><circle cx="23.96" cy="72.04" r="5.5"></circle>
+            <circle cx="48" cy="82" r="5.5"></circle><circle cx="72.04" cy="72.04" r="5.5"></circle>
+          </g>
+        </svg>
+        <span id="homeLink"></span></a>
+    <button class="lang" id="langBtn" type="button"></button>
+  </div>
+  <div id="view" aria-live="polite"></div>
+</main>
+<script src="../assets/vendor/supabase-2.118.0.js"></script>
+<script src="../assets/vendor/leaflet-1.9.4/leaflet.js"></script>
+<script src="../assets/strings.js"></script>
+<script src="../assets/icons.js"></script>
+<script src="../assets/api.js"></script>
+<script src="../assets/nav.js"></script>
+<script src="events.js"></script>
+<script src="../assets/update.js"></script>
+</body>
+</html>
