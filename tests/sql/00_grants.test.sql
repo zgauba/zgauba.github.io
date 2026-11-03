@@ -23,7 +23,12 @@ declare
     'jc_facilities_list', 'jc_facility_day', 'jc_booking_create', 'jc_booking_cancel', 'jc_my_bookings',
     'jc_admin_facilities_list', 'jc_admin_facility_save', 'jc_admin_facility_status',
     'jc_admin_facility_day', 'jc_admin_booking_cancel', 'jc_admin_booking_name_clear',
-    'jc_admin_block_create', 'jc_admin_block_remove'];
+    'jc_admin_block_create', 'jc_admin_block_remove',
+    -- S4
+    'jc_pets_list', 'jc_pet_get', 'jc_pet_save', 'jc_pet_missing_set', 'jc_pet_archive',
+    'jc_pet_sighting_add', 'jc_pet_photo_begin', 'jc_pet_photo_commit',
+    'jc_admin_pets_list', 'jc_admin_stray_save', 'jc_admin_pet_care_add', 'jc_admin_pet_archive',
+    'jc_admin_sighting_hide'];
 begin
   -- Pre-launch suite: fixtures are written into 'jubail' and rolled back. Refuse to run
   -- once real residents exist — post-launch tests must move to a test community.
@@ -78,6 +83,27 @@ begin
      and co.connamespace = 'public'::regnamespace and co.confdeltype = 'n' and at.attnotnull;
   if n <> 0 then raise exception 'FAIL G10 % SET NULL user references are NOT NULL', n; end if;
   k := k + 3;
+
+  -- storage (S4): one private bucket, exactly two policies, both delegating to jc_private;
+  -- jc_private is never callable by anon, and holds only the two policy predicates
+  if not exists (select 1 from storage.buckets where id = 'pet-photos' and not public
+                   and file_size_limit = 2097152) then
+    raise exception 'FAIL G11 pet-photos bucket missing, public, or uncapped'; end if;
+  if (select array_agg(policyname::text || ':' || cmd order by policyname) from pg_policies
+       where schemaname = 'storage' and tablename = 'objects' and policyname like 'jc\_%')
+     is distinct from array['jc_pet_photos_insert:INSERT', 'jc_pet_photos_select:SELECT'] then
+    raise exception 'FAIL G12 storage policies: %', (select array_agg(policyname::text || ':' || cmd) from pg_policies where schemaname = 'storage'); end if;
+  -- and nothing (ours or not) grants UPDATE/DELETE on pet-photos objects
+  if exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects'
+              and cmd in ('UPDATE', 'DELETE', 'ALL')) then
+    raise exception 'FAIL G15 an UPDATE/DELETE/ALL policy exists on storage.objects'; end if;
+  select count(*) into n from pg_proc pr join pg_namespace ns on ns.oid = pr.pronamespace
+   where ns.nspname = 'jc_private'
+     and (has_function_privilege('anon', pr.oid, 'execute') or not pr.prosecdef
+          or not exists (select 1 from unnest(coalesce(pr.proconfig, '{}')) c where c like 'search_path=%'));
+  if n <> 0 then raise exception 'FAIL G13 % jc_private functions anon-callable or not definer/pinned', n; end if;
+  if has_schema_privilege('anon', 'jc_private', 'usage') then raise exception 'FAIL G14 anon can use jc_private'; end if;
+  k := k + 5;
 
   -- anything created after the migrations (next slice, or by hand) must start closed
   execute 'create function public.jc_zz_probe() returns int language sql as $f$ select 1 $f$';
