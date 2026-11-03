@@ -1,6 +1,6 @@
 # T2 — Commons schema batch (plan)
 
-> Status: **APPROVED 2026-11-03** — S1 in build. Source of truth for scope:
+> Status: **APPROVED 2026-11-03** — S1 live; S2 in review/apply. Source of truth for scope:
 > Use Cases traceability table + Wireframes v4.1 (both frozen 2026-11-03),
 > `docs/qa/SYNTHESIS-2026-11-03.md` T2, the 2026-11-02 DB review findings.
 > Target: JubailCommons (`qrpxfssdeeuzmsmlbtbu`) only.
@@ -198,3 +198,19 @@ Failure counters stay on all paths; per-IP limits arrive with T3.
 Testing note: the local tooling declines delete/drop-bearing SQL, so the S1
 dry run (migration + tests, always ending in a raise ⇒ full rollback) is pasted
 into the SQL editor by Zee.
+
+## Test harness (from S2 on)
+
+`tests/sql/build_dryrun.sh [pending migrations]` → one paste: migrations + `00_grants`
+(cumulative allowlist + structural checks) + every slice test + `zz_finish` (always
+raises ⇒ full rollback). Fixtures live in `jubail` and are rolled back; `00_grants`
+**aborts if jubail has real residents** — post-launch, slice tests must move to test
+communities before they can run again.
+
+**Launch-checklist additions (not automatable in one transaction):** two-tab manual
+concurrency run — (a) `jc_event_close` in tab A while tab B signs up (expect
+SIGNUPS_CLOSED or inclusion in the snapshot, never a gap); (b) two household members
+sign up at once (one row, last write wins).
+
+**Accepted residuals (S2 reviews):** signup/withdraw churn writes one state-log row per
+call (T3 rate limits); a deleted account's crowd reports vanish with it (its data).
