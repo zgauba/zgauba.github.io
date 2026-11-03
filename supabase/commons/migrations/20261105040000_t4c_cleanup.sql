@@ -129,6 +129,9 @@ from public, anon, authenticated;
 grant execute on function
   public.jc_cron_nonce_use(text, text), public.jc_photo_purge_queue(int), public.jc_photo_purge_done(text[], text)
 to service_role;
+-- Supabase's default privileges give service_role EXECUTE on every new public function.
+-- Only cron (postgres) mints nonces; the key the Edge Function holds must not.
+revoke execute on function public.jc_cron_nonce_new(text) from service_role;
 
 -- ---------- 5. schedules (UTC; re-running updates by name) ----------
 select cron.schedule('jc-orphan-users', '15 3 * * *', 'select public.jc_purge_orphan_users()');
