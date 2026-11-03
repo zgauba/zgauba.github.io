@@ -6,7 +6,8 @@ PRIMARY PURPOSE: Zee's networking pages + Jubail Island community tools
   (Halloween 2026 season closed 2026-11-03 — site live but empty; Jubail Commons in rebuild)
 LAST VERIFIED: 2026-11-03 (SignalPost re-queried at T1 close-out; JubailCommons
   re-queried after T4 applied — 28 tables, anon = 3 fns, authenticated = 69,
-  modules OFF, no codes set, 3 cron jobs, 1 edge function)
+  modules OFF, no codes set, 3 cron jobs, 1 edge function; T5.0a smoke test:
+  e2e community added, Auth email confirmation found ON — drift, see Auth layer)
 COST-BEARING LAYERS: none — GitHub Pages, Supabase free tier, keyless map tiles.
 SOURCE-OF-TRUTH POLICY:
   [live] = queried from running infra. Re-query before assuming.
@@ -72,12 +73,14 @@ SOURCE-OF-TRUTH POLICY:
 - [live] **Rate limits (T3):** `jc_join` 10 attempts/hour and `jc_admin_unlock` 5 attempts/15 min, per account (`jc_rate`; attempts counted — join clears on success, admin unlock never clears; admin unlock sleeps 1.5 s on every attempt; one attempt in flight per account → parallel calls get `RATE_LIMITED`). Wrong codes **return** `{"error": "BAD_CODE"|"BAD_ADMIN"}` (HTTP 200) so the counter commits — clients must check `error`. `jc_code_check` retired (no grants). No IPs stored; per-IP limiting is Supabase Auth's (below). Plan: `docs/plans/T3-rate-limits.md`.
 - [live] Default privileges are closed globally for role `postgres` (except service_role, above): any function it creates (any schema) starts private and needs an explicit grant.
 - [live] Arabic names seeded (migration `arabic_names`, repo `20261105010000_arabic_names.sql`): community `name_ar` «كومنز الجبيل» + official village spellings. The landing header reads `name_ar` from config, not from strings.js.
+- [live] Communities: `jubail` (real) + `e2e` (real-backend smoke tests only, migration `20261105050000_e2e_test_community.sql`; join code bootstrapped out-of-band, never committed). Never put test accounts in `jubail` — `00_grants` aborts once jubail has residents.
 - [live] Modules (`jc_communities.modules`): `events`, `bookings` (`per_home_per_day: 1`), `pets` — **all `enabled: false`**. The flag is the compliance kill switch: every resident RPC of a module raises `MODULE_OFF` while it is off.
 - [live] Codes (join, community admin, per-module admin): **none set** — `jc_join` fails closed until they are. Set with `select jc_code_bootstrap('jubail', '<scope>')` (server-generated, 10 chars, shown once; never typed into SQL). Stored bcrypt-hashed.
 - [repo] Standing rules: `jc_event_signup(uuid, jsonb)` signature frozen at launch (new fields go in the payload); every user reference is `ON DELETE SET NULL` (or CASCADE) so account deletion never blocks; email is never an authorization key (confirmation is off).
 
 ### LAYER — AUTH & SESSIONS
-- [live] Supabase Auth, email + password. **Email confirmation OFF** (decision); sign-up is open at the Auth API but grants nothing — an auth user becomes a resident only through `jc_join` with the join code.
+- [live] Supabase Auth, email + password. ⚠ **DRIFT (found 2026-11-03 by the T5.0a real-backend smoke test): email confirmation is ON in the dashboard** — sign-up returns no session and Supabase mails a confirmation link (`confirmation_sent_at` set). The decision (and the client) assume OFF; the client says "check your email to confirm" instead of failing silently. Resolve: switch it off (Authentication → Sign In / Providers → Email → Confirm email) or re-decide. Sign-up is open at the Auth API but grants nothing — an auth user becomes a resident only through `jc_join` with the join code.
+- [live] Auth flow = **PKCE** (client setting, T5.0a review): reset links exchange only in the browser that requested them. Redirect URLs allowlist set by Zee 2026-11-03 (`https://zgauba.github.io/commons/**`).
 - [live] Admin = account-bound grants (`jc_admin_grants`): unlock with a scoped code (community / events / bookings / pets), valid 60 days from last use, invalidated by code rotation. Wrong admin codes are tar-pitted 1.5 s; join-code failures are counted but not delayed (codes are high-entropy). Both are rate-limited per account (T3).
 - [live] Offboarding: `jc_account_delete` / `jc_admin_member_remove` → `jc_home_detach` → `jc_home_vacated` (invites expire, event entries withdrawn + answers cleared, future bookings released, pets archived). A `BEFORE DELETE` trigger on `auth.users` (`jc_users_offboard`) runs the same path for dashboard deletes.
 - ⚠ Dashboard config (out-of-band, not in migrations — re-check before launch): email confirmation off; Site URL + redirect allowlist for the password-reset email; minimum password length; leaked-password protection; **anonymous sign-ins disabled**; **Auth rate limits** (sign-ups + sign-ins per IP — T3 relies on these for strangers; raise before the invite burst, since residents may share carrier NAT; values not yet recorded).
