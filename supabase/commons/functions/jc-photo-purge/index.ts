@@ -1,6 +1,7 @@
 // Jubail Commons — pet-photo purge (T4c). Deployed to JubailCommons with verify_jwt=false:
-// the caller is pg_cron (no user), so the gate is the x-jc-cron header, checked against the
-// Vault secret by jc_cron_token_ok. Plan: docs/plans/T4-instrumentation.md.
+// the caller is pg_cron (no user), so the gate is the x-jc-cron header — a single-use nonce
+// minted by the cron command, spent here via jc_cron_nonce_use (unused, < 10 min old).
+// Malformed headers are refused before any database call. Plan: docs/plans/T4-instrumentation.md.
 //
 // Every run ends in jc_photo_purge_done, which writes jc_maintenance_log — including the
 // first Storage error. Runtime logs are not SQL-queryable, so a failure that only reached
@@ -10,17 +11,23 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const BUCKET = "pet-photos";
 const BATCH = 100;
 
+const NONCE = /^[0-9a-f]{48}$/;
+
 Deno.serve(async (req: Request) => {
+  const nonce = req.headers.get("x-jc-cron") ?? "";
+  if (req.method !== "POST" || !NONCE.test(nonce)) return json(403, { error: "forbidden" });
+
   const db = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     { auth: { persistSession: false } },
   );
 
-  const { data: allowed, error: tokenErr } = await db.rpc("jc_cron_token_ok", {
-    p_token: req.headers.get("x-jc-cron"),
+  const { data: allowed, error: nonceErr } = await db.rpc("jc_cron_nonce_use", {
+    p_nonce: nonce,
+    p_job: "photo_purge",
   });
-  if (tokenErr) return json(500, { error: "token_check_failed" });
+  if (nonceErr) return json(500, { error: "gate_check_failed" });
   if (allowed !== true) return json(403, { error: "forbidden" });
 
   let firstError: string | null = null;
