@@ -237,14 +237,21 @@ begin
 end;
 $$;
 
-create function public.jc_fail_slow(p_err text) returns void
+-- Count every failure; slow only admin unlock. Codes are 10+ random chars, so a
+-- delay buys no guessing protection — on the join paths (anon / open signup) it
+-- would only let anyone pin DB connections. Admin unlock needs a resident
+-- account, so its delay is attributable. Per-IP limits arrive with T3.
+create function public.jc_fail(p_err text) returns void
 language plpgsql security definer set search_path = public, pg_temp
 as $$
 begin
-  perform pg_sleep(1.5);
   -- sequences are non-transactional: the count survives the raise below
-  if p_err = 'BAD_ADMIN' then perform nextval('public.jc_admin_fail_count');
-  else perform nextval('public.jc_join_fail_count'); end if;
+  if p_err = 'BAD_ADMIN' then
+    perform pg_sleep(1.5);
+    perform nextval('public.jc_admin_fail_count');
+  else
+    perform nextval('public.jc_join_fail_count');
+  end if;
   raise exception using message = p_err;
 end;
 $$;
@@ -401,7 +408,7 @@ language plpgsql security definer set search_path = public, pg_temp
 as $$
 begin
   if jc_code_ok(p_community, 'join', p_code) then return true; end if;
-  perform jc_fail_slow('BAD_CODE');
+  perform jc_fail('BAD_CODE');
   return false;
 end;
 $$;
@@ -452,7 +459,7 @@ begin
     if v_existing = p_community then return jc_me_get(); end if;
     raise exception 'ALREADY_MEMBER_ELSEWHERE';
   end if;
-  if not jc_code_ok(p_community, 'join', p_code) then perform jc_fail_slow('BAD_CODE'); end if;
+  if not jc_code_ok(p_community, 'join', p_code) then perform jc_fail('BAD_CODE'); end if;
   begin
     insert into jc_accounts (user_id, community_id) values (v_uid, p_community);
   exception when unique_violation then null;  -- double-submit: the other call won
@@ -707,7 +714,7 @@ begin
       v_scopes := v_scopes || s;
     end if;
   end loop;
-  if cardinality(v_scopes) = 0 then perform jc_fail_slow('BAD_ADMIN'); end if;
+  if cardinality(v_scopes) = 0 then perform jc_fail('BAD_ADMIN'); end if;
   return to_jsonb(v_scopes);
 end;
 $$;

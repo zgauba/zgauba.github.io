@@ -4,7 +4,8 @@
 --   success  →  ERROR: ALL_TESTS_PASSED (n checks)
 --   failure  →  ERROR: FAIL Txx: ...
 -- Impersonation: request.jwt.claims + SET LOCAL ROLE, exactly what PostgREST does.
--- Side effect that survives rollback by design: the fail-count sequences advance.
+-- Side effect that survives rollback by design: the fail-count sequences advance
+-- (join ~3, admin ~3 per run).
 
 do $t$
 declare
@@ -19,7 +20,7 @@ declare
   I uuid := '00000000-0000-4000-8000-000000000012';
   J uuid := '00000000-0000-4000-8000-000000000013';
   v jsonb; v_err text; v_tok text; v_code text; n int; k int := 0;
-  v_home uuid; v_home2 uuid; v_inv uuid; v_actual text[]; v_join text;
+  v_home uuid; v_home2 uuid; v_inv uuid; v_actual text[]; v_join text; v_t timestamptz;
   v_auth_expected text[] := array[
     'jc_account_delete','jc_admin_code_rotate','jc_admin_exit','jc_admin_home_edit',
     'jc_admin_home_suppress','jc_admin_homes_list','jc_admin_invite_decide','jc_admin_log_list',
@@ -120,11 +121,13 @@ begin
 
   -- ---------- T07 code pre-check (anon, case/space-insensitive) ----------
   execute 'reset role'; execute 'set local role anon';
+  v_t := clock_timestamp();
   v_err := null; begin perform jc_code_check('jubail', 'wrong-code'); exception when others then v_err := sqlerrm; end;
+  if clock_timestamp() - v_t > interval '0.5 seconds' then raise exception 'FAIL T07c join-code failure is tar-pitted (H1: must be fast)'; end if;
   if v_err is distinct from 'BAD_CODE' then raise exception 'FAIL T07a: %', v_err; end if;
   if not jc_code_check('jubail', ' join-test-1 ') then raise exception 'FAIL T07b'; end if;
   execute 'reset role';
-  k := k + 2;
+  k := k + 3;
 
   -- ---------- T08 join ----------
   execute 'set local role authenticated';
@@ -211,12 +214,14 @@ begin
   v_err := null; begin perform jc_admin_homes_list(); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'NOT_ADMIN' then raise exception 'FAIL T15a: %', v_err; end if;
   perform set_config('request.jwt.claims', json_build_object('sub', A, 'role', 'authenticated')::text, true);
+  v_t := clock_timestamp();
   v_err := null; begin perform jc_admin_unlock('wrong'); exception when others then v_err := sqlerrm; end;
+  if clock_timestamp() - v_t < interval '1.4 seconds' then raise exception 'FAIL T15e admin failure is not tar-pitted'; end if;
   if v_err is distinct from 'BAD_ADMIN' then raise exception 'FAIL T15b: %', v_err; end if;
   if jc_admin_unlock('admin test 1') <> '["community"]'::jsonb then raise exception 'FAIL T15c'; end if;
   v := jc_admin_homes_list();
   if jsonb_array_length(v -> 'homes') <> 1 or jsonb_array_length(v -> 'pending') <> 1 then raise exception 'FAIL T15d: %', v; end if;
-  k := k + 4;
+  k := k + 5;
 
   -- ---------- T16 over-cap approval ----------
   v := jc_admin_invite_decide(v_inv, true);

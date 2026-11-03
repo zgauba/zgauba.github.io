@@ -189,6 +189,11 @@ D1 four slices (S1→S4), all applied before any invite · D2 RPC-only access ·
 D3 admin unlock bound to the account (all devices; exit = everywhere) · D4
 concurrent live events allowed · D5 purge deferred, retention_days removed from
 public config · D6 Halloween 2026 baseline row seeded in S2.
+H1 (security review, ratified 2026-11-03): codes are 10+ server-generated chars,
+so the guess-rate defence is entropy. The 1.5 s tar-pit is REMOVED from the join
+paths (anon `jc_code_check`, open-signup `jc_join`) — there it only let anyone pin
+DB connections — and KEPT on `jc_admin_unlock` (resident-only, attributable).
+Failure counters stay on all paths; per-IP limits arrive with T3.
 
 Testing note: the local tooling declines delete/drop-bearing SQL, so the S1
 dry run (migration + tests, always ending in a raise ⇒ full rollback) is pasted
