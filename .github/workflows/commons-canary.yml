@@ -1,0 +1,31 @@
+# Jubail Commons — outside canary (T4b). Fails when hourly snapshots stop, the cron
+# job is off, or the JubailCommons API is unreachable (e.g. the free-tier project
+# paused). A failed scheduled run makes GitHub email the repo owner.
+# Uses only the publishable key (public by design). Plan: docs/plans/T4-instrumentation.md.
+# ⚠ GitHub disables scheduled workflows after 60 days without repo activity — see
+#   manifest KG for the reminder.
+name: Commons canary
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"   # every 6 h, off the hour (UTC)
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Snapshots are fresh
+        env:
+          API: https://qrpxfssdeeuzmsmlbtbu.supabase.co/rest/v1/rpc/jc_health
+          KEY: sb_publishable_cQKcp9tzYzeyrIO0Hzz6ZQ_jaxoq7QU
+        run: |
+          body=$(curl -sS --fail-with-body --max-time 60 --retry 3 --retry-delay 30 --retry-all-errors \
+            -X POST "$API" -H "apikey: $KEY" -H "Content-Type: application/json" \
+            -d '{"p_community":"jubail"}')
+          echo "$body"
+          echo "$body" | jq -e '.ok == true' > /dev/null || {
+            echo "::error::Commons snapshots are stale or cron is off: $body"; exit 1; }

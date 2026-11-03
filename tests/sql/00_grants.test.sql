@@ -5,7 +5,7 @@
 do $t$
 declare
   k int := 0; n int; v_actual text[];
-  v_anon_expected text[] := array['jc_config_get', 'jc_hit'];  -- T3 retired jc_code_check
+  v_anon_expected text[] := array['jc_config_get', 'jc_health', 'jc_hit'];  -- T3 retired jc_code_check; T4b jc_health
   v_auth_expected text[] := array[
     -- S1
     'jc_account_delete', 'jc_admin_code_rotate', 'jc_admin_exit', 'jc_admin_home_edit',
@@ -28,7 +28,9 @@ declare
     'jc_pets_list', 'jc_pet_get', 'jc_pet_save', 'jc_pet_missing_set', 'jc_pet_archive',
     'jc_pet_sighting_add', 'jc_pet_photo_begin', 'jc_pet_photo_commit',
     'jc_admin_pets_list', 'jc_admin_stray_save', 'jc_admin_pet_care_add', 'jc_admin_pet_archive',
-    'jc_admin_sighting_hide'];
+    'jc_admin_sighting_hide',
+    -- T4
+    'jc_admin_report', 'jc_health'];
 begin
   -- Pre-launch suite: fixtures are written into 'jubail' and rolled back. Refuse to run
   -- once real residents exist — post-launch tests must move to a test community.
@@ -103,7 +105,10 @@ begin
           or not exists (select 1 from unnest(coalesce(pr.proconfig, '{}')) c where c like 'search_path=%'));
   if n <> 0 then raise exception 'FAIL G13 % jc_private functions anon-callable or not definer/pinned', n; end if;
   if has_schema_privilege('anon', 'jc_private', 'usage') then raise exception 'FAIL G14 anon can use jc_private'; end if;
-  k := k + 5;
+  -- T4: pg_cron's functions carry PUBLIC execute; schema usage is what keeps them out of reach
+  if has_schema_privilege('anon', 'cron', 'usage') or has_schema_privilege('authenticated', 'cron', 'usage') then
+    raise exception 'FAIL G16 anon/authenticated can use schema cron'; end if;
+  k := k + 6;
 
   -- anything created after the migrations (next slice, or by hand) must start closed
   execute 'create function public.jc_zz_probe() returns int language sql as $f$ select 1 $f$';
