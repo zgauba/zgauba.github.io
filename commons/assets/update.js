@@ -3,6 +3,8 @@
    the page's HTML (by content — Cloudflare sends no ETag for it) + the ETag of each
    same-origin script/stylesheet (vendor files are versioned by filename, skipped).
    A changed fingerprint = a new deploy:
+   - a failed check is skipped, and a change must be seen on two polls in a row,
+     so a host hiccup never reloads anyone onto an error page;
    - nothing in progress → reload, so residents always run the current version;
    - mid-form, or on a screen marked [data-no-autoreload] (the pin map) → a tappable
      "new version ready" banner instead; never yank someone out of what they're doing.
@@ -10,6 +12,7 @@
 (function(){
   var INTERVAL = window.JC_UPDATE_MS || 120000;
   var base = null, checking = false, ready = false;
+  var candidate = null;   /* a changed fingerprint seen once — confirmed by the next poll */
 
   function hash(t){ var h = 5381; for (var i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return h; }
 
@@ -24,11 +27,13 @@
 
   function fingerprint(){
     var parts = [fetch(location.pathname, { cache: "no-store" })
-      .then(function(r){ return r.ok ? r.text() : ""; })
+      .then(function(r){ if (!r.ok) throw new Error("page " + r.status); return r.text(); })
       .then(function(t){ return "html:" + hash(t); })];
     assets().forEach(function(u){
       parts.push(fetch(u, { method: "HEAD", cache: "no-store" }).then(function(r){
-        return u + ":" + (r.headers.get("etag") || r.headers.get("last-modified") || r.status);
+        /* a host hiccup (429/5xx, a 404 mid-swap) is not a deploy: skip this round */
+        if (!r.ok) throw new Error(u + " " + r.status);
+        return u + ":" + (r.headers.get("etag") || r.headers.get("last-modified") || "");
       }));
     });
     return Promise.all(parts).then(function(a){ return a.join("|"); });
@@ -62,7 +67,10 @@
     checking = true;
     fingerprint().then(function(fp){
       if (base === null) { base = fp; return; }
-      if (fp !== base) { ready = true; apply(); }
+      if (fp === base) { candidate = null; return; }
+      /* two consecutive polls must agree on the new fingerprint (security review PR #21) */
+      if (fp !== candidate) { candidate = fp; return; }
+      ready = true; apply();
     }).catch(function(){ /* offline or host hiccup — try again next round */ })
       .then(function(){ checking = false; });
   }

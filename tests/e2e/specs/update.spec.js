@@ -44,3 +44,44 @@ test("mid-form: no reload, a tappable banner instead", async ({ page }) => {
   await expect(page.locator("#email")).toHaveValue("half-typed@exa");
   expect(csp).toEqual([]);
 });
+
+test("a host hiccup (503 on a check) is NOT a deploy — no reload, no banner", async ({ page }) => {
+  await page.addInitScript(() => { window.JC_UPDATE_MS = 300; });
+  await stubBackend(page);
+  let fail = false;
+  await page.route("**/assets/landing.js", (route) => {
+    if (route.request().method() !== "HEAD") return route.continue();
+    return fail ? route.fulfill({ status: 503, body: "" })
+                : route.fulfill({ status: 200, headers: { etag: '"v1"' }, body: "" });
+  });
+  await page.goto("./");
+  let reloads = 0;
+  page.on("framenavigated", (f) => { if (f === page.mainFrame()) reloads++; });
+  await page.waitForTimeout(800);
+  fail = true;                       // the host hiccups for a few polls…
+  await page.waitForTimeout(1200);
+  fail = false;                      // …and recovers, same version
+  await page.waitForTimeout(1200);
+  expect(reloads).toBe(0);
+  await expect(page.locator("#jcUpdate")).toHaveCount(0);
+});
+
+test("a prefilled display name doesn't block the idle reload", async ({ page }) => {
+  const { MEMBER } = require("./stub");
+  await page.addInitScript(() => { window.JC_UPDATE_MS = 300; });
+  const me = JSON.parse(JSON.stringify(MEMBER)); me.account.display_name = "Omar";
+  const { ok, raise } = require("./stub");
+  await stubBackend(page, { rpc: { jc_me_get: (a, c) => c.signedIn ? ok(me) : raise("NOT_SIGNED_IN") } });
+  await page.goto("account/");
+  await page.locator("#email").fill("a@example.com"); await page.locator("#password").fill("correct-horse");
+  await page.locator("#go").click();
+  await expect(page).toHaveURL(/\/commons\/$/);
+  const deploy = await fakeDeploy(page, "home/home.js");
+  await page.goto("home/");
+  await expect(page.locator("#dname")).toHaveValue("Omar");
+  await page.locator("h2").first().click();          // focus off any input
+  await page.waitForTimeout(800);
+  const reloaded = page.waitForEvent("load", { timeout: 5000 });
+  deploy();
+  await reloaded;
+});

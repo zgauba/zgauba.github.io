@@ -145,6 +145,10 @@ test("invite: member without a home accepts → joined; token removed from the U
   const { calls } = await stubBackend(page, { rpc: hb.rpc });
   await signIn(page, /\/commons\/home\/$/);
   await page.goto("home/?invite=TOKEN_abcdefghijklmnop");
+  // asks first — nothing is accepted on page load (security review PR #21)
+  await expect(page.locator("#inviteYes")).toBeVisible();
+  expect(calls.some((c) => c.name === "jc_invite_accept")).toBe(false);
+  await page.locator("#inviteYes").click();
   await expect(page.locator("#msg")).toHaveText("You've joined Villa 12.");
   await expect(page.locator(".members li")).toHaveCount(2);
   expect(new URL(page.url()).search).toBe("");
@@ -158,8 +162,10 @@ test("invite outcomes: over the cap → pending; dead link → explained", async
   await stubBackend(page, { rpc: hb.rpc });
   await signIn(page, /\/commons\/home\/$/);
   await page.goto("home/?invite=TOKEN_abcdefghijklmnop");
+  await page.locator("#inviteYes").click();
   await expect(page.locator("#msg")).toContainText("a community admin has to approve you");
   await page.goto("home/?invite=TOKEN_zzzzzzzzzzzzzzzz");
+  await page.locator("#inviteYes").click();
   await expect(page.locator("#msg")).toHaveText("This invite link isn't valid anymore. Ask for a new one.");
 });
 
@@ -221,6 +227,8 @@ test("Find me: centers the map on the phone's location; saving pins that spot", 
   await page.goto("home/?view=pin");
   await page.locator("#locateBtn").click();
   await page.waitForTimeout(300);
+  // the phone's location only moves the map — nothing is sent until Save
+  expect(calls.some((c) => c.name === "jc_home_pin_set")).toBe(false);
   await page.locator("#savePin").click();
   await expect(page.locator(".status.ok")).toHaveText("Pinned on the map");
   const a = calls.find((c) => c.name === "jc_home_pin_set").args;
@@ -246,4 +254,81 @@ test("My Home header: the mark + community name, like the hub", async ({ page })
   await expect(page.locator(".topbar a.home svg")).toHaveCount(1);
   await expect(page.locator("#homeLink")).toHaveText("Jubail Commons");
   expect(await page.locator(".topbar a.home").evaluate((n) => getComputedStyle(n).fontSize)).toBe("22px");
+});
+
+test("invite: 'Not now' declines without calling the server", async ({ page }) => {
+  const hb = homeBackend(MEMBER_NO_HOME);
+  hb.rpc.jc_invite_accept = () => ok({ status: "joined", me: MEMBER });
+  const { calls } = await stubBackend(page, { rpc: hb.rpc });
+  await signIn(page, /\/commons\/home\/$/);
+  await page.goto("home/?invite=TOKEN_abcdefghijklmnop");
+  await page.locator("#inviteNo").click();
+  await expect(page.locator("h1")).toHaveText("Your home");
+  expect(calls.some((c) => c.name === "jc_invite_accept")).toBe(false);
+});
+
+test("invite: already in a home → explained", async ({ page }) => {
+  const hb = homeBackend(MEMBER);
+  hb.rpc.jc_invite_accept = () => raise("ALREADY_HAS_HOME");
+  await stubBackend(page, { rpc: hb.rpc });
+  await signIn(page);
+  await page.goto("home/?invite=TOKEN_abcdefghijklmnop");
+  await page.locator("#inviteYes").click();
+  await expect(page.locator("#msg")).toHaveText("You already belong to a home. Leave it first in My Home.");
+});
+
+test("malformed invite tokens are ignored (no server call, normal My Home)", async ({ page }) => {
+  const hb = homeBackend(MEMBER);
+  const { calls } = await stubBackend(page, { rpc: hb.rpc });
+  await signIn(page);
+  for (const bad of ["short", "%3Cscript%3Ealert(1)%3C%2Fscript%3E", "TOKEN_abcdefghijklmnop%26x%3D1"]) {
+    await page.goto("home/?invite=" + bad);
+    await expect(page.locator(".homehead b")).toHaveText("Villa 12");
+  }
+  expect(calls.some((c) => c.name === "jc_invite_accept")).toBe(false);
+});
+
+test("jcSafeNext rejects every off-site or extra-param form", async ({ page }) => {
+  await stubBackend(page);
+  await page.goto("./");
+  const T = "TOKEN_abcdefghijklmnop";
+  const r = await page.evaluate((T) => [
+    "//evil.com", "https://evil.com/", "../x?invite=" + T + "&y=1", "../?invite=" + T + "#x",
+    "../a.b/", "..\\evil", "../%2F%2Fevil", "javascript:alert(1)", "",
+  ].map(jcSafeNext), T);
+  expect(r.every((x) => x === "../")).toBe(true);
+});
+
+test("hostile names are shown as text, never run (esc everywhere)", async ({ page }) => {
+  const evil = '<img src=x onerror="window.__pwned=1">';
+  const start = JSON.parse(JSON.stringify(MEMBER));
+  start.home.members = [{ you: false, name: evil, joined_at: "x" }, { you: true, name: "a***@example.com", joined_at: "y" }];
+  start.account.display_name = evil;
+  const hb = homeBackend(start);
+  await stubBackend(page, { rpc: Object.assign(hb.rpc, { jc_config_get: () => ok(Object.assign({}, CONFIG, {
+    villages: [{ key: "ain-al-maha", en: evil, ar: null, status: "delivered", delivery: null, parent: null }] })) }) });
+  await signIn(page);
+  await page.goto("home/");
+  await expect(page.locator(".members li").first()).toContainText("<img");
+  await expect(page.locator(".homehead span")).toHaveText(evil);
+  expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
+  expect(await page.locator("#view img").count()).toBe(0);
+});
+
+test("referrer policy: pages that can carry a token never send it to other sites", async ({ page }) => {
+  await stubBackend(page);
+  for (const p of ["home/", "account/"]) {
+    await page.goto(p);
+    await expect(page.locator('meta[name="referrer"]')).toHaveAttribute("content", "no-referrer");
+  }
+});
+
+test("language toggle keeps what you typed", async ({ page }) => {
+  const hb = homeBackend(MEMBER_NO_HOME);
+  await stubBackend(page, { rpc: hb.rpc });
+  await signIn(page, /\/commons\/home\/$/);
+  await page.locator("#number").fill("42");
+  await page.locator("#langBtn").click();
+  await expect(page.locator("h1")).toHaveText("منزلك");
+  await expect(page.locator("#number")).toHaveValue("42");
 });

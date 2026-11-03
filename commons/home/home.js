@@ -38,10 +38,20 @@ function home(){ return me().home; }
 function homeTitle(){ return jcHomeLabel(home()); }
 function backTo(rel){ return encodeURIComponent(rel); }
 
+var keepCenter = null;   /* pin view: map position survives a re-render (language toggle) */
 function show(name, arg){
-  if (map) { map.remove(); map = null; }
+  if (map) { keepCenter = name === "pin" ? map.getCenter() : null; map.remove(); map = null; }
+  else keepCenter = null;
   current = name;
   VIEWS[name](arg);
+}
+
+/* Re-render the current view in the other language without losing typed input. */
+function rerender(){
+  var vals = {};
+  Array.prototype.forEach.call(document.querySelectorAll("#view input[id]"), function(i){ vals[i.id] = i.value; });
+  show(current);
+  Object.keys(vals).forEach(function(id){ if (el(id)) el(id).value = vals[id]; });
 }
 
 /* ---------- views ---------- */
@@ -65,6 +75,7 @@ var VIEWS = {
     var c = (cfg && cfg.map) || {};
     var center = h.lat != null ? [h.lat, h.lng] : [c.lat || 24.53, c.lng || 54.43];
     var zoom = h.lat != null ? 19 : Math.max(c.zoom || 15, 16);
+    if (keepCenter) { center = [keepCenter.lat, keepCenter.lng]; zoom = 19; }
     map = L.map("map", { zoomControl: true }).setView(center, zoom);
     var layer = "sat";
     var tiles = L.tileLayer(TILES.sat.url, TILES.sat.opts).addTo(map);
@@ -140,7 +151,8 @@ var VIEWS = {
         '<button class="btn ghost danger" type="button" id="delete">' + esc(jcT("mh_delete_btn")) + '</button>' +
       '</div></div>';
 
-    el("dname").value = acct.display_name || "";
+    /* defaultValue too: a prefilled field is not "being typed in" (update.js busy()) */
+    el("dname").value = el("dname").defaultValue = acct.display_name || "";
     on("toPin", function(){ show("pin"); });
     on("toEdit", function(){ show("edit"); });
     on("invite", doInvite);
@@ -208,7 +220,10 @@ function claimForm(editing){
       '<button class="btn" id="go" type="submit">' + esc(jcT(editing ? "edit_save" : "claim_continue")) + '</button>' +
     '</form>' +
     (editing ? '<div class="links"><button type="button" id="back">' + esc(jcT("acct_back")) + '</button></div>' : '');
-  if (editing) { el("building").value = h.building || ""; el("number").value = h.number || ""; }
+  if (editing) {
+    el("building").value = el("building").defaultValue = h.building || "";
+    el("number").value = el("number").defaultValue = h.number || "";
+  }
   /* no villages = the community config didn't load: say so, never an empty form */
   if (!villages.length) showErr("NETWORK");
   on("back", function(){ show("myhome"); });
@@ -269,11 +284,24 @@ function doInvite(){
   }, function(e){ busy("invite", false); showErr(e.code); });
 }
 
+/* Ask before joining (security review PR #21): one tap on a link must never pull
+   someone into a household. The server reveals the home only on accept, so the
+   question is generic. */
 function acceptInvite(){
   var token = INVITE;
   INVITE = null;
   try { history.replaceState(null, "", location.pathname); } catch(e){}  /* single use: drop it from the URL */
-  el("view").innerHTML = '<p class="sub">' + esc(jcT("working")) + '</p>';
+  current = "invite";
+  el("view").innerHTML =
+    '<h1>' + esc(jcT("invite_title")) + '</h1>' +
+    '<div class="panel"><p class="sub">' + esc(jcT("invite_ask")) + '</p>' + msgBox() +
+      '<button class="btn" type="button" id="inviteYes">' + esc(jcT("invite_yes")) + '</button>' +
+      '<button class="btn ghost" type="button" id="inviteNo">' + esc(jcT("invite_no")) + '</button></div>';
+  on("inviteNo", function(){ home() ? show("myhome") : show("claim"); });
+  on("inviteYes", function(){ busy("inviteYes", true); doAccept(token); });
+}
+
+function doAccept(token){
   return rpc("jc_invite_accept", { p_token: token }).then(function(r){
     if (r && r.status === "joined") {
       state.me = r.me;
@@ -297,7 +325,7 @@ function paint(){
 el("langBtn").addEventListener("click", function(){
   jcSetLang(jcLang() === "ar" ? "en" : "ar");
   paint();
-  if (current && current !== "notice") show(current);
+  if (current && current !== "notice" && current !== "invite") rerender();
 });
 
 jcSetLang(jcLang());
