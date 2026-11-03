@@ -142,23 +142,76 @@ test("forgot password: same answer either way, redirect back to this page", asyn
   expect(rec.redirect).toBe("http://localhost:4173/commons/account/");
 });
 
-test("recovery link → new password → saved → in", async ({ page }) => {
+// PKCE (PR #18 review): the reset link comes back as ?code=, exchanged only in the
+// browser that asked for it (it holds the verifier stored by resetPasswordForEmail).
+async function requestReset(page) {
+  await page.goto("account/");
+  await page.locator("#toForgot").click();
+  await page.locator("#email").fill("a@example.com");
+  await page.locator("#go").click();
+  await expect(page.locator("#msg")).toHaveText(/reset link is on its way/);
+}
+
+test("recovery link (same browser) → new password → saved → in", async ({ page }) => {
   const { calls } = await stubBackend(page);
-  const now = Math.floor(Date.now() / 1000);
-  await page.goto("account/#access_token=" + fakeJwt("a@example.com") +
-    "&expires_in=3600&expires_at=" + (now + 3600) + "&refresh_token=rt&token_type=bearer&type=recovery");
+  await requestReset(page);
+  expect(calls.find((c) => c.name === "recover").args.code_challenge).toBeTruthy();
+  await page.goto("account/?code=reset-code-1");
   await expect(page.locator("h1")).toHaveText("Choose a new password");
+  const exch = calls.find((c) => c.name === "token:pkce");
+  expect(exch.args.auth_code).toBe("reset-code-1");
+  expect(exch.args.code_verifier).toBeTruthy();
   await page.locator("#password").fill("brand-new-pw");
   await page.locator("#go").click();
   await expect(page).toHaveURL(/\/commons\/$/);
   expect(calls.find((c) => c.name === "putUser").args.password).toBe("brand-new-pw");
 });
 
+test("reset code opened in a browser that didn't request it → refused, explained", async ({ page }) => {
+  const { calls } = await stubBackend(page);
+  await page.goto("account/?code=someone-elses-code");
+  await expect(page.locator("h1")).toHaveText("Reset your password");
+  await expect(page.locator("#msg")).toHaveText(/opened in a different browser/);
+  expect(calls.some((c) => c.name === "token:pkce")).toBe(false);
+});
+
+// Login CSRF: under the implicit flow, a link carrying an attacker's tokens in the
+// fragment would be adopted as the visitor's session. PKCE must ignore it.
+test("a crafted link with someone else's session is NOT adopted", async ({ page }) => {
+  const { calls } = await stubBackend(page);
+  const now = Math.floor(Date.now() / 1000);
+  await page.goto("./#access_token=" + fakeJwt("attacker@example.com") +
+    "&expires_in=3600&expires_at=" + (now + 3600) + "&refresh_token=rt&token_type=bearer");
+  await expect(page.locator("#brand")).toHaveText("Jubail Commons");
+  await page.waitForTimeout(300);
+  await expect(page.locator("#authLink")).toHaveText("Sign in");
+  expect(calls.some((c) => c.name === "getUser")).toBe(false);
+  const stored = await page.evaluate(() => Object.keys(localStorage).filter((k) => /auth-token$/.test(k)));
+  expect(stored).toEqual([]);
+});
+
+test("reusing the current password says so (not 'too short')", async ({ page }) => {
+  await stubBackend(page, { auth: { putUser: () => ({ status: 422, body: {
+    code: "same_password", error_code: "same_password",
+    msg: "New password should be different from the old password." } }) } });
+  await requestReset(page);
+  await page.goto("account/?code=reset-code-2");
+  await page.locator("#password").fill("my-current-pw");
+  await page.locator("#go").click();
+  await expect(page.locator("#msg")).toHaveText("That's your current password. Choose a different one.");
+});
+
 test("expired reset link → forgot view with an explanation", async ({ page }) => {
   await stubBackend(page);
-  await page.goto("account/#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired");
+  await page.goto("account/?error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired");
   await expect(page.locator("h1")).toHaveText("Reset your password");
-  await expect(page.locator("#msg")).toHaveText(/expired or was already used/);
+  await expect(page.locator("#msg")).toHaveText(/expired/);
+});
+
+test("?community= override is shown on the join step, never silent", async ({ page }) => {
+  await stubBackend(page);
+  await page.goto("account/?view=join&community=e2e");
+  await expect(page.locator(".who")).toContainText("e2e");
 });
 
 test("?next= only accepts relative Commons paths (no open redirect)", async ({ page }) => {

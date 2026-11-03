@@ -17,6 +17,7 @@ module.exports = defineConfig({
   webServer: {
     command: "python3 -m http.server 4173 --bind 127.0.0.1 --directory ../..",
     url: "http://localhost:4173/commons/",
-    reuseExistingServer: true,
+    // never reuse: a stray server on 4173 would silently serve another checkout
+    reuseExistingServer: false,
   },
 });

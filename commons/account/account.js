@@ -4,9 +4,12 @@
    signed-in, not-yet-member account — retrying with the same account works (T3),
    and never-joined accounts are purged after 30 days (T4c). */
 
-/* From api.js's pre-client capture — location.hash is already cleared by now. */
-var RECOVERING = /type=recovery/.test(JC_URL_HASH);
-var LINK_ERROR = /error_code=/.test(JC_URL_HASH);
+/* From api.js's pre-client capture — the client may already have cleared the URL.
+   PKCE: a reset link returns as ?code=…; the client exchanges it only if this
+   browser requested the reset, then announces PASSWORD_RECOVERY. */
+var HAS_CODE = /[?&]code=/.test(JC_URL_SEARCH);
+var LINK_ERROR = /error_code=/.test(JC_URL_HASH + JC_URL_SEARCH);
+var RECOVERING = false;
 var params = new URLSearchParams(location.search);
 var NEXT = jcSafeNext(params.get("next"));
 
@@ -18,6 +21,10 @@ var state = null;       /* last jcState() */
 function authCode(err){
   if (!err) return "UNKNOWN";
   var c = err.code || "", m = String(err.message || "");
+  /* before the /password should be/ fallback: GoTrue's same_password message
+     ("New password should be different…") would otherwise read as WEAK_PASSWORD */
+  if (c === "same_password") return "SAME_PASSWORD";
+  if (c === "session_not_found" || err.name === "AuthSessionMissingError") return "LINK_EXPIRED";
   if (c === "user_already_exists" || c === "email_exists" || /already registered/i.test(m)) return "EMAIL_TAKEN";
   if (c === "invalid_credentials" || /invalid login/i.test(m)) return "BAD_LOGIN";
   if (c === "weak_password" || /password should be/i.test(m)) return "WEAK_PASSWORD";
@@ -67,6 +74,8 @@ var VIEWS = {
     el("view").innerHTML =
       '<h1>' + esc(jcT("join_title")) + '</h1>' +
       (signedIn ? '<p class="who">' + esc(jcT("acct_signed_in_as")) + ' <b>' + esc(state.email) + '</b></p>' : '') +
+      /* ?community= override (e2e smoke test): never let it be silent */
+      (jcCommunity() !== "jubail" ? '<p class="who">' + esc(jcT("join_community")) + ' <b>' + esc(jcCommunity()) + '</b></p>' : '') +
       '<form class="panel" id="form" novalidate>' +
         '<label>' + esc(jcT("join_code_label")) +
           '<input id="code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" required></label>' +
@@ -115,7 +124,6 @@ var VIEWS = {
       '<div class="links">' + linkBtn("toSignin", "acct_back") + '</div>';
     on("toSignin", function(){ show("signin"); });
     onSubmit(doForgot);
-    if (LINK_ERROR) { LINK_ERROR = false; showErr("LINK_EXPIRED"); }
   },
 
   recover: function(){
@@ -125,7 +133,9 @@ var VIEWS = {
         field("password", "acct_password_new", "password", "new-password") +
         msgBox() +
         '<button class="btn" id="go" type="submit">' + esc(jcT("recover_btn")) + '</button>' +
-      '</form>';
+      '</form>' +
+      '<div class="links">' + linkBtn("toForgot", "acct_forgot") + '</div>';
+    on("toForgot", function(){ show("forgot"); });
     onSubmit(doRecover);
   },
 
@@ -240,18 +250,17 @@ el("langBtn").addEventListener("click", function(){
   show(current);
 });
 
+/* The client may announce recovery more than once (exchange + post-init notify);
+   re-rendering would wipe a half-typed password. */
 jcDb.auth.onAuthStateChange(function(event){
-  if (event === "PASSWORD_RECOVERY") { RECOVERING = true; show("recover"); }
+  if (event === "PASSWORD_RECOVERY") {
+    RECOVERING = true;
+    if (current !== "recover") show("recover");
+  }
 });
 
-jcSetLang(jcLang());
-paint();
-if (RECOVERING) {
-  show("recover");
-} else if (LINK_ERROR) {
-  show("forgot");
-} else {
-  jcState().then(function(s){
+function routeNormally(){
+  return jcState().then(function(s){
     state = s;
     if (s.status === "member") return show("member");
     if (s.status === "not_member") return show("code");
@@ -261,4 +270,33 @@ if (RECOVERING) {
     show("signin");
     showErr(e.code || "UNKNOWN");
   });
+}
+
+/* A reset link: let the client finish the code exchange (getSession awaits its
+   init), then one more tick for its deferred PASSWORD_RECOVERY notice. No recovery
+   and no session ⇒ the link was expired, reused, or opened in another browser
+   (PKCE has no verifier there) — say so and offer a fresh link. */
+function routeFromLink(){
+  el("view").innerHTML = '<p class="sub">' + esc(jcT("working")) + '</p>';
+  return jcDb.auth.getSession().then(function(r){
+    return new Promise(function(res){ setTimeout(function(){ res(r); }, 0); });
+  }).then(function(r){
+    try { history.replaceState(null, "", location.pathname); } catch(e){}
+    if (RECOVERING) { if (current !== "recover") show("recover"); return; }
+    if (r.data && r.data.session) return routeNormally();
+    show("forgot");
+    showErr("LINK_EXPIRED");
+  });
+}
+
+jcSetLang(jcLang());
+paint();
+if (LINK_ERROR) {
+  LINK_ERROR = false;
+  show("forgot");
+  showErr("LINK_EXPIRED");
+} else if (HAS_CODE) {
+  routeFromLink();
+} else {
+  routeNormally();
 }

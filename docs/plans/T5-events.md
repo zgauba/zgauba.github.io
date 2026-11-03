@@ -1,6 +1,7 @@
 # T5 — Events module (first module build)
 
 > Status: **APPROVED 2026-11-03** (Zee: four-PR split; D1–D6 below).
+> Reviews: `docs/qa/T5-0a-review-2026-11-03.md`.
 > Source: `docs/qa/SYNTHESIS-2026-11-03.md` T5 ("per-module PRs; Playwright stub
 > harness with the first module"). Use cases: A, B, C, D1–D3, D5, F1–F5, H1.
 
@@ -31,7 +32,8 @@ queue (lands with the Community map module); UC-H2 rotation banner.
 | D3 | Leaflet 1.9.4 vendored (T5.0b). Tiles stay Esri/OSM. |
 | D4 | `tests/e2e/` with its own dev-only `package.json` (Playwright pinned); `node_modules` ignored; stubbed RPC + auth. CI job added in T5.1, once stable. |
 | D5 | Sign-up screen states the post-pivot privacy posture; the landing's `privacy_line` stays for T6 (KG7). |
-| D6 | Real-backend smoke test runs in a dedicated `e2e` community (`?community=` override honoured on non-production pages only), never in `jubail` — `00_grants` aborts once jubail has residents. |
+| D6 | Real-backend smoke test runs in a dedicated `e2e` community, never in `jubail` — `00_grants` aborts once jubail has residents. `?community=<slug>` is accepted on any page (server authz derives the community from membership, so it only picks which config/join code the screens use) and is always shown on the join step, never silent. |
+| D7 | **Auth uses the PKCE flow** (PR #18 review): the default implicit flow adopts any session handed to it in a URL fragment (login CSRF). PKCE exchanges a reset `?code=` only in the browser that requested it — so reset links must be opened in that browser; the copy says so. |
 
 ## Client contract
 

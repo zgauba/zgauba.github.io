@@ -23,13 +23,19 @@ function jcCommunity(){
   } catch(e){ return (q && /^[a-z][a-z0-9-]{1,30}$/.test(q)) ? q : "jubail"; }
 }
 
-/* Captured BEFORE createClient: the client consumes and clears auth fragments
-   (#access_token…&type=recovery, #error_code=…) as soon as it is created, so a page
-   reading location.hash afterwards would never know it was opened from a reset link. */
+/* Captured BEFORE createClient: the client consumes and clears auth parameters
+   (?code=…, #error_code=…) as soon as it is created, so a page reading the URL
+   afterwards would never know it was opened from a reset link. */
 var JC_URL_HASH = location.hash;
+var JC_URL_SEARCH = location.search;
 
+/* flowType 'pkce' (PR #18 review): the default implicit flow adopts ANY session
+   handed to it in a URL fragment — a crafted link could silently swap a resident's
+   session for an attacker's (login CSRF). PKCE only exchanges a ?code= when THIS
+   browser holds the matching verifier, i.e. it requested the email itself.
+   Cost: a reset link must be opened in the browser that asked for it. */
 var jcDb = supabase.createClient(JC_URL, JC_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "pkce" }
 });
 
 function el(id){ return document.getElementById(id); }
