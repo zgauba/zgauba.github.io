@@ -61,11 +61,13 @@ function applyBrandTokens(tokens){
   });
 }
 
-/* signed_out → "Sign in"; not_member → "Finish joining"; member → "Account". */
+/* member → "Account"; not_member → "Finish joining". Signed out: hidden — the
+   community card's Sign in / Join buttons already say it (no duplicate CTA). */
 function renderAuth(){
   var label = authStatus === "member" ? "nav_account"
-            : authStatus === "not_member" ? "nav_finish_join" : "nav_sign_in";
-  el("authLink").textContent = jcT(label);
+            : authStatus === "not_member" ? "nav_finish_join" : null;
+  el("authLink").hidden = !label;
+  if (label) el("authLink").textContent = jcT(label);
 }
 
 function renderPicker(){

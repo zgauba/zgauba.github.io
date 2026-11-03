@@ -42,6 +42,8 @@ test("signed out: platform entry with Sign in + Join, no hub, visit counted, no 
   await expect(card.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "account/?community=jubail");
   await expect(card.getByRole("link", { name: "Join" })).toHaveAttribute("href", "account/?community=jubail&view=join");
   await expect(page.locator("#hub")).toBeHidden();
+  await expect(page.locator("#authLink")).toBeHidden();
+  await expect(page.getByRole("link", { name: "Sign in" })).toHaveCount(1);
   await expect(page.locator("#errbar")).toBeHidden();
   await expect.poll(() => calls.filter((c) => c.name === "jc_hit").length).toBe(1);
   expect(calls.find((c) => c.name === "jc_hit").args).toEqual({ p_community: "jubail", p_page: "landing" });
@@ -95,7 +97,7 @@ test("language toggle switches to Arabic + RTL", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   await expect(page.locator("#brand")).toHaveText("كومنز");
   await expect(page.locator(".community .names b")).toHaveText("كومنز الجبيل");
-  await expect(page.locator("#authLink")).toHaveText("تسجيل الدخول");
+  await expect(page.locator("#authLink")).toBeHidden();  // no duplicate Sign in for signed-out visitors
 });
 
 test("non-https archive link from config falls back to the default", async ({ page }) => {
