@@ -14,11 +14,13 @@ const CODE = process.env.E2E_JOIN_CODE;
 const BASE = process.env.E2E_EMAIL || "";
 const EMAIL = BASE.replace("@", "+commons-smoke-" + Date.now() + "@");
 const PASSWORD = "smoke-" + Date.now() + "-pw";
+const NUMBER = String(Date.now() % 100000);
 
 test("join (wrong code, then right) → member → sign out/in → delete account", async ({ page }) => {
   test.skip(!CODE || !BASE.includes("@"), "set E2E_JOIN_CODE and E2E_EMAIL");
   page.on("pageerror", (e) => console.log("PAGEERROR", e.message));
   let failed = null;
+  let deletedViaUi = false;
   try {
     await page.goto("account/?view=join&community=e2e");
     await expect(page.locator(".who")).toContainText("e2e");
@@ -32,31 +34,34 @@ test("join (wrong code, then right) → member → sign out/in → delete accoun
     await expect(page.locator("#msg")).toHaveText(/That code didn't work/, { timeout: 15000 });
     await expect(page.locator(".who").first()).toContainText(EMAIL);
 
-    // right code, same account
+    // right code, same account → a new member goes on to claim their home
     await page.locator("#code").fill(CODE);
     await page.locator("#go").click();
-    await expect(page).toHaveURL(/\/commons\/$/, { timeout: 15000 });
-    await expect(page.locator("#brand")).toHaveText("E2E Test Commons");
-    await expect(page.locator("#authLink")).toHaveText("Account");
+    await expect(page).toHaveURL(/\/commons\/home\/$/, { timeout: 15000 });
+    await expect(page.locator("#homeLink")).toHaveText("E2E Test Commons");
+
+    // claim a home in the e2e village (unique number per run), skip the pin
+    await page.locator('[data-village="test-village"]').click();
+    await page.locator('[data-type="villa"]').click();
+    await page.locator("#number").fill(NUMBER);
+    await page.locator("#go").click();
+    await expect(page.locator("h1")).toHaveText("Pin your home", { timeout: 15000 });
+    await page.locator("#skipPin").click();
+    await expect(page.locator(".homehead b")).toHaveText("Villa " + NUMBER);
+    await expect(page.locator(".members li")).toHaveCount(1);
 
     // real jc_me_get shape
     const me = await page.evaluate(() => rpc("jc_me_get"));
     expect(me.community).toBe("e2e");
-    expect(me.home).toBeNull();
+    expect(me.home.number).toBe(NUMBER);
 
-    // sign out, sign back in
-    await page.goto("account/");
-    await expect(page.locator(".who")).toContainText(EMAIL);
+    // the hub greets the home; sign out, sign back in → straight to the hub
+    await page.goto("./");
+    await expect(page.locator(".tagline")).toHaveText("Welcome, Villa " + NUMBER, { timeout: 15000 });
+    await page.goto("home/");
     await page.locator("#signOut").click();
-    await expect(page.locator("h1")).toHaveText("Sign in");
-    await page.locator("#email").fill(EMAIL);
-    await page.locator("#password").fill(PASSWORD);
-    await page.locator("#go").click();
-    await expect(page).toHaveURL(/\/commons\/$/, { timeout: 15000 });
-
-    // wrong password against the real Auth API
+    await expect(page).toHaveURL(/\/commons\/$/);
     await page.goto("account/");
-    await page.locator("#signOut").click();
     await page.locator("#email").fill(EMAIL);
     await page.locator("#password").fill("not-the-password");
     await page.locator("#go").click();
@@ -64,6 +69,13 @@ test("join (wrong code, then right) → member → sign out/in → delete accoun
     await page.locator("#password").fill(PASSWORD);
     await page.locator("#go").click();
     await expect(page).toHaveURL(/\/commons\/$/, { timeout: 15000 });
+
+    // delete through the real My Home screen (UC-H1/H3) — the cleanup path itself
+    await page.goto("home/");
+    await page.locator("#delConfirm").fill("DELETE");
+    await page.locator("#delete").click();
+    await expect(page).toHaveURL(/\/commons\/$/, { timeout: 15000 });
+    deletedViaUi = true;
   } catch (e) {
     failed = e;
   } finally {
@@ -80,6 +92,6 @@ test("join (wrong code, then right) → member → sign out/in → delete accoun
     console.log("CLEANUP", out, EMAIL);
     // the first failure is the one worth reading — never mask it with the cleanup's
     if (failed) throw failed;
-    expect(out).toBe("deleted");
+    expect(deletedViaUi ? out === "no-session" : out === "deleted").toBe(true);
   }
 });
