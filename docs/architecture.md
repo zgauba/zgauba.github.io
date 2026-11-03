@@ -5,7 +5,8 @@ APP: zgauba.github.io (Jubail Commons monorepo)
 PRIMARY PURPOSE: Zee's networking pages + Jubail Island community tools
   (Halloween 2026 season closed 2026-11-03 — site live but empty; Jubail Commons in rebuild)
 LAST VERIFIED: 2026-11-03 (SignalPost re-queried at T1 close-out; JubailCommons
-  re-queried after each T2 slice applied — schema complete, modules OFF, no codes set)
+  re-queried after T3 applied — 25 tables, anon = 2 fns, authenticated = 67,
+  modules OFF, no codes set, 0 edge functions)
 COST-BEARING LAYERS: none — GitHub Pages, Supabase free tier, keyless map tiles.
 SOURCE-OF-TRUTH POLICY:
   [live] = queried from running infra. Re-query before assuming.
@@ -65,7 +66,7 @@ SOURCE-OF-TRUTH POLICY:
 - [repo] `commons/index.html` landing: renders from `jc_config_get('jubail')` with an explicit error fallback; EN/AR strings (`commons/assets/strings.js`, Arabic flagged `ar_draft` pending native review) + RTL; three-layer tokens. No module screens yet (T5).
 
 ### LAYER — DATABASE / API (JubailCommons)
-- [live] Migrations applied (history rows present): `foundation_tables_and_config`, `20261103120000 s1_identity_homes`, `20261103180000 s2_events`, `20261103210000 s3_courts`, `20261104000000 s4_pets`, `20261105000000 t3_rate_limits`. S1–S4 were pasted via the SQL editor (local tooling declines drop/delete-bearing SQL); history rows added by hand. Note: foundation's history version (`20261102165811`) differs from its repo filename (`…180000`) — same migration.
+- [live] Migrations applied (history rows present): `foundation_tables_and_config`, `20261103120000 s1_identity_homes`, `20261103180000 s2_events`, `20261103210000 s3_courts`, `20261104000000 s4_pets`, `t3_rate_limits` (applied via the Supabase tool, so its history version is `20261103062032` vs repo filename `…20261105000000` — same migration). S1–S4 were pasted via the SQL editor (local tooling declines drop/delete-bearing SQL); history rows added by hand. Note: foundation's history version (`20261102165811`) differs from its repo filename (`…180000`) — same migration.
 - [live] **25 `jc_` tables**, RLS on every one, **zero policies, no table/sequence grants** to anon/authenticated. Access model = **RPC-only**: every read/write is a `SECURITY DEFINER` function with a pinned `search_path`; the caller's community is derived from their membership (`jc_me`), never from client input.
 - [live] **Callable surface:** anon = `jc_config_get`, `jc_hit` (2). authenticated = 67 (identity/homes, events, courts, pets, scoped admin). The exact lists live in `tests/sql/00_grants.test.sql` — that file is the source of truth for "who can call what".
 - [live] **Rate limits (T3):** `jc_join` 10 attempts/hour and `jc_admin_unlock` 5 attempts/15 min, per account (`jc_rate`; attempts counted — join clears on success, admin unlock never clears; admin unlock sleeps 1.5 s on every attempt; one attempt in flight per account → parallel calls get `RATE_LIMITED`). Wrong codes **return** `{"error": "BAD_CODE"|"BAD_ADMIN"}` (HTTP 200) so the counter commits — clients must check `error`. `jc_code_check` retired (no grants). No IPs stored; per-IP limiting is Supabase Auth's (below). Plan: `docs/plans/T3-rate-limits.md`.
