@@ -118,30 +118,15 @@ as $$
   from public.jc_communities where id = p_community;
 $$;
 
--- ---------- built-in deletion: the promise is a mechanism, not a chore ----------
-create or replace function public.jc_season_close(p_community text, p_code text, p_event uuid)
-returns jsonb
-language plpgsql
-security definer
-set search_path to public, pg_temp
-as $$
-declare v_deleted int;
-begin
-  perform jc_assert_admin(p_community, p_code);
-  if not exists (select 1 from jc_events where id = p_event and community_id = p_community) then
-    raise exception 'NOT_FOUND';
-  end if;
-  delete from jc_entries where event_id = p_event and community_id = p_community;
-  get diagnostics v_deleted = row_count;
-  update jc_events set status = 'closed' where id = p_event;
-  return jsonb_build_object('deleted_entries', v_deleted);
-end;
-$$;
+-- ---------- (removed) jc_season_close ----------
+-- The delete-bearing close function that stood here was NEVER applied live
+-- (tooling declined it; then superseded by archive-at-close, 2026-11-03 — KG6).
+-- Removed from this mirror so the file matches apply history. Its replacement,
+-- jc_event_close (snapshot → archive, deletes nothing), ships in T2 / S2.
 
 -- Public RPCs granted explicitly: don't depend on default privileges staying
 -- permissive if Supabase's defaults change.
 grant execute on function public.jc_config_get(text) to anon, authenticated;
-grant execute on function public.jc_season_close(text, text, uuid) to anon, authenticated;
 
 -- ---------- bootstrap: the flagship community ----------
 -- passcode/admin_code seed as NULL and FAIL CLOSED (jc_assert_admin requires
