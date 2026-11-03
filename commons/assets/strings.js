@@ -1,7 +1,9 @@
 /* Jubail Commons — strings dictionary (EN/AR).
    Every user-visible string lives here; markup never hardcodes copy.
-   Arabic entries are drafts PENDING NATIVE-SPEAKER REVIEW (flagged "ar_draft"
-   until a reviewer clears them — see backlog).
+   Arabic: native-speaker review approved 2026-11-03 (sheet "Jubail Commons —
+   Arabic review"). Style: singular address (احجز، سجّل), Western digits —
+   both match jubailisland.ae. Any new or changed AR string needs review again;
+   privacy_line is NOT reviewed (rewritten with the privacy policy — T6, KG7).
    Gotcha (learned Oct 2026): never place "·" directly after Arabic-Indic
    digits — it reads like ٠ (zero). Use "،" or parentheses in AR strings. */
 
@@ -27,35 +29,42 @@ var JC_STRINGS = {
     archive_halloween_desc: "Where it all started — the trick-or-treat map.",
     archive_open: "Open the map",
     privacy_line: "Zero-PII by default: no names, emails or phone numbers unless a feature asks, per-feature and opt-in.",
-    error_config: "Couldn't load community settings — showing defaults. Pull to refresh or try again shortly.",
-    footer_credit: "Made by your neighbor in Ain Al Maha"
+    error_config: "Couldn't load community settings — showing defaults. Try again shortly.",
+    footer_credit: "Made by your neighbor in Ain Al Maha",
+    /* nav (T5) */
+    nav_home: "Commons",
+    nav_my_home: "My Home",
+    nav_community: "The Community",
+    nav_admin: "Admin"
   },
   ar: {
     dir: "rtl",
     lang: "ar",
-    ar_draft: true,
-    /* «ساحة الجبيل» — a sāḥa is the communal square where a neighborhood
-       gathers; closest Arabic concept to "commons". PENDING NATIVE REVIEW
-       like every string in this pack. */
-    brand: "ساحة الجبيل",
+    /* "Commons" is the cross-community product name: transliterated, not
+       translated; word order follows the village names (مرفأ الجبيل). */
+    brand: "كومنز الجبيل",
     tagline: "فعاليات المجتمع والحجوزات والمزيد — من الجيران، للجيران.",
     toggle_label: "EN",
     module_events: "الفعاليات",
-    module_events_desc: "احتفالات المجتمع على الخريطة — سجّلوا منزلكم وأديروا مشاركتكم بأنفسكم.",
+    module_events_desc: "احتفالات المجتمع على الخريطة — سجّل منزلك وأدِر مشاركتك بنفسك.",
     module_bookings: "الملاعب",
-    module_bookings_desc: "احجزوا ملاعب ومرافق المجتمع.",
-    module_pets: "الحيوانات الأليفة",
+    module_bookings_desc: "احجز ملاعب ومرافق المجتمع.",
+    module_pets: "حيوانات الجبيل الأليفة",
     module_pets_desc: "دليل حيوانات الحي الأليفة.",
-    cta_events: "سجّلوا منزلكم",
-    cta_bookings: "احجزوا ملعباً",
-    cta_pets: "أضيفوا حيوانكم الأليف",
+    cta_events: "سجّل منزلك",
+    cta_bookings: "احجز ملعباً",
+    cta_pets: "أضف حيوانك الأليف",
     coming_soon: "قريباً",
-    archive_halloween: "هالوين ٢٠٢٦",
-    archive_halloween_desc: "حيث بدأ كل شيء — خريطة الحلوى.",
-    archive_open: "افتحوا الخريطة",
+    archive_halloween: "هالوين 2026",
+    archive_halloween_desc: "من هنا كانت البداية — خريطة الحلوى.",
+    archive_open: "افتح الخريطة",
     privacy_line: "الخصوصية أولاً: لا نحفظ أسماء أو أرقام هواتف أو بريداً إلكترونياً إلا بموافقتكم ولكل ميزة على حدة.",
-    error_config: "تعذّر تحميل إعدادات المجتمع — نعرض الإعدادات الافتراضية. حاولوا مرة أخرى بعد قليل.",
-    footer_credit: "من جاركم في عين المها"
+    error_config: "تعذّر تحميل إعدادات المجتمع — نعرض الإعدادات الافتراضية. حاول مرة أخرى بعد قليل.",
+    footer_credit: "من جارك في عين المها",
+    nav_home: "الرئيسية",
+    nav_my_home: "منزلي",
+    nav_community: "المجتمع",
+    nav_admin: "الإدارة"
   }
 };
 
