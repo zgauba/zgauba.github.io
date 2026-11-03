@@ -159,7 +159,7 @@ as $$
            'never_run', l.at is null))
     from (values ('orphan_users'), ('photo_purge')) j(job)
     left join lateral (select at, affected, error from jc_maintenance_log m
-                        where m.job = j.job order by at desc limit 1) l on true;
+                        where m.job = j.job order by at desc, id desc limit 1) l on true;
 $$;
 revoke execute on function public.jc_maintenance_status() from public, anon, authenticated;
 
