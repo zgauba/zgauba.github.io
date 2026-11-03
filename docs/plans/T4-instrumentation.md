@@ -44,9 +44,17 @@ A canary nobody can see is the silent failure it was meant to catch. And the del
 - `jc_purge_orphan_users()` — cron `jc-orphan-users` daily 03:15 UTC: deletes auth users
   with no `jc_accounts` row, created 30+ days ago and idle 30+ days.
 - Pet photos — cron `jc-photo-purge` daily 03:35 UTC → `pg_net` → Edge Function
-  `jc-photo-purge` (`verify_jwt=false`; gate = `x-jc-cron` header vs Vault secret
-  `jc_cron_token`) → `jc_photo_purge_queue` → Storage API remove → `jc_photo_purge_done`.
-  Due: retired rows, and pending rows older than 1 h.
+  `jc-photo-purge` (`verify_jwt=false`) → `jc_photo_purge_queue` → Storage API remove →
+  `jc_photo_purge_done`. Due: retired rows, and pending rows older than 1 h.
+- **Gate = single-use nonce**, not a stored secret (changed after security review): pg_net's
+  request queue is readable by anon at the grant level (Supabase default — `postgres`
+  cannot revoke it; tried), so anything sent as a header must be worthless after one use.
+  Cron mints a nonce per run (`jc_cron_nonce_new`); the function refuses malformed headers
+  before touching the DB, then spends the nonce (`jc_cron_nonce_use`: unused, < 10 min).
+- `jc_health` gains `maintenance_ok` (a cleanup job stale > 36 h or whose last run errored
+  fails the canary; pg_cron logs "succeeded" as soon as the HTTP call is queued, so only
+  `jc_maintenance_log` knows whether the function actually worked). A job that has never
+  run is ok — the first runs are forced at deploy.
 - `jc_maintenance_log` records every run (affected + first error); the report flags a job
   that hasn't logged in 36 h.
 
