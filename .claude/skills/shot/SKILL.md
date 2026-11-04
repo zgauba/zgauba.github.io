@@ -17,13 +17,14 @@ Never reaches the real Supabase project: it runs on the same stubs as the specs
 - **persona** — `member` (default), `anon`, `member-no-home`, `member-no-pin`, `organizer`, `community-admin`, `event-admin` (runs only the live test event)
 - **lang** — `en` (default) or `ar`
 - **full** — whole page instead of one screen
+- **clicks** (optional, env `SHOT_CLICKS`) — `;`-separated selectors tapped in order before the picture, for screens behind a button, e.g. `SHOT_CLICKS='#newEv;[data-tpl="market"]'`
 
 ## Steps
 
 1. Name the file from the args, in the session scratchpad (never in the repo): `<scratchpad>/shot-<path-slug>-<persona>-<lang>.png`.
 2. Run from `tests/e2e/`:
    ```bash
-   SHOT_PATH='<path>' SHOT_PERSONA=<persona> SHOT_LANG=<lang> SHOT_FULL=<1|0> SHOT_OUT=<abs png> \
+   SHOT_PATH='<path>' SHOT_PERSONA=<persona> SHOT_LANG=<lang> SHOT_FULL=<1|0> SHOT_CLICKS='<sel;sel>' SHOT_OUT=<abs png> \
      npx playwright test -c playwright.shot.config.js 2>&1 | grep -v WebServer | tail -15
    ```
 3. Read the PNG with the Read tool and describe what matters for the question at hand.

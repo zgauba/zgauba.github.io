@@ -82,3 +82,20 @@ Sign in / join / reset; claim home, pin screen (Streets fixed in #24), invites, 
 events list, past stats, Our year, sign up / update / withdraw, organizer note to a home;
 map Directions / Google Maps / Find me / Streets-Satellite; auto-update banner; AR + RTL;
 Jubail modules stay OFF.
+
+## Design references (Zee, 2026-11-04 — concept PDFs, not in the repo)
+
+- **Haq al Laila concept** → the `haq_al_laila` look (PR 5) and template (2c, applied): deep navy
+  background, gold lantern mark, Arabic-first header; "عطونا الله يعطيكم" ("Atona Allah Yatikom") as
+  the tagline; pin **fill = what's handed out** with **teal = nut-free / allergy-friendly** (the
+  choice that matters), ring = which gate, grey ✕ = out of treats; list grouped by village with a
+  "Go" button per home; footer "only unit numbers & pin locations stored · deleted after the
+  celebration". Date ≈ 15 Sha'ban (late Jan 2027), after Maghrib. Palette, icons and Arabic wording
+  pending review by Emirati neighbors.
+- **Events hub concept**: cards per event — "Next up" (highlighted), "Wrapped" (archive with
+  homes · villages), "Idea" (coming soon, e.g. Holiday Lights Map — a homes event with the same
+  engine). Inform the events list polish, not a new feature.
+- **Pets of Jubail concept** → the Pets module (T6+): three kinds (owned · community "known &
+  fine" · stray under care with a care record kept by the cat-care group); a missing pet's card
+  turns red and tops the directory; "Report a concern" composes a WhatsApp-hub message (nothing
+  stored); no owner names or phones; never collects money.

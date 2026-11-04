@@ -26,7 +26,9 @@ var scopes = [];          /* unlocked scopes: jc_me_get.admin_scopes / jc_admin_
 var events = [];          /* last jc_admin_events_list */
 var closing = null;       /* id of the event whose close form is open */
 var newCode = null;       /* {scope, code} — shown once: any later re-render drops it */
-var ed = null;            /* editor state: { ev (original or null), qs, locked, slugTouched } */
+var ed = null;            /* editor state: { ev (original or null), qs, locked, slugTouched,
+                             kind, look, venue {lat,lng}|null, tpl (new events) } */
+var vmap = null;          /* Leaflet map for the venue pin while the editor is open */
 
 /* Halloween 2026, as residents knew it (jubail-halloween/): friendly wording and the
    pin hints PR 5 draws (ring = which gate, icon = what's handed out). Arabic: DRAFT. */
@@ -46,6 +48,49 @@ var HALLOWEEN = { fields: {
     labels_ar: { front: "البوابة الأمامية", garden: "بوابة الحديقة (جهة المنتزه)", both: "البوابتان" } }
 } };
 var FEATURES = ["giant_switch", "supply", "crowd_reports"];
+
+/* T5.2 2c — "New event" starts from a template (plan amendment A5). A template only
+   pre-fills: kind, look, questions, switches, spots — the organizer changes anything.
+   Arabic wording: DRAFT, pending review. */
+var LOOKS = ["plain", "halloween", "haq_al_laila", "gathering", "market", "yard_sale"];
+var ENTRANCE = HALLOWEEN.fields.entrance;
+var TEMPLATES = [
+  { id: "halloween", kind: "homes", look: "halloween", features: { giant_switch: true }, schema: HALLOWEEN },
+  { id: "haq_al_laila", kind: "homes", look: "haq_al_laila", features: { giant_switch: true }, schema: { fields: {
+    /* from Zee's Haq al Laila concept (Oct 2026): the choice that matters is nut-free —
+       allergy-friendly homes stand out on the map */
+    treats: { type: "enum", values: ["mix", "nut_free", "both"], required: true, pin: "glyph",
+      label_en: "What will you hand out?", label_ar: "ماذا ستوزّع؟",
+      labels_en: { mix: "Sweets & nuts — the traditional mix", nut_free: "Nut-free only — safe for kids with allergies",
+                   both: "Both — a nut-free option alongside the mix" },
+      labels_ar: { mix: "حلويات ومكسرات — الخلطة التقليدية", nut_free: "خالٍ من المكسرات فقط — آمن للأطفال المصابين بالحساسية",
+                   both: "الاثنان — خيار خالٍ من المكسرات مع الخلطة" },
+      glyphs: { mix: "🥜", nut_free: "🍬", both: "🥜🍬" } },
+    handout: { type: "enum", values: ["door", "self_serve"], required: true,
+      label_en: "On the night, treats are…", label_ar: "في تلك الليلة، توزَّع الحلوى…",
+      labels_en: { door: "Handed out at the door", self_serve: "Self-serve — help yourselves" },
+      labels_ar: { door: "توزيع شخصي عند الباب", self_serve: "خدمة ذاتية — تفضلوا" } },
+    entrance: ENTRANCE } } },
+  { id: "gathering", kind: "venue", look: "gathering", schema: { fields: {
+    people: { type: "enum", values: ["one", "two", "three", "four", "five_plus"], required: true,
+      label_en: "How many from your household?", label_ar: "كم شخصًا من أهل منزلك؟",
+      labels_en: { one: "1", two: "2", three: "3", four: "4", five_plus: "5 or more" },
+      labels_ar: { one: "١", two: "٢", three: "٣", four: "٤", five_plus: "٥ أو أكثر" } },
+    bringing: { type: "bool", label_en: "Bringing something to share?", label_ar: "هل ستحضر شيئًا للمشاركة؟" } } } },
+  { id: "market", kind: "venue", look: "market", spots: true, schema: { fields: {
+    selling: { type: "enum", values: ["toys_books", "clothes", "food", "crafts", "other"], required: true,
+      label_en: "What will you sell?", label_ar: "ماذا ستبيع؟",
+      labels_en: { toys_books: "Toys & books", clothes: "Clothes", food: "Food & treats", crafts: "Crafts", other: "Something else" },
+      labels_ar: { toys_books: "ألعاب وكتب", clothes: "ملابس", food: "طعام وحلويات", crafts: "مشغولات يدوية", other: "شيء آخر" } },
+    table: { type: "bool", label_en: "Do you need a table?", label_ar: "هل تحتاج إلى طاولة؟" } } } },
+  { id: "yard_sale", kind: "homes", look: "yard_sale", schema: { fields: {
+    items: { type: "enum", values: ["furniture", "clothes", "toys", "mixed"], required: true, pin: "glyph",
+      label_en: "What's on sale?", label_ar: "ماذا تعرض للبيع؟",
+      labels_en: { furniture: "Furniture", clothes: "Clothes", toys: "Toys & books", mixed: "A bit of everything" },
+      labels_ar: { furniture: "أثاث", clothes: "ملابس", toys: "ألعاب وكتب", mixed: "القليل من كل شيء" },
+      glyphs: { furniture: "🛋️", clothes: "👕", toys: "🧸", mixed: "📦" } } } } },
+  { id: "blank", kind: "homes", look: "plain", schema: { fields: {} } }
+];
 
 /* ---------- helpers ---------- */
 function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
@@ -99,6 +144,7 @@ function show(name){
   current = name;
   newCode = null;         /* only rotate() draws the code, once (review PR #26) */
   newLink = null;         /* same for a grant link */
+  if (vmap) { vmap.remove(); vmap = null; }
   VIEWS[name]();
 }
 
@@ -185,6 +231,25 @@ var VIEWS = {
     if (closeForm) closeForm.addEventListener("submit", function(e2){ e2.preventDefault(); closeEvent(); });
   },
 
+  templates: function(){
+    el("view").innerHTML =
+      '<h1>' + esc(jcT("tpl_title")) + '</h1><p class="sub">' + esc(jcT("tpl_sub")) + '</p>' +
+      '<div class="tpls">' + TEMPLATES.map(function(t){
+        return '<button class="tpl" type="button" data-tpl="' + t.id + '"><b>' + esc(jcT("tpl_" + t.id)) + '</b>' +
+          '<small>' + esc(jcT("tpl_" + t.id + "_help")) + '</small></button>';
+      }).join("") + '</div>' +
+      '<button class="btn ghost" id="cancel" type="button">' + esc(jcT("ev_cancel")) + '</button>';
+    Array.prototype.forEach.call(document.querySelectorAll("[data-tpl]"), function(b){
+      b.addEventListener("click", function(){
+        var t = TEMPLATES.filter(function(x){ return x.id === b.dataset.tpl; })[0];
+        ed = { ev: null, qs: fromSchema(t.schema), locked: false, slugTouched: false,
+               kind: t.kind, look: t.look, venue: null, tpl: t };
+        show("editor");
+      });
+    });
+    on("cancel", function(){ show("home"); });
+  },
+
   editor: function(){
     var ev = ed.ev || {};
     var draft = !ed.ev || ev.status === "draft";
@@ -192,16 +257,46 @@ var VIEWS = {
     el("view").innerHTML =
       '<h1>' + esc(jcT(ed.ev ? "ed_edit" : "ed_new")) + '</h1>' +
       '<form class="panel" id="form" novalidate data-no-autoreload>' +
-        '<label>' + esc(jcT("ed_title_en")) + '<input id="title_en" type="text" maxlength="120" required></label>' +
+        '<label>' + esc(jcT("ed_title_en")) + '<input id="title_en" type="text" maxlength="120" required dir="ltr"></label>' +
         '<label>' + esc(jcT("ed_title_ar")) + '<input id="title_ar" type="text" maxlength="120" dir="rtl"></label>' +
         '<label>' + esc(jcT("ed_slug")) + '<input id="slug" type="text" maxlength="41" autocapitalize="none" spellcheck="false"' +
           (draft ? '' : ' disabled') + '></label>' +
         '<p class="help">' + esc(jcT("ed_slug_help")) + '</p>' +
-        '<label>' + esc(jcT("ed_desc_en")) + '<textarea id="description_en" maxlength="2000"></textarea></label>' +
+        '<label>' + esc(jcT("ed_desc_en")) + '<textarea id="description_en" maxlength="2000" dir="ltr"></textarea></label>' +
         '<label>' + esc(jcT("ed_desc_ar")) + '<textarea id="description_ar" maxlength="2000" dir="rtl"></textarea></label>' +
         '<div class="dates"><label>' + esc(jcT("ed_starts")) + '<input id="starts_at" type="datetime-local"></label>' +
           '<label>' + esc(jcT("ed_ends")) + '<input id="ends_at" type="datetime-local"></label></div>' +
         '<p class="help">' + esc(jcT("ed_time_help")) + '</p>' +
+        /* T5.2 2c: what a sign-up means (fixed once anyone signs up) + the look */
+        '<fieldset><legend>' + esc(jcT("ed_kind")) + '</legend>' +
+          ["homes", "venue"].map(function(k){
+            return '<label class="check"><input type="radio" name="kind" value="' + k + '"' +
+              (ed.kind === k ? ' checked' : '') + (ed.locked ? ' disabled' : '') + '> <span><b>' +
+              esc(jcT("ed_kind_" + k)) + '</b><small>' + esc(jcT("ed_kind_" + k + "_help")) + '</small></span></label>';
+          }).join("") +
+          (ed.locked ? '<p class="help">' + esc(jcT("ed_kind_locked")) + '</p>' : '') +
+          /* a look this page doesn't know yet stays selected, so saving never rewrites it */
+          '<label>' + esc(jcT("ed_look")) + '<select id="look">' + LOOKS.concat(LOOKS.indexOf(ed.look) < 0 ? [ed.look] : []).map(function(l){
+            return '<option value="' + l + '"' + (ed.look === l ? ' selected' : '') + '>' + esc(jcT("look_" + l) === "look_" + l ? l : jcT("look_" + l)) + '</option>';
+          }).join("") + '</select></label>' +
+        '</fieldset>' +
+        '<fieldset id="venueBox" hidden><legend>' + esc(jcT("ed_venue")) + '</legend>' +
+          '<p class="notice">' + esc(jcT("ed_jicm")) + '</p>' +
+          '<label>' + esc(jcT("ed_venue_name_en")) + '<input id="venue_name_en" type="text" maxlength="120" dir="ltr"></label>' +
+          '<label>' + esc(jcT("ed_venue_name_ar")) + '<input id="venue_name_ar" type="text" maxlength="120" dir="rtl"></label>' +
+          '<p class="help">' + esc(jcT("ed_venue_pin_help")) + '</p>' +
+          '<div class="pinmap vpin"><div class="map" id="vmap"></div><div class="ring" aria-hidden="true"></div>' +
+            '<div class="layers"><button type="button" class="lang" id="layerBtn">' + esc(jcT("pin_street")) + '</button></div>' +
+            '<button type="button" class="lang locate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
+          '<span class="row"><input type="text" id="coords" dir="ltr" inputmode="decimal" autocomplete="off" placeholder="24.5301, 54.4312" aria-label="' + esc(jcT("pin_paste")) + '">' +
+            '<button type="button" class="btn ghost" id="coordsGo" style="flex:0 0 auto">' + esc(jcT("pin_paste_go")) + '</button></span>' +
+          '<div class="row"><button type="button" class="btn ghost" id="setVenue">' + esc(jcT("ed_venue_here")) + '</button></div>' +
+          '<p class="help" id="venueState" role="status"></p>' +
+          '<label>' + esc(jcT("ed_capacity")) + '<input id="capacity" type="number" inputmode="numeric" min="1" max="5000" step="1"></label>' +
+          '<p class="help">' + esc(jcT("ed_capacity_help")) + '</p>' +
+          '<label class="check"><input type="checkbox" id="spots"> <span>' + esc(jcT("ed_spots")) + '</span></label>' +
+          '<p class="help">' + esc(jcT("ed_spots_help")) + '</p>' +
+        '</fieldset>' +
         '<fieldset><legend>' + esc(jcT("ed_features")) + '</legend>' + FEATURES.map(function(f){
           return '<label class="check"><input type="checkbox" id="f_' + f + '"> <span>' + esc(jcT("ed_f_" + f)) + '</span></label>';
         }).join("") + '</fieldset>' +
@@ -222,7 +317,16 @@ var VIEWS = {
     });
     el("starts_at").value = el("starts_at").defaultValue = toLocalInput(ev.starts_at);
     el("ends_at").value = el("ends_at").defaultValue = toLocalInput(ev.ends_at);
-    FEATURES.forEach(function(f){ el("f_" + f).checked = !!(ev.features && ev.features[f]); });
+    var feats0 = ed.ev ? ev.features : ed.tpl && ed.tpl.features;      /* a template pre-sets switches */
+    FEATURES.forEach(function(f){ el("f_" + f).checked = !!(feats0 && feats0[f]); });
+    ["venue_name_en", "venue_name_ar"].forEach(function(k){ el(k).value = el(k).defaultValue = ev[k] || ""; });
+    el("capacity").value = el("capacity").defaultValue = ev.capacity != null ? String(ev.capacity) : "";
+    el("spots").checked = el("spots").defaultChecked = ed.ev ? !!ev.spots : !!(ed.tpl && ed.tpl.spots);
+    drawVenueState();
+    Array.prototype.forEach.call(document.querySelectorAll('input[name="kind"]'), function(r){
+      r.addEventListener("change", syncKind);
+    });
+    syncKind();
     drawQuestions();
 
     el("title_en").addEventListener("input", function(){
@@ -255,7 +359,11 @@ var VIEWS = {
 function eventRow(e){
   var status = e.status === "draft" ? "adm_status_draft" : e.status === "archived" ? "adm_status_archived"
     : e.signups_open ? "adm_status_open" : "adm_status_paused";
-  var line = [jcT(status), fmtDate(e.starts_at), jcFmt("adm_homes", { n: e.entries || 0 })].filter(Boolean).join(" · ");
+  var place = e.kind === "venue"                                     /* T5.2 2c */
+    ? (e.venue_name_en ? jcFmt("adm_at", { v: ar() && e.venue_name_ar ? e.venue_name_ar : e.venue_name_en }) : jcT("adm_no_venue"))
+    : null;
+  var line = [jcT(status), place, fmtDate(e.starts_at),
+              jcFmt(e.kind === "venue" ? "adm_households" : "adm_homes", { n: e.entries || 0 })].filter(Boolean).join(" · ");
   var acts = "";
   function btn(a, label, ghost){
     return '<button class="btn' + (ghost ? ' ghost' : '') + ' small" type="button" data-act="' + a + '" data-id="' + esc(e.id) + '">' + esc(label) + '</button>';
@@ -416,8 +524,61 @@ function acceptView(token){
 
 function openEditor(ev){
   closing = null;
-  ed = { ev: ev, qs: fromSchema(ev && ev.payload_schema), locked: !!ev && ev.entries > 0, slugTouched: !!ev };
+  if (!ev) return show("templates");        /* a new event starts from a template (2c) */
+  ed = { ev: ev, qs: fromSchema(ev.payload_schema), locked: ev.entries > 0, slugTouched: true,
+         kind: ev.kind || "homes", look: ev.look || "plain",
+         venue: ev.venue_lat != null ? { lat: ev.venue_lat, lng: ev.venue_lng } : null };
   show("editor");
+}
+
+/* ---------- kind + venue (T5.2 2c) ---------- */
+function kindNow(){ var r = document.querySelector('input[name="kind"]:checked'); return r ? r.value : ed.kind; }
+function syncKind(){
+  var venue = kindNow() === "venue";
+  el("venueBox").hidden = !venue;
+  if (venue && !vmap) initVenueMap();       /* Leaflet needs a visible box to size itself */
+  else if (venue) vmap.invalidateSize();    /* shown again: the box may have changed size meanwhile */
+}
+function drawVenueState(){
+  var n = el("venueState");
+  if (n) n.textContent = ed.venue ? jcT("ed_venue_set") : jcT("ed_venue_unset");
+}
+/* Same pin drop as a home: pan the map until the place is under the ring, then
+   "The place is here". Nothing is taken from the map until that tap. */
+function initVenueMap(){
+  if (typeof L === "undefined") return;
+  var c = (cfg && cfg.map) || {};
+  var center = ed.venue ? [ed.venue.lat, ed.venue.lng] : [c.lat || 24.53, c.lng || 54.43];
+  vmap = L.map("vmap", { zoomControl: true }).setView(center, ed.venue ? 18 : Math.max(c.zoom || 15, 16));
+  var layer = "sat";
+  var tiles = L.tileLayer(jcTiles.sat.url, jcTiles.sat.opts).addTo(vmap);
+  on("layerBtn", function(){
+    layer = layer === "sat" ? "street" : "sat";
+    vmap.removeLayer(tiles);
+    tiles = L.tileLayer(jcTiles[layer].url, jcTiles[layer].opts).addTo(vmap);
+    el("layerBtn").textContent = jcT(layer === "sat" ? "pin_street" : "pin_sat");
+  });
+  on("locateBtn", function(){
+    if (!navigator.geolocation) return showErr("LOCATE_FAILED");
+    navigator.geolocation.getCurrentPosition(function(pos){
+      if (vmap) vmap.setView([pos.coords.latitude, pos.coords.longitude], 18);
+    }, function(err){ showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED"); },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+  });
+  on("coordsGo", function(){
+    var p = jcParseLatLng(el("coords").value);
+    if (!p) return showErr("BAD_COORDS");
+    vmap.setView(p, 18);
+  });
+  /* the box sits inside the event form: Enter means "Go", never "save the event" (review) */
+  el("coords").addEventListener("keydown", function(e){
+    if (e.key === "Enter") { e.preventDefault(); el("coordsGo").click(); }
+  });
+  on("setVenue", function(){
+    var p = vmap.getCenter();
+    ed.venue = { lat: Math.round(p.lat * 1e6) / 1e6, lng: Math.round(p.lng * 1e6) / 1e6 };
+    drawVenueState();
+  });
 }
 
 /* ---------- questions: schema <-> editable list ---------- */
@@ -511,7 +672,7 @@ function drawBuilder(){
         (i > 0 ? '<button type="button" class="mini" data-qact="up" aria-label="' + esc(jcT("ed_q_up")) + '">↑</button>' : '') +
         (i < ed.qs.length - 1 ? '<button type="button" class="mini" data-qact="down" aria-label="' + esc(jcT("ed_q_down")) + '">↓</button>' : '') +
         '<button type="button" class="mini danger" data-qact="del">' + esc(jcT("ed_q_remove")) + '</button></span></div>' +
-      '<label>' + esc(jcT("ed_q_label_en")) + '<input type="text" maxlength="200" data-q-label="en"></label>' +
+      '<label>' + esc(jcT("ed_q_label_en")) + '<input type="text" maxlength="200" data-q-label="en" dir="ltr"></label>' +
       '<label>' + esc(jcT("ed_q_label_ar")) + '<input type="text" maxlength="200" dir="rtl" data-q-label="ar"></label>' +
       '<div class="qrow"><label>' + esc(jcT("ed_q_type")) + '<select data-q-type>' + types + '</select></label>' +
         '<label class="check"><input type="checkbox" data-q-req' + (q.required ? ' checked' : '') + '> <span>' + esc(jcT("ed_q_req")) + '</span></label></div>' +
@@ -520,7 +681,7 @@ function drawBuilder(){
           '<div class="choices"><span class="clabel">' + esc(jcT("ed_q_choices")) + '</span>' + q.choices.map(function(c, j){
             return '<div class="choice" data-c="' + j + '">' +
               (q.pin === "glyph" ? '<input type="text" class="glyph" maxlength="8" data-c-f="glyph" aria-label="' + esc(jcT("ed_q_glyph_in")) + '">' : '') +
-              '<input type="text" maxlength="40" data-c-f="en" placeholder="' + esc(jcT("ed_q_choice_en")) + '" aria-label="' + esc(jcT("ed_q_choice_en")) + '">' +
+              '<input type="text" maxlength="40" data-c-f="en" dir="ltr" placeholder="' + esc(jcT("ed_q_choice_en")) + '" aria-label="' + esc(jcT("ed_q_choice_en")) + '">' +
               '<input type="text" maxlength="40" dir="rtl" data-c-f="ar" placeholder="' + esc(jcT("ed_q_choice_ar")) + '" aria-label="' + esc(jcT("ed_q_choice_ar")) + '">' +
               '<button type="button" class="mini" data-cact="del" aria-label="' + esc(jcT("ed_q_remove_choice")) + '">✕</button></div>';
           }).join("") +
@@ -629,6 +790,29 @@ function saveEvent(){
   var feats = Object.assign({}, orig.features || {});
   FEATURES.forEach(function(k){ if (el("f_" + k).checked) feats[k] = true; else delete feats[k]; });
   if (JSON.stringify(feats) !== JSON.stringify(orig.features || {})) f.features = feats;
+  /* T5.2 2c: kind + look; venue settings only for a one-place event (the server refuses
+     them on a homes event, and switching to homes clears them there) */
+  var kind = kindNow(), look = el("look").value;
+  if (ev) {
+    if (kind !== (orig.kind || "homes")) f.kind = kind;
+    if (look !== (orig.look || "plain")) f.look = look;
+  }
+  else { if (kind !== "homes") f.kind = kind; if (look !== "plain") f.look = look; }   /* defaults aren't sent */
+  if (kind === "venue") {
+    put("venue_name_en", text("venue_name_en"));
+    put("venue_name_ar", text("venue_name_ar"));
+    put("venue_lat", ed.venue ? ed.venue.lat : null);
+    put("venue_lng", ed.venue ? ed.venue.lng : null);
+    if (el("capacity").validity.badInput) return showErr("BAD_CAPACITY");   /* "abc" reads as "" — not "no limit" */
+    var capRaw = el("capacity").value.trim(), cap = null;
+    if (capRaw) {
+      cap = Number(capRaw);
+      if (!(Number.isInteger(cap) && cap >= 1 && cap <= 5000)) return showErr("BAD_CAPACITY");
+    }
+    put("capacity", cap);
+    var spots = el("spots").checked;
+    if (ev ? spots !== !!orig.spots : spots) f.spots = spots;
+  }
   /* compare in one canonical shape, so reopening and saving an untouched event sends nothing */
   if (!ed.locked) {
     var built = toSchema(ed.qs);

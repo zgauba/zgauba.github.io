@@ -80,9 +80,11 @@ function adminBackend(opts = {}) {
         starts_at: "2026-11-04T04:40:00Z", ends_at: "2026-12-04T04:40:00Z", status: "live", signups_open: true,
         features: { giant_switch: true }, theme: {}, payload_schema: { fields: { treats: { type: "enum", values: ["candy"], required: true } } },
         safety: {}, entries: 3 },
+      ...(opts.extraEvents || []),
       { id: ADMIN_PAST_ID, slug: "halloween-2026", title_en: "Halloween 2026", status: "archived", signups_open: false,
         starts_at: "2026-10-31T00:00:00Z", features: { giant_switch: true }, payload_schema: { fields: {} }, entries: 124 },
-    ],
+    ].map((e) => Object.assign({ kind: "homes", look: "plain", venue_name_en: null, venue_name_ar: null,   // as jc_admin_events_list (T5.2 3b)
+      venue_lat: null, venue_lng: null, capacity: null, spots: false }, e)),
   };
   const admin = () => st.scopes.includes("events") || st.scopes.includes("community");
   const community = () => st.scopes.includes("community");
@@ -114,7 +116,11 @@ function adminBackend(opts = {}) {
         } else Object.assign(find(a.p_event), a.p_fields);
         return ok(visible());
       },
-      jc_admin_event_publish: guard((a) => { find(a.p_event).status = "live"; return ok(st.events); }),
+      jc_admin_event_publish: guard((a) => {
+        const e = find(a.p_event);
+        if (e.kind === "venue" && !(e.venue_name_en && e.venue_lat != null)) return raise("NO_VENUE");   // as T5.2 3b
+        e.status = "live"; return ok(st.events);
+      }),
       jc_admin_event_signups: guardEv((a) => { find(a.p_event).signups_open = a.p_open; return ok(visible()); }),
       jc_event_close: guardEv((a) => {
         const e = find(a.p_event);
