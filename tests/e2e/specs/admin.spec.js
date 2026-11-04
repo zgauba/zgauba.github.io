@@ -337,6 +337,7 @@ test("one question drives the ring and one the icon: picking ring elsewhere move
   await expect(page.locator('.qcard[data-q="2"] [data-q-pin]')).toHaveValue("ring");
   await page.locator('.qcard[data-q="1"] [data-q-pin]').selectOption("ring");
   await expect(page.locator('.qcard[data-q="1"] [data-q-pin]')).toHaveValue("ring");
+  await expect(page.locator("#msg")).toHaveText("Pin ring colour now comes from question 2 — only one question can set it.");
   await expect(page.locator('.qcard[data-q="2"] [data-q-pin]')).toHaveValue("");
 });
 
@@ -404,4 +405,34 @@ test("hostile question wording stays text in the builder and on the resident for
   await expect(page.locator('.qcard[data-q="0"] [data-q-label="en"]')).toHaveValue(evil);
   expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
   expect(await page.locator("#qs img").count()).toBe(0);
+});
+
+// PR #27 review M1: the server's 8 KB cap is measured on Postgres's jsonb text (": ", ", "),
+// which is longer than JSON.stringify. Grow one question a byte at a time: the first size the
+// page refuses must still be UNDER 8 KB as plain JSON — i.e. the old check would have let it
+// through and the server would have rejected it.
+test("question size cap counts bytes the way the database stores them", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await expect(page.locator("#newEv")).toBeVisible();
+  const r = await page.evaluate(() => {
+    const qs = (n) => [{ key: "a", label_en: "q" + "x".repeat(n), label_ar: "", type: "enum", required: false, pin: "",
+      choices: Array.from({ length: 20 }, (_, j) => ({ value: "v" + j, en: "y".repeat(300), ar: "", glyph: "" })) }];
+    const real = pgJsonBytes;
+    for (let n = 0; n < 9000; n++) {
+      if (toSchema(qs(n)).err !== "Q_TOO_BIG") continue;
+      pgJsonBytes = () => 0;                        // build the same schema without the cap
+      const schema = toSchema(qs(n)).schema;
+      pgJsonBytes = real;
+      return { n, plain: new TextEncoder().encode(JSON.stringify(schema)).length, stored: real(schema),
+               previousFits: !toSchema(qs(n - 1)).err };
+    }
+    return null;
+  });
+  expect(r).not.toBeNull();
+  expect(r.previousFits).toBe(true);
+  expect(r.stored).toBe(8193);                       // refused exactly when the stored text passes 8 KB…
+  expect(r.plain).toBeLessThanOrEqual(8192);         // …while plain JSON still looked fine
 });

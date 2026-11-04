@@ -44,10 +44,11 @@ function fmtDate(iso){
 function human(s){ s = String(s).replace(/_/g, " "); return s.charAt(0).toUpperCase() + s.slice(1); }
 function fieldLabel(key, spec){ return (spec && (spec["label_" + jcLang()] || spec.label_en)) || human(key); }
 function valueLabel(spec, v){
-  var m = spec && (spec["labels_" + jcLang()] || spec.labels_en);
   if (typeof v === "boolean") return jcT(v ? "ev_yes" : "ev_no");
   if (spec && spec.type === "bool" && (v === "true" || v === "false")) return jcT(v === "true" ? "ev_yes" : "ev_no");  /* stats keys are strings */
-  return (m && m[v]) || human(v);
+  /* per choice: this language, else English, else the stored value (PR #27 review: a
+     partly translated question must not drop the English wording of the rest) */
+  return (spec && (jcOwn(spec["labels_" + jcLang()], v) || jcOwn(spec.labels_en, v))) || human(v);
 }
 /* Usable coordinates only (T5.1 review): anything else is "not on the map yet". */
 function hasPos(e){ return !!e && Number.isFinite(e.lat) && Number.isFinite(e.lng); }

@@ -295,7 +295,7 @@ function fromSchema(schema){
       key: k, label_en: f.label_en || "", label_ar: f.label_ar || "",
       type: f.type === "bool" || f.type === "text" ? f.type : "enum",
       required: !!f.required, pin: f.pin === "ring" || f.pin === "glyph" ? f.pin : "", max: f.max,
-      choices: (f.values || []).map(function(v){ return { value: v, en: len[v] || "", ar: lar[v] || "", glyph: gl[v] || "" }; })
+      choices: (f.values || []).map(function(v){ return { value: v, en: jcOwn(len, v) || "", ar: jcOwn(lar, v) || "", glyph: jcOwn(gl, v) || "" }; })
     };
   });
 }
@@ -345,9 +345,15 @@ function toSchema(qs){
     fields[q.key] = f;
   }
   var schema = { fields: fields };
-  /* the server caps the stored questions at 8 KB */
-  if (new TextEncoder().encode(JSON.stringify(schema)).length > 8192) return { err: "Q_TOO_BIG" };
+  /* the server caps the stored questions at 8 KB of Postgres's jsonb text, which writes
+     ": " and ", " — count those spaces too, or a wordy set passes here and fails there */
+  if (pgJsonBytes(schema) > 8192) return { err: "Q_TOO_BIG" };
   return { schema: schema };
+}
+
+function pgJsonBytes(v){
+  var t = JSON.stringify(v).replace(/"(?:[^"\\]|\\.)*"|([:,])/g, function(m, sep){ return sep ? sep + " " : m; });
+  return new TextEncoder().encode(t).length;
 }
 
 function drawQuestions(){ return ed.locked ? drawPreview() : drawBuilder(); }
@@ -404,9 +410,11 @@ function drawBuilder(){
     var pin = card.querySelector("[data-q-pin]");
     if (pin) pin.addEventListener("change", function(){
       /* one question drives the ring, one the icon */
-      if (pin.value) ed.qs.forEach(function(o){ if (o !== q && o.pin === pin.value) o.pin = ""; });
+      var moved = false;
+      if (pin.value) ed.qs.forEach(function(o){ if (o !== q && o.pin === pin.value) { o.pin = ""; moved = true; } });
       q.pin = pin.value;
       drawBuilder();
+      if (moved) showOk(jcFmt("ed_q_pin_moved", { s: jcT("ed_q_pin_" + q.pin), n: ed.qs.indexOf(q) + 1 }));
     });
     Array.prototype.forEach.call(card.querySelectorAll(".choice"), function(row){
       var c = q.choices[+row.dataset.c];
@@ -441,9 +449,11 @@ function drawPreview(){
   el("qs").innerHTML = keys.length ? '<ol class="qlist">' + keys.map(function(k){
     var f = fields[k] || {};
     var lab = (ar() && f.label_ar) || f.label_en || k;
-    var labels = (ar() && f.labels_ar) || f.labels_en || {};
     var vals = f.type === "bool" ? [jcT("ev_yes"), jcT("ev_no")]
-      : (f.values || []).map(function(v){ return ((f.glyphs && f.glyphs[v]) ? f.glyphs[v] + " " : "") + (labels[v] || v); });
+      : (f.values || []).map(function(v){
+          var g = jcOwn(f.glyphs, v);
+          return (g ? g + " " : "") + ((ar() && jcOwn(f.labels_ar, v)) || jcOwn(f.labels_en, v) || v);
+        });
     var notes = [];
     if (f.required) notes.push(jcT("ed_q_required"));
     if (f.pin === "ring") notes.push(jcT("ed_q_ring"));
