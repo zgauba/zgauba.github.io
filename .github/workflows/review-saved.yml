@@ -1,0 +1,39 @@
+# Reviews live in the repo (KG13 — missed in T2 and PR #24). A PR that changes the app
+# (commons/) or the database (supabase/) must also add or update a review report in
+# docs/qa/ (file name containing "review"). Trivial copy-only PRs can carry the label
+# "review-not-needed" instead. Reads the PR's file list through the API — no checkout,
+# so nothing from the PR branch is ever executed here.
+name: Review saved
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  review-saved:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require a docs/qa review report for app or database changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SKIP: ${{ contains(github.event.pull_request.labels.*.name, 'review-not-needed') }}
+        run: |
+          files=$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[] | select(.status != "removed") | .filename')
+          if ! printf '%s\n' "$files" | grep -Eq '^(commons|supabase)/'; then
+            echo "No app or database files changed — no review report needed."; exit 0
+          fi
+          if printf '%s\n' "$files" | grep -Eq '^docs/qa/[^/]*review[^/]*\.md$'; then
+            echo "Review report found:"; printf '%s\n' "$files" | grep -E '^docs/qa/[^/]*review[^/]*\.md$'; exit 0
+          fi
+          if [ "$SKIP" = "true" ]; then
+            echo "Label review-not-needed set — skipping."; exit 0
+          fi
+          echo "::error::This PR changes commons/ or supabase/ but adds no review report. Save the reviewer's findings as docs/qa/<name>-review-<date>.md on this branch before merging (or label the PR review-not-needed for a trivial copy change)."
+          exit 1
