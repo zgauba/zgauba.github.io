@@ -51,7 +51,7 @@ function valueLabel(spec, v){
 }
 /* Usable coordinates only (T5.1 review): anything else is "not on the map yet". */
 function hasPos(e){ return !!e && Number.isFinite(e.lat) && Number.isFinite(e.lng); }
-function eventUrl(t){ return "../events/?id=" + data.event.id + "&tab=" + t; }
+function eventUrl(t){ return "../events/?id=" + encodeURIComponent(data.event.id) + "&tab=" + t; }
 /* the pin screen, coming back to this event's My home tab when the pin is saved */
 function pinUrl4Me(){ return "../home/?view=pin&next=" + encodeURIComponent(eventUrl("mine")); }
 function goPin(){ location.href = pinUrl4Me(); }
@@ -115,7 +115,7 @@ var VIEWS = {
     TABS.forEach(function(t){
       on("tab-" + t, function(){
         tab = t; editing = false;
-        try { history.replaceState(null, "", "?id=" + ev.id + "&tab=" + t); } catch(e){}
+        try { history.replaceState(null, "", "?id=" + encodeURIComponent(ev.id) + "&tab=" + t); } catch(e){}
         show("detail");
       });
     });
