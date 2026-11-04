@@ -74,7 +74,9 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', u2, 'role', 'authenticated')::text, true);
   v_err := null; begin perform jc_event_signup(v_ev, '{}'); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'NO_PIN' then raise exception 'FAIL P02 unpinned sign-up: %', v_err; end if;
+  execute 'reset role';
   if exists (select 1 from jc_event_entries where home_id = v_home2) then raise exception 'FAIL P02b entry written'; end if;
+  execute 'set local role authenticated';
   k := k + 2;
 
   -- ---------- P03 organizer pins the home → sign-up works; logged with from/to ----------
@@ -117,10 +119,11 @@ begin
   k := k + 5;
 
   -- ---------- P05 isolation: an organizer can't touch another community's home ----------
+  -- (a spot inside OUR community, so the 10 km rule can't answer first)
   perform set_config('request.jwt.claims', json_build_object('sub', u1, 'role', 'authenticated')::text, true);
-  v_err := null; begin perform jc_admin_home_pin_set(v_home4, 25.0, 55.0); exception when others then v_err := sqlerrm; end;
+  v_err := null; begin perform jc_admin_home_pin_set(v_home4, 24.531, 54.431); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'NOT_FOUND' then raise exception 'FAIL P05 cross-community pin move: %', v_err; end if;
-  v_err := null; begin perform jc_admin_entry_pin_set(v_entry4, 25.0, 55.0); exception when others then v_err := sqlerrm; end;
+  v_err := null; begin perform jc_admin_entry_pin_set(v_entry4, 24.531, 54.431); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'NOT_FOUND' then raise exception 'FAIL P05b cross-community entry pin: %', v_err; end if;
   k := k + 2;
 

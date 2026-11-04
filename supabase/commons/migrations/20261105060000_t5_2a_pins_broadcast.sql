@@ -26,9 +26,12 @@
 alter table public.jc_event_entries
   add column event_lat double precision,
   add column event_lng double precision,
+  -- both or neither: spelled out, because a CHECK that evaluates to NULL (lat set, lng
+  -- null → "between" is NULL) passes — caught by s8 P07b in the dry run
   add constraint jc_event_entries_event_pin check (
         (event_lat is null and event_lng is null)
-     or (event_lat between -90 and 90 and event_lng between -180 and 180));
+     or (event_lat is not null and event_lng is not null
+         and event_lat between -90 and 90 and event_lng between -180 and 180));
 alter table public.jc_communities
   add constraint jc_communities_broadcast_len check (char_length(broadcast) <= 280);
 
@@ -253,6 +256,8 @@ begin
   -- every member sees this on every page: also drop marks that hide or reorder words
   -- (LRM / RLM / ALM, zero-width, line / paragraph separators) on top of jc_clean_text
   v_text := coalesce(jc_clean_text(regexp_replace(p_text, '[\u200B-\u200F\u2028\u2029\u2060\uFEFF\u061C]', '', 'g')), '');
+  -- jc_clean_text trims spaces only: a banner of just line breaks / tabs means "no banner"
+  v_text := btrim(v_text, E' \t\n\r');
   if char_length(v_text) > 280 then raise exception 'TOO_LONG'; end if;
   update jc_communities set broadcast = v_text where id = v_comm;
   perform jc_admin_log_add(v_comm, 'broadcast_set', jsonb_build_object('text', v_text));
