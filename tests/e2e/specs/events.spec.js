@@ -258,7 +258,7 @@ test("tap a pin: answers, note, walking directions + view pin; distance after Fi
   await expect(pop).toContainText(/≈ \d+ m from you/);
   await expect(pop.getByRole("link", { name: "Directions" })).toHaveAttribute("href",
     "https://www.google.com/maps/dir/?api=1&destination=24.531%2C54.431&travelmode=walking");
-  await expect(pop.getByRole("link", { name: "View pin" })).toHaveAttribute("href", /maps\/search\/\?api=1&query=24\.531%2C54\.431/);
+  await expect(pop.getByRole("link", { name: "Google Maps" })).toHaveAttribute("href", /maps\/search\/\?api=1&query=24\.531%2C54\.431/);
 });
 
 test("list: house numbers in natural order (9 before 10); nearest-first after locating", async ({ page, context }) => {

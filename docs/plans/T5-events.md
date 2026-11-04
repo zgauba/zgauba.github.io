@@ -38,6 +38,20 @@ Every feature of `jubail-halloween/` mapped to Commons. Outcome:
   banner polled on every page; **organizer can move a home's pin** (Zee 2026-11-03 —
   needs an admin pin RPC, admin-logged, migration) and override an entry's live state.
 - **Separate small PR after #24:** "Save as an app" (web manifest + icons).
+- **Zee's test feedback on PR #24 (2026-11-04) — deferred to T5.2, NOT in #24** (Zee: keep
+  #24 minimal; only the "View pin" → "Google Maps" rename went in):
+  - **Tabs inside an event** (Halloween parity): Map · List · My home (sign-up form when
+    not in; status / edit / withdraw / organizer note when in) · Organizer (admins only).
+    The event page today stacks everything on one screen.
+  - **No map next to sign-up.** The event uses the home's pin — there is no per-event pin —
+    but the map beside the Sign up button makes people think they must map themselves.
+    The My home tab shows one line instead ("Your pin: Villa 206 ✓ — change on My Home").
+  - **Home pin required at community sign-up:** remove "Skip for now"; homes with no pin
+    are routed back to the pin screen. Server-side enforcement rides the T5.2 migration.
+  - **Friendly question wording** for Halloween-style events (`label_en` / `labels_en` in
+    `payload_schema`, e.g. "Kids should come to…" / "🚪 Front Gate") — set via the event editor.
+  - Small parity gaps: ⟳ refresh on the event map; remember Streets/Satellite.
+  - Open question for the admin PR: bring back **CSV export** of sign-ups (Halloween had it).
 - **Dropped on purpose:** "Other…" free-text village; delete-after-Halloween (archive
   model); print list (KG3, parked); "this week!" banner.
 
