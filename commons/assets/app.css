@@ -39,3 +39,9 @@ input:focus-visible, button:focus-visible, a:focus-visible{outline:2px solid var
 .msg.ok{display:block; background:var(--jc-surface-2); border:1px solid var(--jc-good); color:var(--jc-good)}
 .who{font-size:14px; color:var(--jc-muted); margin:0; overflow-wrap:anywhere}
 .who b{color:var(--jc-ink)}
+/* Sub-menu tabs inside a page — event detail (Map · List · My home) and My Home
+   (Home · Household · Account). Halloween-site parity, T5.2. */
+.subtabs{display:flex; gap:4px; margin:8px 0 14px; border-bottom:1px solid var(--jc-line)}
+.subtabs button{flex:1; font:inherit; font-weight:700; cursor:pointer; color:var(--jc-muted); background:none;
+  border:0; border-bottom:3px solid transparent; padding:10px 6px; margin-bottom:-1px}
+.subtabs button[aria-selected="true"]{color:var(--jc-ink); border-bottom-color:var(--jc-accent)}

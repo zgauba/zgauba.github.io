@@ -197,7 +197,7 @@ test("My Home links to the organizer tools; signed-out visitors go to sign in fi
   await page.goto("admin/");
   await expect(page).toHaveURL(/\/commons\/account\/\?next=/);
   await signIn(page);
-  await page.goto("home/");
+  await page.goto("home/?tab=account");
   await expect(page.locator("#toAdmin")).toHaveAttribute("href", "../admin/");
 });
 

@@ -77,9 +77,9 @@ test("a prefilled display name doesn't block the idle reload", async ({ page }) 
   await page.locator("#go").click();
   await expect(page).toHaveURL(/\/commons\/$/);
   const deploy = await fakeDeploy(page, "home/home.js");
-  await page.goto("home/");
+  await page.goto("home/?tab=account");
   await expect(page.locator("#dname")).toHaveValue("Omar");
-  await page.locator("h2").first().click();          // focus off any input
+  await page.locator(".who").click();          // focus off any input
   await page.waitForTimeout(800);
   const reloaded = page.waitForEvent("load", { timeout: 5000 });
   deploy();

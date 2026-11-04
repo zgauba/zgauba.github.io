@@ -105,14 +105,33 @@ test("My Home: invite link, display name, tab bar (Commons + My Home only while 
   await stubBackend(page, { rpc: hb.rpc });
   await signIn(page);
   await page.goto("home/");
+  // sub-menu, not one long scroll: Home first (the house), then Household, Account
+  await expect(page.locator('.subtabs [role="tab"]')).toHaveText(["Home", "Household", "Account"]);
+  await expect(page.locator(".homehead b")).toHaveText("Villa 12");
+  await expect(page.locator("#invite")).toHaveCount(0);
+  await page.locator("#mh-household").click();
+  await expect(page).toHaveURL(/\/home\/\?tab=household$/);
   await expect(page.locator(".members li")).toHaveCount(1);
   await expect(page.locator(".members .tag")).toHaveText("you");
   await page.locator("#invite").click();
   await expect(page.locator("#inviteLink")).toHaveText("http://localhost:4173/commons/home/?invite=TOKEN_abcdefghijklmnop");
+  await page.locator("#mh-account").click();
+  await expect(page.locator("#delete")).toBeVisible();
   await page.locator("#dname").fill("Omar");
   await page.locator("#saveName").click();
   await expect(page.locator("#msg")).toHaveText("Saved");
-  await expect(page.locator("#dname")).toHaveValue("Omar");
+  await expect(page.locator("#dname")).toHaveValue("Omar");       // still on Account after the save
+  await page.reload();
+  await expect(page.locator('#mh-account')).toHaveAttribute("aria-selected", "true");   // ?tab= survives a reload
+  // an unsaved name survives a tab switch and a language switch (code review, polish PR)
+  await page.locator("#dname").fill("Draft");
+  await page.locator("#mh-home").click();
+  await page.locator("#mh-account").click();
+  await expect(page.locator("#dname")).toHaveValue("Draft");
+  await page.locator("#langBtn").click();
+  await expect(page.locator("#mh-account")).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#mh-account")).toHaveText("الحساب");
+  await expect(page.locator("#dname")).toHaveValue("Draft");
   await expect(page.locator("#tabbar a")).toHaveCount(2);
   await expect(page.locator('#tabbar a[aria-current="page"]')).toHaveAttribute("data-tab", "home");
 });
@@ -153,7 +172,8 @@ test("invite: member without a home accepts → joined; token removed from the U
   await page.locator("#inviteYes").click();
   await expect(page.locator("#msg")).toHaveText("You've joined Villa 12.");
   await expect(page.locator(".members li")).toHaveCount(2);
-  expect(new URL(page.url()).search).toBe("");
+  await expect(page.locator("#mh-household")).toHaveAttribute("aria-selected", "true");   // lands on Household
+  expect(new URL(page.url()).search).toBe("?tab=household");                                // token gone, tab kept
   expect(calls.filter((c) => c.name === "jc_invite_accept").length).toBe(1);
 });
 
@@ -175,7 +195,7 @@ test("leave this home (confirmed) → back to claim", async ({ page }) => {
   const hb = homeBackend(MEMBER);
   await stubBackend(page, { rpc: hb.rpc });
   await signIn(page);
-  await page.goto("home/");
+  await page.goto("home/?tab=account");
   page.once("dialog", (d) => d.accept());
   await page.locator("#leave").click();
   await expect(page.locator("h1")).toHaveText("Your home");
@@ -185,7 +205,7 @@ test("delete account needs DELETE typed; then signs out to the public landing", 
   const hb = homeBackend(MEMBER);
   const { calls } = await stubBackend(page, { rpc: hb.rpc });
   await signIn(page);
-  await page.goto("home/");
+  await page.goto("home/?tab=account");
   await page.locator("#delete").click();
   await expect(page.locator("#msg")).toHaveText("Type DELETE to confirm.");
   expect(calls.some((c) => c.name === "jc_account_delete")).toBe(false);
@@ -311,8 +331,9 @@ test("hostile names are shown as text, never run (esc everywhere)", async ({ pag
     villages: [{ key: "ain-al-maha", en: evil, ar: null, status: "delivered", delivery: null, parent: null }] })) }) });
   await signIn(page);
   await page.goto("home/");
-  await expect(page.locator(".members li").first()).toContainText("<img");
   await expect(page.locator(".homehead span")).toHaveText(evil);
+  await page.locator("#mh-household").click();
+  await expect(page.locator(".members li").first()).toContainText("<img");
   expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
   expect(await page.locator("#view img").count()).toBe(0);
 });
@@ -345,7 +366,11 @@ test("pin: paste coordinates (plain or Google Maps link) moves the map; junk is 
   await expect(page.locator("#msg")).toContainText("don't look like coordinates");
   await page.locator("#coords").fill("https://www.google.com/maps/place/Villa+12/@24.5512,54.4123,17z");
   await page.locator("#coordsGo").click();
+  // wait until the stub has RECORDED the save — reading `calls` right after the click raced
+  // it, and so did waitForRequest (it fires before the route handler runs). Flaked: polish PR.
+  const saves = () => calls.filter((c) => c.name === "jc_home_pin_set").length;
   await page.locator("#savePin").click();
+  await expect.poll(saves).toBe(1);
   let a = calls.filter((c) => c.name === "jc_home_pin_set").pop().args;
   expect(Math.abs(a.p_lat - 24.5512)).toBeLessThan(0.0002);
   expect(Math.abs(a.p_lng - 54.4123)).toBeLessThan(0.0002);
@@ -353,6 +378,7 @@ test("pin: paste coordinates (plain or Google Maps link) moves the map; junk is 
   await page.locator("#coords").fill("24.5301° N, 54.4312° E");
   await page.locator("#coordsGo").click();
   await page.locator("#savePin").click();
+  await expect.poll(saves).toBe(2);
   a = calls.filter((c) => c.name === "jc_home_pin_set").pop().args;
   expect(Math.abs(a.p_lat - 24.5301)).toBeLessThan(0.0002);
 });

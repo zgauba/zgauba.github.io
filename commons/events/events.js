@@ -75,17 +75,35 @@ var VIEWS = {
     el("view").innerHTML = '<h1>' + esc(jcT("ev_title")) + '</h1><p class="sub">' + esc(jcT("ev_sub")) + '</p>' +
       msgBox() + '<div id="lists"><p class="sub">' + esc(jcT("working")) + '</p></div>';
     rpc("jc_events_list").then(function(evs){
-      var live = evs.filter(function(e){ return e.status === "live"; });
+      /* upcoming: soonest first (undated last); past: most recent first (server order) */
+      function when(e){ return e.starts_at ? Date.parse(e.starts_at) : Infinity; }
+      var live = evs.filter(function(e){ return e.status === "live"; })
+                    .sort(function(a, b){ return when(a) - when(b); });
       var past = evs.filter(function(e){ return e.status === "archived"; });
+      /* organizers (events / community scope) manage every event for now; per-event
+         admins (T5.2 next) will narrow this to the events they were granted */
+      var scopes = (state.me && state.me.admin_scopes) || [];
+      var organizer = scopes.indexOf("events") >= 0 || scopes.indexOf("community") >= 0;
+      /* live: View + Sign up (only while sign-ups are open and this home isn't in);
+         no status pill — the button says it. Past: the whole card opens the numbers. */
       function row(e){
-        var pill = e.status === "archived" ? '<span class="pill">' + esc(jcT("ev_archived")) + '</span>'
-          : e.signups_open ? '<span class="pill open">' + esc(jcT("ev_open")) + '</span>'
-          : '<span class="pill">' + esc(jcT("ev_closed")) + '</span>';
+        var url = "?id=" + encodeURIComponent(e.id);
         var line = [fmtDate(e.starts_at), jcFmt("ev_homes_in", { n: e.homes_in || 0 })];
         if (e.status === "archived") line.push(jcT("ev_see_numbers"));
+        else if (!e.signups_open) line.push(jcT("ev_closed"));
         if (e.my_status === "in") line.push(jcT("ev_mine"));
-        return '<li><a href="?id=' + esc(e.id) + '" data-event="' + esc(e.slug) + '"><span><b>' + esc(title(e)) + '</b>' +
-          '<small>' + esc(line.filter(Boolean).join(" · ")) + '</small></span>' + pill + '</a></li>';
+        var info = '<b>' + esc(title(e)) + '</b><small>' + esc(line.filter(Boolean).join(" · ")) + '</small>';
+        if (e.status === "archived") {
+          return '<li data-event="' + esc(e.slug) + '"><a class="evcard" href="' + url + '"><span>' + info + '</span></a></li>';
+        }
+        return '<li class="evcard" data-event="' + esc(e.slug) + '">' +
+          '<div class="evtop"><span>' + info + '</span>' +
+            (organizer ? '<a class="badge" href="../admin/?event=' + encodeURIComponent(e.id) + '">' + esc(jcT("ev_admin")) + '</a>' : '') +
+          '</div>' +
+          '<div class="evacts"><a class="btn ghost" href="' + url + '">' + esc(jcT("ev_view")) + '</a>' +
+            (e.signups_open && e.my_status !== "in"
+              ? '<a class="btn" href="' + url + '&amp;tab=mine">' + esc(jcT("ev_signup_cta")) + '</a>' : '') +
+          '</div></li>';
       }
       el("lists").innerHTML =
         (live.length ? '<ul class="evlist">' + live.map(row).join("") + '</ul>'
@@ -107,7 +125,7 @@ var VIEWS = {
         '<p class="sub">' + esc([fmtDate(ev.starts_at), jcT(ev.signups_open ? "ev_open" : "ev_closed"),
                                  jcFmt("ev_homes_in", { n: entries.length })].join(" · ")) + '</p>' +
         (desc(ev) ? '<p>' + esc(desc(ev)) + '</p>' : '') + '</div>' +
-      '<div class="evtabs" role="tablist">' + TABS.map(function(t){
+      '<div class="subtabs" role="tablist">' + TABS.map(function(t){
         return '<button type="button" role="tab" id="tab-' + t + '" aria-selected="' + (tab === t) + '">' +
           esc(jcT("ev_tab_" + t)) + '</button>';
       }).join("") + '</div>' +

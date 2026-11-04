@@ -10,6 +10,9 @@ var params = new URLSearchParams(location.search);
 var INVITE = params.get("invite");
 if (INVITE && !/^[A-Za-z0-9_-]{16,64}$/.test(INVITE)) INVITE = null;
 var VIEW = params.get("view");
+var MH_TABS = ["home", "household", "account"];
+var mhTab = MH_TABS.indexOf(params.get("tab")) >= 0 ? params.get("tab") : "home";
+var draftName = null;   /* display name typed but not saved, kept while switching tabs */
 var NEXT = params.get("next");
 if (NEXT && jcSafeNext(NEXT) !== NEXT) NEXT = null;   /* only our own pages, never off-site */
 
@@ -142,54 +145,75 @@ var VIEWS = {
     });
   },
 
+  /* Sub-menu (Zee, T5.2 polish): Home · Household · Account instead of one long
+     scroll. The tab survives re-renders (save, language) and lives in ?tab=. */
   myhome: function(){
     var h = home(), m = me(), members = h.members || [];
     var acct = m.account || {};
-    el("view").innerHTML =
-      '<div class="panel">' +
-        '<div class="homehead">' + jcIcon("house", 34) +
-          '<div><b>' + esc(homeTitle()) + '</b><span>' + esc(jcVillageName(cfg, h.village)) + '</span></div></div>' +
-        (h.pin_set_at
-          ? '<p class="status ok">' + esc(jcT("mh_pin_set")) + '</p>'
-          : '<p class="status warn">' + esc(jcT("mh_pin_missing")) + '</p>') +
-        '<div class="row">' +
-          '<button class="btn ghost" type="button" id="toPin">' + esc(jcT(h.pin_set_at ? "mh_pin_btn" : "mh_pin_add")) + '</button>' +
-          (members.length <= 1 ? '<button class="btn ghost" type="button" id="toEdit">' + esc(jcT("mh_fix")) + '</button>' : '') +
+    var body;
+    if (mhTab === "household") {
+      body =
+        '<div class="panel">' +
+          '<ul class="members">' + members.map(function(x){
+            return '<li><span>' + esc(x.name) + '</span>' + (x.you ? '<span class="tag">' + esc(jcT("mh_you")) + '</span>' : '') + '</li>';
+          }).join("") + '</ul>' +
+          '<div id="inviteOut"></div>' +
+          '<button class="btn" type="button" id="invite">' + esc(jcT("mh_invite")) + '</button>' +
+        '</div>';
+    } else if (mhTab === "account") {
+      body =
+        '<div class="panel">' +
+          '<p class="who"><b>' + esc(acct.email || state.email || "") + '</b></p>' +
+          '<label>' + esc(jcT("mh_name")) +
+            '<input id="dname" type="text" maxlength="40" autocomplete="nickname"></label>' +
+          '<p class="help">' + esc(jcT("mh_name_help")) + '</p>' +
+          '<button class="btn ghost" type="button" id="saveName">' + esc(jcT("mh_save")) + '</button>' +
+          /* organizers unlock with a code there; residents without one just see the lock */
+          '<a class="btn ghost" id="toAdmin" href="../admin/">' + esc(jcT("mh_organizer")) + '</a>' +
+          '<button class="btn ghost" type="button" id="signOut">' + esc(jcT("acct_sign_out")) + '</button>' +
         '</div>' +
-      '</div>' +
-      msgBox() +
-
-      '<div class="section"><h2>' + esc(jcT("mh_household")) + '</h2><div class="panel">' +
-        '<ul class="members">' + members.map(function(x){
-          return '<li><span>' + esc(x.name) + '</span>' + (x.you ? '<span class="tag">' + esc(jcT("mh_you")) + '</span>' : '') + '</li>';
-        }).join("") + '</ul>' +
-        '<div id="inviteOut"></div>' +
-        '<button class="btn" type="button" id="invite">' + esc(jcT("mh_invite")) + '</button>' +
-      '</div></div>' +
-
-      '<div class="section" id="historySec" hidden><h2>' + esc(jcT("mh_history")) + '</h2><div class="panel" id="history"></div></div>' +
-
-      '<div class="section"><h2>' + esc(jcT("mh_account")) + '</h2><div class="panel">' +
-        '<p class="who"><b>' + esc(acct.email || state.email || "") + '</b></p>' +
-        '<label>' + esc(jcT("mh_name")) +
-          '<input id="dname" type="text" maxlength="40" autocomplete="nickname"></label>' +
-        '<p class="help">' + esc(jcT("mh_name_help")) + '</p>' +
-        '<button class="btn ghost" type="button" id="saveName">' + esc(jcT("mh_save")) + '</button>' +
-        '<button class="btn ghost" type="button" id="signOut">' + esc(jcT("acct_sign_out")) + '</button>' +
-        /* organizers unlock with a code there; residents without one just see the lock */
-        '<a class="btn ghost" id="toAdmin" href="../admin/">' + esc(jcT("mh_organizer")) + '</a>' +
-      '</div></div>' +
-
-      '<div class="section"><div class="panel">' +
-        '<button class="btn ghost danger" type="button" id="leave">' + esc(jcT("mh_leave")) + '</button>' +
-        '<p class="help">' + esc(jcT("mh_delete_help")) + '</p>' +
-        '<input id="delConfirm" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="DELETE">' +
-        '<button class="btn ghost danger" type="button" id="delete">' + esc(jcT("mh_delete_btn")) + '</button>' +
-      '</div></div>';
+        '<div class="section"><div class="panel">' +
+          '<button class="btn ghost danger" type="button" id="leave">' + esc(jcT("mh_leave")) + '</button>' +
+          '<p class="help">' + esc(jcT("mh_delete_help")) + '</p>' +
+          '<input id="delConfirm" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="DELETE">' +
+          '<button class="btn ghost danger" type="button" id="delete">' + esc(jcT("mh_delete_btn")) + '</button>' +
+        '</div></div>';
+    } else {
+      body =
+        '<div class="panel">' +
+          '<div class="homehead">' + jcIcon("house", 34) +
+            '<div><b>' + esc(homeTitle()) + '</b><span>' + esc(jcVillageName(cfg, h.village)) + '</span></div></div>' +
+          (h.pin_set_at
+            ? '<p class="status ok">' + esc(jcT("mh_pin_set")) + '</p>'
+            : '<p class="status warn">' + esc(jcT("mh_pin_missing")) + '</p>') +
+          '<div class="row">' +
+            '<button class="btn ghost" type="button" id="toPin">' + esc(jcT(h.pin_set_at ? "mh_pin_btn" : "mh_pin_add")) + '</button>' +
+            (members.length <= 1 ? '<button class="btn ghost" type="button" id="toEdit">' + esc(jcT("mh_fix")) + '</button>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="section" id="historySec" hidden><h2>' + esc(jcT("mh_history")) + '</h2><div class="panel" id="history"></div></div>';
+    }
+    el("view").innerHTML =
+      '<div class="subtabs" role="tablist">' + MH_TABS.map(function(t){
+        return '<button type="button" role="tab" id="mh-' + t + '" aria-selected="' + (mhTab === t) + '">' +
+          esc(jcT("mh_tab_" + t)) + '</button>';
+      }).join("") + '</div>' +
+      msgBox() + body;
+    MH_TABS.forEach(function(t){
+      on("mh-" + t, function(){
+        if (el("dname")) draftName = el("dname").value;   /* an unsaved name survives a tab switch */
+        mhTab = t;
+        try { history.replaceState(null, "", t === "home" ? location.pathname : "?tab=" + t); } catch(e){}
+        show("myhome");
+      });
+    });
 
     /* defaultValue too: a prefilled field is not "being typed in" (update.js busy()) */
-    el("dname").value = el("dname").defaultValue = acct.display_name || "";
-    loadHistory();
+    if (el("dname")) {
+      el("dname").value = el("dname").defaultValue = acct.display_name || "";
+      if (draftName !== null) { el("dname").value = draftName; draftName = null; }
+    }
+    if (el("history")) loadHistory();
     on("toPin", function(){ show("pin"); });
     on("toEdit", function(){ show("edit"); });
     on("invite", doInvite);
@@ -358,6 +382,8 @@ function doAccept(token){
   return rpc("jc_invite_accept", { p_token: token }).then(function(r){
     if (r && r.status === "joined") {
       state.me = r.me;
+      mhTab = "household";
+      try { history.replaceState(null, "", "?tab=household"); } catch(e){}
       show("myhome");
       showOk(jcFmt("invite_joined", { h: homeTitle() }));
     } else {

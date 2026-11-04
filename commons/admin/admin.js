@@ -11,6 +11,8 @@
    have signed up (the server enforces that too). */
 
 var state = null, cfg = null, current = null;
+/* ?event=<id> — the events list's Admin badge: open that event's editor once loaded */
+var OPEN_EVENT = new URLSearchParams(location.search).get("event");
 var scopes = [];          /* unlocked scopes: jc_me_get.admin_scopes / jc_admin_unlock */
 var events = [];          /* last jc_admin_events_list */
 var closing = null;       /* id of the event whose close form is open */
@@ -509,7 +511,12 @@ function saveEvent(){
 }
 
 function loadHome(){
-  return rpc("jc_admin_events_list").then(function(list){ events = list; show("home"); },
+  return rpc("jc_admin_events_list").then(function(list){
+    events = list;
+    var ev = OPEN_EVENT && events.filter(function(x){ return x.id === OPEN_EVENT; })[0];
+    OPEN_EVENT = null;                      /* once: Cancel / Save return to the list */
+    if (ev) openEditor(ev); else show("home");
+  },
     function(e){ if (e.code === "NOT_ADMIN") { scopes = []; show("lock"); } else { show("lock"); showErr(e.code); } });
 }
 
