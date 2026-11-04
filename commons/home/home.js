@@ -176,6 +176,8 @@ var VIEWS = {
         '<p class="help">' + esc(jcT("mh_name_help")) + '</p>' +
         '<button class="btn ghost" type="button" id="saveName">' + esc(jcT("mh_save")) + '</button>' +
         '<button class="btn ghost" type="button" id="signOut">' + esc(jcT("acct_sign_out")) + '</button>' +
+        /* organizers unlock with a code there; residents without one just see the lock */
+        '<a class="btn ghost" id="toAdmin" href="../admin/">' + esc(jcT("mh_organizer")) + '</a>' +
       '</div></div>' +
 
       '<div class="section"><div class="panel">' +
