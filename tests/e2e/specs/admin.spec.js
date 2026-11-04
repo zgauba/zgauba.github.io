@@ -395,6 +395,7 @@ test("event admin (no code): straight to their events — no New event, Publish,
   await expect(page.locator("#newEv")).toHaveCount(0);
   await expect(page.locator('[data-act="admins"]')).toHaveCount(0);     // appointing is the community's
   await expect(page.locator("#exit")).toHaveCount(0);                   // nothing to lock: no code
+  await expect(page.locator("h2.group").filter({ hasText: /codes/i })).toHaveCount(0);
   await expect(page.locator("#addCode")).toBeVisible();
   await page.locator('[data-act="pause"]').click();                    // runs their own event
   await expect(page.locator("#msg")).toHaveText(/paused/i);
@@ -428,6 +429,9 @@ test("community admin: Admins panel — make a link (shown once), see holders, r
   expect(lastCall(calls, "jc_event_admin_link_create").args).toEqual({ p_event: LIVE_ID });
   await expect(row.locator(".adminlist li")).toHaveCount(2);               // + the unused link
   await expect(row.locator(".adminlist li").last()).toContainText("Unused link");
+  await page.locator('[data-act="pause"]').click();                       // any other action drops the shown link
+  await expect(page.locator("#newLink")).toHaveCount(0);
+  await expect(row.locator(".adminlist li")).toHaveCount(2);              // the panel itself stays open
   page.once("dialog", (d) => d.accept());
   await row.locator('[data-unadmin="u-7"]').click();
   await expect(page.locator("#msg")).toHaveText("Removed.");
@@ -503,4 +507,31 @@ test("already in: 'Enter another code' opens the code box with Back; a community
   await unlock(page, "COMMUNITY-1");
   await expect(page.locator(".aevents li")).toHaveCount(3);                 // community admin: every event
   await expect(page.locator("h2.group").filter({ hasText: /codes/i })).toBeVisible();
+});
+
+test("code holder who is also an event admin: Lock drops the code, keeps their own event", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"], adminEvents: [LIVE_ID] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await expect(page.locator(".aevents li")).toHaveCount(3);
+  await page.locator("#exit").click();
+  await expect(page.locator(".aevents li")).toHaveCount(1);              // still runs Test Event
+  await expect(page.locator(".aevents li")).toContainText("Test Event");
+  await expect(page.locator("#exit")).toHaveCount(0);
+  await expect(page.locator("#code")).toHaveCount(0);
+});
+
+test("one event's NOT_ADMIN (it just closed) keeps the person's other events — no lock-out", async ({ page }) => {
+  const ab = adminBackend({ adminEvents: [LIVE_ID, DRAFT_ID] });
+  ab.rpc.jc_admin_event_signups = () => { ab.st.adminEvents = [DRAFT_ID]; return raise("NOT_ADMIN"); };
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await expect(page.locator(".aevents li")).toHaveCount(2);
+  await page.locator('[data-act="pause"]').click();
+  await expect(page.locator("#msg")).toHaveText("Organizer tools are locked on your account — enter your code again.");
+  await expect(page.locator("#code")).toHaveCount(0);                    // not the lock screen
+  await expect(page.locator(".aevents li")).toHaveCount(1);
+  await expect(page.locator(".aevents li")).toContainText("National Day");
 });

@@ -105,13 +105,15 @@ function adminBackend(opts = {}) {
       },
       jc_admin_exit: () => { st.scopes = []; return ok(null); },
       jc_admin_events_list: () => (admin() || st.adminEvents.length ? ok(visible()) : raise("NOT_ADMIN")),
-      jc_admin_event_save: (a) => (a.p_event === null ? (admin() ? null : raise("NOT_ADMIN")) : (admin() || mine(a.p_event) ? null : raise("NOT_ADMIN"))) || (() => {
+      // create: organizers only; edit: organizers or that event's admins (jc_assert_event_admin)
+      jc_admin_event_save: (a) => {
+        if (a.p_event === null ? !admin() : !(admin() || mine(a.p_event))) return raise("NOT_ADMIN");
         if (a.p_event === null) {
           st.events.unshift(Object.assign({ id: "66666666-6666-4666-8666-666666666666", status: "draft", signups_open: true,
             features: {}, payload_schema: { fields: {} }, entries: 0 }, a.p_fields));
         } else Object.assign(find(a.p_event), a.p_fields);
         return ok(visible());
-      })(),
+      },
       jc_admin_event_publish: guard((a) => { find(a.p_event).status = "live"; return ok(st.events); }),
       jc_admin_event_signups: guardEv((a) => { find(a.p_event).signups_open = a.p_open; return ok(visible()); }),
       jc_event_close: guardEv((a) => {

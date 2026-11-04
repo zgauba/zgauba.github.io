@@ -20,7 +20,8 @@ var adminEvents = [];     /* jc_me_get.admin_events — events this person runs 
 var admining = null;      /* id of the event whose Admins panel is open */
 var adminsData = null;    /* jc_event_admins_list for it */
 var newLink = null;       /* {event, url} — shown once, like newCode */
-var addingCode = false;   /* lock view opened from "Enter another code" (already in) */
+var addingCode = false;
+var accErr = null;        /* accept view: an error survives a language switch */   /* lock view opened from "Enter another code" (already in) */
 var scopes = [];          /* unlocked scopes: jc_me_get.admin_scopes / jc_admin_unlock */
 var events = [];          /* last jc_admin_events_list */
 var closing = null;       /* id of the event whose close form is open */
@@ -83,8 +84,15 @@ function slugify(t){
 }
 /* Any admin RPC: an expired / rotated grant comes back NOT_ADMIN → back to the lock. */
 function fail(e){
-  if (e.code === "NOT_ADMIN") { scopes = []; adminEvents = []; show("lock"); }
-  showErr(e.code);
+  if (e.code !== "NOT_ADMIN") return showErr(e.code);
+  /* one event closing or one grant ending must not drop the others (code review PR B):
+     re-read who this is, then land wherever they still belong */
+  admining = null; adminsData = null; closing = null;
+  rpc("jc_me_get").then(function(me){
+    scopes = me.admin_scopes || []; adminEvents = me.admin_events || [];
+    if (!canEnter()) { show("lock"); return showErr("NOT_ADMIN"); }
+    return loadHome().then(function(){ showErr("NOT_ADMIN"); });
+  }, function(){ scopes = []; adminEvents = []; show("lock"); showErr("NOT_ADMIN"); });
 }
 
 function show(name){
@@ -167,7 +175,7 @@ var VIEWS = {
     on("exit", function(){
       busy("exit", true);
       rpc("jc_admin_exit").then(function(){
-        scopes = [];
+        scopes = []; admining = null; adminsData = null;
         if (isEventAdmin()) return loadHome();        /* still runs their own events */
         events = []; show("lock");
       }, function(e){ busy("exit", false); fail(e); });
@@ -277,7 +285,7 @@ function act(a, id, b){
   if (!e) return;
   if (a === "edit") return openEditor(e);
   if (a === "admins") return toggleAdmins(id);
-  if (a === "close") { closing = closing === id ? null : id; show("home"); if (el("closeSlug")) el("closeSlug").focus(); return; }
+  if (a === "close") { closing = closing === id ? null : id; admining = null; adminsData = null; show("home"); if (el("closeSlug")) el("closeSlug").focus(); return; }
   if (a === "publish" && !window.confirm(jcFmt("adm_publish_confirm", { t: title(e) }))) return;
   var call = a === "publish" ? rpc("jc_admin_event_publish", { p_event: id })
     : rpc("jc_admin_event_signups", { p_event: id, p_open: a === "open" });
@@ -349,16 +357,18 @@ function toggleAdmins(id){
 function wireAdmins(){
   if (!admining) return;
   var keepLink = newLink;
+  var id = admining;                       /* results belong to the panel they were asked from */
+  function draw(link){ if (admining !== id) return; current = "home"; newLink = link; VIEWS.home(); }
   on("makeLink", function(){
     busy("makeLink", true);
-    rpc("jc_event_admin_link_create", { p_event: admining }).then(function(r){
-      var url = location.origin + location.pathname + "?eventadmin=" + encodeURIComponent(r.token);
-      return rpc("jc_event_admins_list", { p_event: admining }).then(function(d){
-        adminsData = d;
-        current = "home";
-        newLink = { event: admining, url: url };     /* drawn once; the next show() drops it */
-        VIEWS.home();
-      });
+    rpc("jc_event_admin_link_create", { p_event: id }).then(function(r){
+      /* drawn once; the next show() drops it — and shown even if the list refresh fails,
+         because the token can never be shown again */
+      var link = { event: id, url: location.origin + location.pathname + "?eventadmin=" + encodeURIComponent(r.token) };
+      return rpc("jc_event_admins_list", { p_event: id }).then(function(d){
+        if (admining === id) adminsData = d;
+        draw(link);
+      }, function(){ draw(link); });
     }, function(err){ busy("makeLink", false); fail(err); });
   });
   on("copyLink", function(){
@@ -371,8 +381,8 @@ function wireAdmins(){
     b.addEventListener("click", function(){
       if (b.dataset.unadmin && !window.confirm(jcFmt("adm_admins_remove_confirm", { n: b.dataset.name }))) return;
       b.disabled = true;
-      rpc("jc_event_admin_revoke", { p_event: admining, p_user: b.dataset.unadmin || null, p_link: b.dataset.unlink || null })
-        .then(function(d){ adminsData = d; show("home"); showOk(jcT("adm_admins_removed")); },
+      rpc("jc_event_admin_revoke", { p_event: id, p_user: b.dataset.unadmin || null, p_link: b.dataset.unlink || null })
+        .then(function(d){ if (admining !== id) return; adminsData = d; show("home"); showOk(jcT("adm_admins_removed")); },
               function(err){ b.disabled = false; fail(err); });
     });
   });
@@ -399,8 +409,9 @@ function acceptView(token){
       return loadHome().then(function(){
         showOk(jcFmt("acc_done", { t: ar() && r.title_ar ? r.title_ar : r.title_en }));
       });
-    }, function(err){ busy("accYes", false); showErr(err.code); });
+    }, function(err){ busy("accYes", false); accErr = err.code; showErr(err.code); });
   });
+  if (accErr) showErr(accErr);
 }
 
 function openEditor(ev){
@@ -639,7 +650,7 @@ function loadHome(){
     OPEN_EVENT = null;                      /* once: Cancel / Save return to the list */
     if (ev) openEditor(ev); else show("home");
   },
-    function(e){ if (e.code === "NOT_ADMIN") { scopes = []; adminEvents = []; show("lock"); } else { show("lock"); showErr(e.code); } });
+    function(e){ if (e.code === "NOT_ADMIN") { scopes = []; adminEvents = []; show("lock"); showErr(e.code); } else { show("lock"); showErr(e.code); } });
 }
 
 /* ---------- boot ---------- */
