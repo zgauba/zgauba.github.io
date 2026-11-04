@@ -42,12 +42,15 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', u2, 'role', 'authenticated')::text, true);
   perform jc_join('jubail', 'S2-JOIN-CODE-01');
   perform jc_home_claim('seef-al-jubail', 'villa', null, '2');
+  perform jc_home_pin_set(24.5610, 54.5010);  -- T5.2: signing up needs a pin (NO_PIN)
   perform set_config('request.jwt.claims', json_build_object('sub', u3, 'role', 'authenticated')::text, true);
   perform jc_join('jubail', 'S2-JOIN-CODE-01');
   perform jc_home_claim('marsa-al-jubail', 'villa', null, '7');
+  perform jc_home_pin_set(24.5620, 54.5020);
   perform set_config('request.jwt.claims', json_build_object('sub', u4, 'role', 'authenticated')::text, true);
   perform jc_join('jubail', 'S2-JOIN-CODE-01');
   perform jc_home_claim('nad-al-dhabi', 'villa', null, '3');
+  perform jc_home_pin_set(24.5630, 54.5030);
   perform set_config('request.jwt.claims', json_build_object('sub', u6, 'role', 'authenticated')::text, true);
   perform jc_join('jubail', 'S2-JOIN-CODE-01');
   perform set_config('request.jwt.claims', json_build_object('sub', u7, 'role', 'authenticated')::text, true);

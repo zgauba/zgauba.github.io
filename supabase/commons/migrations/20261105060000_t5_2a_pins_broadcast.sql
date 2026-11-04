@@ -18,7 +18,9 @@
 --     20261103180000_s2_events.sql and jc_home_vacated from 20261104000000_s4_pets.sql;
 --   alter table public.jc_communities drop constraint jc_communities_broadcast_len;
 --   alter table public.jc_event_entries drop constraint jc_event_entries_event_pin,
---     drop column event_lat, drop column event_lng;
+--     drop column event_lat, drop column event_lng;   -- ⚠ discards every event-only pin
+-- Restore the replaced functions BEFORE dropping the columns (their bodies reference them).
+-- Reviews: docs/qa/T5-2-pr3a-review-2026-11-04.md (database + security).
 
 -- ---------- 1. columns ----------
 alter table public.jc_event_entries
@@ -103,7 +105,7 @@ begin
   -- NO_PIN into "pin your home" and back). An organizer's event-only pin counts.
   if not exists (select 1 from jc_homes where id = v_home and lat is not null)
      and not exists (select 1 from jc_event_entries
-                      where event_id = ev.id and home_id = v_home and event_lat is not null) then
+                      where event_id = ev.id and home_id = v_home and status = 'in' and event_lat is not null) then
     raise exception 'NO_PIN';
   end if;
 
@@ -119,6 +121,9 @@ begin
         live_state   = case when jc_event_entries.status = 'withdrawn' then 'active' else jc_event_entries.live_state end,
         supply_level = case when jc_event_entries.status = 'withdrawn' then null else jc_event_entries.supply_level end,
         reports_locked_until = case when jc_event_entries.status = 'withdrawn' then null else jc_event_entries.reports_locked_until end,
+        -- T5.2: an organizer's event-only pin doesn't come back with a re-join
+        event_lat    = case when jc_event_entries.status = 'withdrawn' then null else jc_event_entries.event_lat end,
+        event_lng    = case when jc_event_entries.status = 'withdrawn' then null else jc_event_entries.event_lng end,
         updated_at = now(), updated_by = excluded.updated_by
   returning id into v_entry;
   perform jc_log(v_comm, ev.id, v_entry, 'signup', v_clean);
@@ -184,6 +189,8 @@ as $$
 declare f record; mk text; lim int;
 begin
   if jsonb_typeof(p) is distinct from 'object' then raise exception 'BAD_SCHEMA'; end if;
+  -- T5.2: the stored size cap (jc_events_json_caps), checked here so it reads BAD_SCHEMA
+  if octet_length(p::text) > 8192 then raise exception 'BAD_SCHEMA'; end if;
   if jsonb_typeof(coalesce(p -> 'fields', '{}')) <> 'object' then raise exception 'BAD_SCHEMA'; end if;
   if (select count(*) from jsonb_object_keys(coalesce(p -> 'fields', '{}'))) > 12 then raise exception 'BAD_SCHEMA'; end if;
   for f in select key, value from jsonb_each(coalesce(p -> 'fields', '{}')) loop
@@ -210,10 +217,14 @@ begin
     end loop;
     foreach mk in array array['labels_en', 'labels_ar', 'glyphs'] loop
       lim := case when mk = 'glyphs' then 16 else 80 end;
-      if f.value ? mk and (jsonb_typeof(f.value -> mk) <> 'object'
-          or exists (select 1 from jsonb_each(f.value -> mk) x
-                      where jsonb_typeof(x.value) <> 'string' or char_length(x.value #>> '{}') not between 1 and lim)) then
-        raise exception 'BAD_SCHEMA';
+      if f.value ? mk then
+        -- nested, so jsonb_each never sees a non-object (fails as BAD_SCHEMA, not 22023)
+        if f.value ->> 'type' <> 'enum' or jsonb_typeof(f.value -> mk) <> 'object' then raise exception 'BAD_SCHEMA'; end if;
+        if exists (select 1 from jsonb_each(f.value -> mk) x
+                    where jsonb_typeof(x.value) <> 'string' or char_length(x.value #>> '{}') not between 1 and lim
+                       or not (f.value -> 'values') ? x.key) then   -- only real choices carry wording
+          raise exception 'BAD_SCHEMA';
+        end if;
       end if;
     end loop;
     if f.value ? 'pin' and (f.value ->> 'type' <> 'enum' or coalesce(f.value ->> 'pin', '') not in ('ring', 'glyph')) then
@@ -238,7 +249,10 @@ as $$
 declare v_comm text; v_text text;
 begin
   v_comm := jc_assert_admin('events');
-  v_text := coalesce(jc_clean_text(p_text), '');
+  if length(p_text) > 2000 then raise exception 'TOO_LONG'; end if;
+  -- every member sees this on every page: also drop marks that hide or reorder words
+  -- (LRM / RLM / ALM, zero-width, line / paragraph separators) on top of jc_clean_text
+  v_text := coalesce(jc_clean_text(regexp_replace(p_text, '[\u200B-\u200F\u2028\u2029\u2060\uFEFF\u061C]', '', 'g')), '');
   if char_length(v_text) > 280 then raise exception 'TOO_LONG'; end if;
   update jc_communities set broadcast = v_text where id = v_comm;
   perform jc_admin_log_add(v_comm, 'broadcast_set', jsonb_build_object('text', v_text));
@@ -251,19 +265,22 @@ create function public.jc_admin_home_pin_set(p_home uuid, p_lat double precision
 returns jsonb
 language plpgsql security definer set search_path = public, pg_temp
 as $$
-declare v_comm text; h public.jc_homes%rowtype; v_far boolean;
+declare v_comm text; h public.jc_homes%rowtype;
 begin
   v_comm := jc_assert_admin('events');
   if p_lat is null or p_lng is null or p_lat not between -90 and 90 or p_lng not between -180 and 180 then
     raise exception 'BAD_PIN';
   end if;
+  -- an organizer fixes pins inside the community: more than 10 km from its centre is refused
+  -- (a resident's own far pin is only flagged; this is someone else's home)
+  if coalesce((select jc_dist_m(p_lat, p_lng, c.map_lat, c.map_lng) > 10000
+                 from jc_communities c where c.id = v_comm), false) then
+    raise exception 'BAD_PIN';
+  end if;
   select * into h from jc_homes where id = p_home and community_id = v_comm for update;
   if h.id is null then raise exception 'NOT_FOUND'; end if;
-  select jc_dist_m(p_lat, p_lng, c.map_lat, c.map_lng) > 10000 into v_far
-    from jc_communities c where c.id = v_comm;
   update jc_homes
-     set lat = p_lat, lng = p_lng, pin_set_at = now(),
-         flags = (flags - 'pin_far' - 'pin_near') || case when v_far then '{"pin_far": true}'::jsonb else '{}'::jsonb end
+     set lat = p_lat, lng = p_lng, pin_set_at = now(), flags = flags - 'pin_far' - 'pin_near'
    where id = p_home;
   update jc_admin_notices set resolved_at = now(), resolved_by = auth.uid()
    where community_id = v_comm and home_id = p_home and kind = 'pin_flag' and resolved_at is null;
@@ -271,7 +288,9 @@ begin
     'home_id', p_home,
     'from', case when h.lat is null then null else jsonb_build_array(h.lat, h.lng) end,
     'to', jsonb_build_array(p_lat, p_lng)));
-  return jsonb_build_object('home_id', p_home, 'lat', p_lat, 'lng', p_lng, 'far', v_far);
+  -- the old spot comes back so the screen can offer Undo (events organizers can't read the log)
+  return jsonb_build_object('home_id', p_home, 'lat', p_lat, 'lng', p_lng,
+    'from', case when h.lat is null then null else jsonb_build_array(h.lat, h.lng) end);
 end;
 $$;
 
@@ -287,8 +306,12 @@ begin
      or (p_lat is not null and (p_lat not between -90 and 90 or p_lng not between -180 and 180)) then
     raise exception 'BAD_PIN';
   end if;
+  if p_lat is not null and coalesce((select jc_dist_m(p_lat, p_lng, c.map_lat, c.map_lng) > 10000
+                                        from jc_communities c where c.id = v_comm), false) then
+    raise exception 'BAD_PIN';
+  end if;
   select * into en from jc_event_entries
-   where id = p_entry and community_id = v_comm and archived_at is null for update;
+   where id = p_entry and community_id = v_comm and status = 'in' and archived_at is null for update;
   if en.id is null then raise exception 'NOT_FOUND'; end if;
   update jc_event_entries set event_lat = p_lat, event_lng = p_lng, updated_at = now() where id = p_entry;
   perform jc_admin_log_add(v_comm, 'entry_pin_set', jsonb_build_object(
