@@ -2,68 +2,8 @@
 // fields), Halloween template, publish, sign-ups, close (type the short name), codes.
 const { test, expect } = require("@playwright/test");
 const { stubBackend, ok, raise, MEMBER } = require("./stub");
+const { adminBackend, signIn, ADMIN_DRAFT_ID: DRAFT_ID, ADMIN_LIVE_ID: LIVE_ID, ADMIN_PAST_ID: PAST_ID } = require("./backends");
 
-const DRAFT_ID = "33333333-3333-4333-8333-333333333333";
-const LIVE_ID = "44444444-4444-4444-8444-444444444444";
-const PAST_ID = "55555555-5555-4555-8555-555555555555";
-
-function adminBackend(opts = {}) {
-  const st = {
-    scopes: opts.scopes || [],
-    events: [
-      { id: DRAFT_ID, slug: "national-day-2026", title_en: "National Day", title_ar: null, description_en: null, description_ar: null,
-        starts_at: null, ends_at: null, status: "draft", signups_open: true, features: {}, theme: {},
-        payload_schema: { fields: {} }, safety: {}, entries: 0 },
-      { id: LIVE_ID, slug: "test-event", title_en: opts.liveTitle || "Test Event", title_ar: null, description_en: "Practice", description_ar: null,
-        starts_at: "2026-11-04T04:40:00Z", ends_at: "2026-12-04T04:40:00Z", status: "live", signups_open: true,
-        features: { giant_switch: true }, theme: {}, payload_schema: { fields: { treats: { type: "enum", values: ["candy"], required: true } } },
-        safety: {}, entries: 3 },
-      { id: PAST_ID, slug: "halloween-2026", title_en: "Halloween 2026", status: "archived", signups_open: false,
-        starts_at: "2026-10-31T00:00:00Z", features: { giant_switch: true }, payload_schema: { fields: {} }, entries: 124 },
-    ],
-  };
-  const admin = () => st.scopes.includes("events") || st.scopes.includes("community");
-  const guard = (fn) => (a) => (admin() ? fn(a) : raise("NOT_ADMIN"));
-  const find = (id) => st.events.find((e) => e.id === id);
-  return {
-    st,
-    rpc: Object.assign({
-      jc_me_get: (a, c) => (c.signedIn ? ok(Object.assign({}, MEMBER, { admin_scopes: st.scopes })) : raise("NOT_SIGNED_IN")),
-      jc_admin_unlock: (a) => {
-        const map = { "EVENTS-CODE-1": ["events"], "COMMUNITY-1": ["community"], "PETS-1": ["pets"] };
-        if (!map[a.p_code]) return ok({ error: "BAD_ADMIN" });   // T3: wrong code is a 200 with an error body
-        st.scopes = map[a.p_code];
-        return ok(st.scopes);
-      },
-      jc_admin_exit: () => { st.scopes = []; return ok(null); },
-      jc_admin_events_list: guard(() => ok(st.events)),
-      jc_admin_event_save: guard((a) => {
-        if (a.p_event === null) {
-          st.events.unshift(Object.assign({ id: "66666666-6666-4666-8666-666666666666", status: "draft", signups_open: true,
-            features: {}, payload_schema: { fields: {} }, entries: 0 }, a.p_fields));
-        } else Object.assign(find(a.p_event), a.p_fields);
-        return ok(st.events);
-      }),
-      jc_admin_event_publish: guard((a) => { find(a.p_event).status = "live"; return ok(st.events); }),
-      jc_admin_event_signups: guard((a) => { find(a.p_event).signups_open = a.p_open; return ok(st.events); }),
-      jc_event_close: guard((a) => {
-        const e = find(a.p_event);
-        if (a.p_confirm !== e.slug) return raise("CONFIRM_REQUIRED");
-        e.status = "archived"; return ok({ homes: e.entries });
-      }),
-      jc_admin_code_rotate: (a) => (st.scopes.includes("community")
-        ? ok({ scope: a.p_scope, code: "NEWCODE" + a.p_scope.toUpperCase(), version: 2 }) : raise("NOT_ADMIN")),
-    }, opts.rpc || {}),
-  };
-}
-
-async function signIn(page) {
-  await page.goto("account/");
-  await page.locator("#email").fill("a@example.com");
-  await page.locator("#password").fill("correct-horse");
-  await page.locator("#go").click();
-  await expect(page).toHaveURL(/\/commons\/$/);
-}
 async function unlock(page, code) {
   await page.locator("#code").fill(code);
   await page.locator("#go").click();
