@@ -25,4 +25,25 @@ function jcTabBar(root, active, cfg){
       (it.key === active ? ' aria-current="page"' : '') + '>' +
       jcIcon(it.icon, 22) + '<span>' + esc(it.label) + '</span></a>';
   }).join("");
+  jcBanner(cfg);
+}
+
+/* The organizers' banner (jc_admin_broadcast_set) on every member page (T5.2 PR 4).
+   The hub draws its own #bcast; other pages get one at the top of <main>. */
+function jcBanner(cfg){
+  if (el("bcast")) return;
+  var b = ((cfg && cfg.broadcast) || "").trim();
+  var box = el("jcBanner");
+  if (!b) { if (box) box.remove(); return; }
+  if (!box) {
+    var main = document.querySelector("main");
+    if (!main) return;
+    box = document.createElement("div");
+    box.id = "jcBanner";
+    box.className = "bcast";
+    box.setAttribute("role", "status");
+    box.setAttribute("dir", "auto");     /* the banner may be English or Arabic */
+    main.insertBefore(box, main.firstChild);
+  }
+  box.textContent = "⚠️ " + b;
 }
