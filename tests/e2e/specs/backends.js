@@ -85,7 +85,7 @@ function adminEntries() {
       Object.assign({}, base, { id: "a2", home_id: "h-a2", village: "ain-al-maha", number: "14", home_lat: null, home_lng: null,
         payload: { treats: "candy" }, org_note: "Pin looks off" }),
       Object.assign({}, base, { id: "a3", home_id: "h-a3", village: "seef-al-jubail", type: "townhouse", number: "7",
-        home_lat: 24.53, home_lng: 54.43, event_lat: 24.5311, event_lng: 54.4311, payload: { treats: "candy" } }),
+        home_lat: 24.53, home_lng: 54.43, event_lat: 24.5311, event_lng: 54.4311, payload: { treats: "candy" }, note: " @SUM(1)" }),
       Object.assign({}, base, { id: "a4", home_id: "h-a4", village: "seef-al-jubail", number: "9", status: "withdrawn",
         home_lat: 24.53, home_lng: 54.43 }),
     ],

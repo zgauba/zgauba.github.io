@@ -96,7 +96,12 @@ var TEMPLATES = [
 
 /* ---------- helpers ---------- */
 function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
-function showErr(code){ var m = el("msg"); if (!m) return; m.className = "msg err"; m.textContent = jcErrText({ code: code }); }
+function showErr(code){
+  var m = el("msg"); if (!m) return;
+  m.className = "msg err"; m.textContent = jcErrText({ code: code });
+  /* the message sits at the top: on a long list the tap that failed may be far below (review PR 4) */
+  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
+}
 function showOk(text){ var m = el("msg"); if (!m) return; m.className = "msg ok"; m.textContent = text; }
 function on(id, fn){ var n = el(id); if (n) n.addEventListener("click", fn); }
 function busy(id, onoff){
@@ -296,11 +301,7 @@ var VIEWS = {
           '<label>' + esc(jcT("ed_venue_name_en")) + '<input id="venue_name_en" type="text" maxlength="120" dir="ltr"></label>' +
           '<label>' + esc(jcT("ed_venue_name_ar")) + '<input id="venue_name_ar" type="text" maxlength="120" dir="rtl"></label>' +
           '<p class="help">' + esc(jcT("ed_venue_pin_help")) + '</p>' +
-          '<div class="pinmap vpin"><div class="map" id="vmap"></div><div class="ring" aria-hidden="true"></div>' +
-            '<div class="layers"><button type="button" class="lang" id="layerBtn">' + esc(jcT("pin_street")) + '</button></div>' +
-            '<button type="button" class="lang locate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
-          '<span class="row"><input type="text" id="coords" dir="ltr" inputmode="decimal" autocomplete="off" placeholder="24.5301, 54.4312" aria-label="' + esc(jcT("pin_paste")) + '">' +
-            '<button type="button" class="btn ghost" id="coordsGo" style="flex:0 0 auto">' + esc(jcT("pin_paste_go")) + '</button></span>' +
+          pinMapHtml() +
           '<div class="row"><button type="button" class="btn ghost" id="setVenue">' + esc(jcT("ed_venue_here")) + '</button></div>' +
           '<p class="help" id="venueState" role="status"></p>' +
           '<label>' + esc(jcT("ed_capacity")) + '<input id="capacity" type="number" inputmode="numeric" min="1" max="5000" step="1"></label>' +
@@ -373,7 +374,11 @@ var VIEWS = {
     var head = '<button class="btn ghost small" id="suBack" type="button">' + esc(jcT("adm_su_back")) + '</button>' +
       '<h1>' + esc(title(e)) + '</h1>';
     if (!su.list) {
-      el("view").innerHTML = head + msgBox() + '<p class="help">' + esc(jcT("working")) + '</p>';
+      el("view").innerHTML = head + msgBox() + (su.failed
+        ? '<button class="btn" type="button" id="suRetry">' + esc(jcT("adm_retry")) + '</button>'
+        : '<p class="help">' + esc(jcT("working")) + '</p>');
+      on("suRetry", function(){ openSignups(su.ev); });
+      if (su.failed) showErr(su.failed);
       return on("suBack", leaveSignups);
     }
     var ins = su.list.filter(function(x){ return x.status === "in"; });
@@ -383,7 +388,7 @@ var VIEWS = {
                 hidden ? jcFmt("adm_su_hidden_n", { n: hidden }) : null].filter(Boolean).join(" · ");
     var groups = {};
     ins.forEach(function(x){ (groups[x.village] = groups[x.village] || []).push(x); });   /* server order: building, number */
-    var villages = Object.keys(groups).sort(function(a, b){ return jcVillageName(cfg, a).localeCompare(jcVillageName(cfg, b)); });
+    var villages = Object.keys(groups).sort(function(a, b){ return jcVillageName(cfg, a).localeCompare(jcVillageName(cfg, b), jcLang()); });
     el("view").innerHTML = head + '<p class="sub">' + esc(line) + '</p>' +
       (ro ? '<p class="notice">' + esc(jcT("adm_su_readonly")) + '</p>' : '') +
       msgBox() +
@@ -407,11 +412,7 @@ var VIEWS = {
       '<h1>' + esc(jcT("adm_pm_title")) + '</h1>' +
       '<p class="sub">' + esc(jcHomeLabel(x) + " · " + jcVillageName(cfg, x.village)) + '</p>' +
       '<div class="panel"><p class="help">' + esc(jcT(where)) + ' ' + esc(jcT("adm_pm_help")) + '</p>' +
-        '<div class="pinmap vpin"><div class="map" id="vmap"></div><div class="ring" aria-hidden="true"></div>' +
-          '<div class="layers"><button type="button" class="lang" id="layerBtn">' + esc(jcT("pin_street")) + '</button></div>' +
-          '<button type="button" class="lang locate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
-        '<span class="row"><input type="text" id="coords" dir="ltr" inputmode="decimal" autocomplete="off" placeholder="24.5301, 54.4312" aria-label="' + esc(jcT("pin_paste")) + '">' +
-          '<button type="button" class="btn ghost" id="coordsGo" style="flex:0 0 auto">' + esc(jcT("pin_paste_go")) + '</button></span>' +
+        pinMapHtml() +
         msgBox() +
         '<button class="btn" type="button" id="pmHome">' + esc(jcT("adm_pm_home")) + '</button>' +
         '<button class="btn ghost" type="button" id="pmEvent">' + esc(jcT("adm_pm_event")) + '</button>' +
@@ -627,6 +628,14 @@ function initVenueMap(){
   });
 }
 
+/* The markup initPinMap wires up: map + ring, Streets / Satellite, Find me, paste coordinates */
+function pinMapHtml(){
+  return '<div class="pinmap vpin"><div class="map" id="vmap"></div><div class="ring" aria-hidden="true"></div>' +
+      '<div class="layers"><button type="button" class="lang" id="layerBtn">' + esc(jcT("pin_street")) + '</button></div>' +
+      '<button type="button" class="lang locate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
+    '<span class="row"><input type="text" id="coords" dir="ltr" inputmode="decimal" autocomplete="off" placeholder="24.5301, 54.4312" aria-label="' + esc(jcT("pin_paste")) + '">' +
+      '<button type="button" class="btn ghost" id="coordsGo" style="flex:0 0 auto">' + esc(jcT("pin_paste_go")) + '</button></span>';
+}
 /* The pin-drop map in #vmap (venue pin, pin move): Streets / Satellite, Find me, paste
    coordinates. center = [lat, lng] or null for the community's own view. */
 function initPinMap(center){
@@ -668,12 +677,20 @@ function centerOf(m){
 /* ---------- sign-ups (T5.2 PR 4) ---------- */
 function openSignups(e){
   closing = null; admining = null; adminsData = null;
-  su = { ev: e, list: null, open: null };
+  su = { ev: e, list: null, open: null, failed: null };
   show("signups");
   rpc("jc_admin_entries_list", { p_event: e.id }).then(function(list){
     if (!su || su.ev.id !== e.id) return;
     su.list = list || []; show("signups");
-  }, fail);
+  }, function(err){
+    if (err.code === "NOT_ADMIN" || !su || su.ev.id !== e.id) return fail(err);
+    su.failed = err.code; show("signups");          /* not "Working…" forever: say why, offer Retry */
+  });
+}
+function refreshList(id){
+  return rpc("jc_admin_entries_list", { p_event: id }).then(function(list){
+    if (su && su.ev.id === id) su.list = list || [];
+  });
 }
 function leaveSignups(){ su = null; pm = null; show("home"); }
 
@@ -732,13 +749,21 @@ function entryCard(x, ro){
 function byEntry(id){ return ((su && su.list) || []).filter(function(x){ return x.id === id; })[0]; }
 /* a write that returns the whole list (moderate / spot / event pin) → redraw, then say so */
 function suWrite(name, args, okText, undo){
-  var id = su.ev.id;
+  var id = su.ev.id, from = screenKey();
   return rpc(name, args).then(function(list){
     if (!su || su.ev.id !== id) return;
-    su.list = list || []; su.open = null; pm = null;
+    su.list = list || [];
+    if (screenKey() !== from) return;       /* a late answer: keep the data, don't pull them off another screen (review) */
+    su.open = null; pm = null;
     show("signups");
     okUndo(okText, undo);
-  }, fail);
+  }, suFail);
+}
+function screenKey(){ return current + (pm ? ":" + pm.x.id : ""); }
+/* any failed write: buttons usable again (a re-render would drop what was typed), then say why */
+function suFail(err){
+  Array.prototype.forEach.call(document.querySelectorAll("#view button"), function(n){ n.disabled = false; });
+  fail(err);
 }
 /* the ok message, with an Undo button when the change can be put back */
 function okUndo(text, undo){
@@ -774,14 +799,12 @@ function wireEntries(){
   Array.prototype.forEach.call(document.querySelectorAll("[data-form]"), function(f){
     var x = byEntry(f.dataset.id), what = f.dataset.form, inp = f.querySelector("[data-in]");
     function send(v){
-      var btns = f.querySelectorAll("button");
-      Array.prototype.forEach.call(btns, function(n){ n.disabled = true; });
-      var p = what === "note"
+      Array.prototype.forEach.call(f.querySelectorAll("button"), function(n){ n.disabled = true; });
+      what === "note"
         ? suWrite("jc_admin_entry_moderate", { p_entry: x.id, p_hidden: null, p_org_note: v },
                   jcFmt(v ? "adm_su_note_ok" : "adm_su_note_cleared", { h: jcHomeLabel(x) }))
         : suWrite("jc_admin_entry_spot_set", { p_entry: x.id, p_spot: v },
                   v ? jcFmt("adm_su_spot_ok", { h: jcHomeLabel(x), s: v.toUpperCase() }) : jcFmt("adm_su_spot_cleared", { h: jcHomeLabel(x) }));
-      p.then(function(){ Array.prototype.forEach.call(btns, function(n){ n.disabled = false; }); });
     }
     f.addEventListener("submit", function(e2){
       e2.preventDefault();
@@ -808,31 +831,28 @@ function movePin(how){
   if (how === "home") {
     var id = su.ev.id;
     return rpc("jc_admin_home_pin_set", { p_home: x.home_id, p_lat: p.lat, p_lng: p.lng }).then(function(r){
-      return rpc("jc_admin_entries_list", { p_event: id }).then(function(list){
+      var from = r && r.from;
+      var undo = from ? function(){
+        rpc("jc_admin_home_pin_set", { p_home: x.home_id, p_lat: from[0], p_lng: from[1] }).then(function(){
+          return refreshList(id).then(null, function(){});        /* put back either way; the list may lag */
+        }).then(function(){
+          if (!su || su.ev.id !== id) return;
+          show("signups"); showOk(jcT("adm_undone"));
+        }, suFail);
+      } : null;
+      var text = jcFmt(x.event_lat != null ? "adm_pm_home_ok_shadowed" : "adm_pm_home_ok", { h: h });
+      /* the pin DID move: say so even if the list refresh fails (review) */
+      return refreshList(id).then(null, function(){}).then(function(){
         if (!su || su.ev.id !== id) return;
-        su.list = list || []; pm = null; show("signups");
-        var from = r && r.from;
-        okUndo(jcFmt(x.event_lat != null ? "adm_pm_home_ok_shadowed" : "adm_pm_home_ok", { h: h }), from ? function(){
-          rpc("jc_admin_home_pin_set", { p_home: x.home_id, p_lat: from[0], p_lng: from[1] }).then(function(){
-            return rpc("jc_admin_entries_list", { p_event: id }).then(function(l2){
-              if (!su || su.ev.id !== id) return;
-              su.list = l2 || []; show("signups"); showOk(jcT("adm_undone"));
-            });
-          }).then(null, fail);
-        } : null);
+        pm = null; show("signups"); okUndo(text, undo);
       });
-    }, function(err){
-      ["pmHome", "pmEvent", "pmReset"].forEach(function(id2){ if (el(id2)) el(id2).disabled = false; });
-      fail(err);
-    }).then(null, fail);                    /* the list refresh after a successful move */
+    }, suFail);
   }
   var was = x.event_lat != null ? { lat: x.event_lat, lng: x.event_lng } : null;
   suWrite("jc_admin_entry_pin_set", { p_entry: x.id, p_lat: p ? p.lat : null, p_lng: p ? p.lng : null },
     jcFmt(how === "reset" ? "adm_pm_reset_ok" : "adm_pm_event_ok", { h: h }),
     function(){
       suWrite("jc_admin_entry_pin_set", { p_entry: x.id, p_lat: was ? was.lat : null, p_lng: was ? was.lng : null }, jcT("adm_undone"));
-    }).then(function(){
-      ["pmHome", "pmEvent", "pmReset"].forEach(function(id){ if (el(id)) el(id).disabled = false; });
     });
 }
 
@@ -840,7 +860,9 @@ function movePin(how){
    Cells a spreadsheet would read as a formula get a leading ' (resident-typed text). */
 function csvCell(v){
   var s = v == null ? "" : String(v);
-  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  /* numbers come from the server (a negative longitude stays a number); text — including
+     text that starts with whitespace — is defused (security review PR 4) */
+  if (typeof v !== "number" && /^[\s=+\-@]/.test(s)) s = "'" + s;
   return '"' + s.replace(/"/g, '""') + '"';
 }
 function downloadCsv(){
@@ -1164,7 +1186,14 @@ el("langBtn").addEventListener("click", function(){
   paint();
   if (current === "editor") return drawQuestions();   /* never throw away the form */
   if (current === "accept") return acceptView(GRANT);   /* same link, other language */
+  /* keep what's half-done: the banner draft, an open note / spot, where the pin map was moved */
+  var keep = Array.prototype.map.call(document.querySelectorAll("#bannerText, [data-form] [data-in]"), function(n){ return n.value; });
+  var view = vmap ? { c: vmap.getCenter(), z: vmap.getZoom() } : null;
   if (current) show(current);
+  Array.prototype.forEach.call(document.querySelectorAll("#bannerText, [data-form] [data-in]"), function(n, i){
+    if (keep[i] != null) n.value = keep[i];
+  });
+  if (view && vmap) vmap.setView(view.c, view.z);
 });
 
 jcSetLang(jcLang());

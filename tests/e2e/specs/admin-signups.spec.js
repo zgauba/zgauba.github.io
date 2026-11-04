@@ -175,7 +175,7 @@ test("CSV: every row incl. withdrawn, answers in words, formula-looking text def
   expect(lines[0]).toBe('"Village","Home","Status","Hidden","Pin","Latitude","Longitude","treats","Household note","Organizer note","Open reports","Signed up","Last change"');
   expect(lines).toHaveLength(5);                                                  // header + 4 (the withdrawn one too)
   expect(lines[1]).toContain('"Ain Al Maha","Villa 12","Signed up","","Home\'s pin","24.5302","54.4322","candy","\'=HYPERLINK(""x"")"');
-  expect(lines[3]).toContain('"This event only","24.5311","54.4311"');
+  expect(lines[3]).toContain('"This event only","24.5311","54.4311","candy","\' @SUM(1)"');   // whitespace before @ defused too
   expect(lines[4]).toContain('"Villa 9","Withdrew"');
 });
 
@@ -282,4 +282,87 @@ test("banner: empty post refused on the phone; event admin without a live event 
   await page2.goto("admin/");
   await expect(page2.locator("h1")).toBeVisible();
   await expect(page2.locator("#bannerForm")).toHaveCount(0);
+});
+
+// ── review fixes (PR 4 code review) ──
+test("home-pin Undo puts the home's old pin back (a different RPC than the move)", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  const { calls } = await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await openSignups(page, "test-event");
+  await card(page, "12").locator('[data-su="pin"]').click();
+  await page.locator("#coords").fill("24.5400, 54.4400");
+  await page.locator("#coordsGo").click();
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#pmHome").click();
+  await expect(page.locator("#msg")).toContainText("Villa 12's pin moved.");
+  const moved = lastCall(calls, "jc_admin_home_pin_set").args;
+  expect(moved.p_lat).toBeCloseTo(24.54, 4);
+  await page.locator("#undo").click();
+  await expect(page.locator("#msg")).toHaveText("Put back.");
+  expect(lastCall(calls, "jc_admin_home_pin_set").args).toEqual({ p_home: "h-a1", p_lat: 24.5302, p_lng: 54.4322 });
+});
+
+test("event-pin Undo over an existing event pin restores that pin, not the home's", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  const { calls } = await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await openSignups(page, "test-event");
+  await card(page, "7").locator('[data-su="pin"]').click();
+  await page.locator("#coords").fill("24.5400, 54.4400");
+  await page.locator("#coordsGo").click();
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#pmEvent").click();
+  await expect(page.locator("#msg")).toContainText("Townhouse 7 is pinned here for this event.");
+  expect(lastCall(calls, "jc_admin_entry_pin_set").args.p_lat).toBeCloseTo(24.54, 4);
+  await page.locator("#undo").click();
+  await expect(page.locator("#msg")).toHaveText("Put back.");
+  expect(lastCall(calls, "jc_admin_entry_pin_set").args).toEqual({ p_entry: "a3", p_lat: 24.5311, p_lng: 54.4311 });
+});
+
+test("a failed write says why and leaves the buttons usable", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  await stubBackend(page, { rpc: Object.assign({}, ab.rpc, {
+    jc_admin_entry_moderate: () => ({ status: 400, body: { code: "P0001", message: "BAD_STATE" } }),
+    jc_admin_entry_pin_set: () => ({ status: 400, body: { code: "P0001", message: "BAD_PIN" } }),
+  }) });
+  await signIn(page);
+  await page.goto("admin/");
+  await openSignups(page, "test-event");
+  const hide = card(page, "12").locator('[data-su="hide"]');
+  await hide.click();
+  await expect(page.locator("#msg")).toHaveText("That can't be done right now — reload and try again.");
+  await expect(hide).toBeEnabled();
+  await card(page, "12").locator('[data-su="pin"]').click();
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#pmEvent").click();
+  await expect(page.locator("#msg")).toHaveText("That spot can't be saved. Try again.");
+  await expect(page.locator("#pmEvent")).toBeEnabled();
+  await expect(page.locator("#pmHome")).toBeEnabled();
+});
+
+test("the list failing to load says why and offers Try again", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  let fails = 1;
+  await stubBackend(page, { rpc: Object.assign({}, ab.rpc, {
+    jc_admin_entries_list: (a, c) => (fails-- > 0 ? { status: 400, body: { code: "P0001", message: "BAD_STATE" } } : ab.rpc.jc_admin_entries_list(a, c)),
+  }) });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator('li[data-event="test-event"] [data-act="signups"]').click();
+  await expect(page.locator("#msg")).toHaveText("That can't be done right now — reload and try again.");
+  await page.locator("#suRetry").click();
+  await expect(page.locator("h2.group")).toHaveText(["Ain Al Maha · 2", "Seef Al Jubail · 1"]);
+});
+
+test("switching language keeps a half-typed banner", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator("#bannerText").fill("Half typed");
+  await page.locator("#langBtn").click();
+  await expect(page.locator("#bannerText")).toHaveValue("Half typed");
 });
