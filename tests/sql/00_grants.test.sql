@@ -30,7 +30,9 @@ declare
     'jc_admin_pets_list', 'jc_admin_stray_save', 'jc_admin_pet_care_add', 'jc_admin_pet_archive',
     'jc_admin_sighting_hide',
     -- T4
-    'jc_admin_report', 'jc_health'];
+    'jc_admin_report', 'jc_health',
+    -- T5.2 PR 3a
+    'jc_admin_broadcast_set', 'jc_admin_home_pin_set', 'jc_admin_entry_pin_set'];
 begin
   -- Pre-launch suite: fixtures are written into 'jubail' and rolled back. Refuse to run
   -- once real residents exist — post-launch tests must move to a test community.
