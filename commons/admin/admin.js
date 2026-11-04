@@ -13,6 +13,14 @@
 var state = null, cfg = null, current = null;
 /* ?event=<id> — the events list's Admin badge: open that event's editor once loaded */
 var OPEN_EVENT = new URLSearchParams(location.search).get("event");
+/* ?eventadmin=<token> — a community admin's grant link (T5.2 PR B): asked, never auto-accepted */
+var GRANT = new URLSearchParams(location.search).get("eventadmin");
+if (GRANT && !/^[A-Za-z0-9_-]{16,64}$/.test(GRANT)) GRANT = null;
+var adminEvents = [];     /* jc_me_get.admin_events — events this person runs (no code needed) */
+var admining = null;      /* id of the event whose Admins panel is open */
+var adminsData = null;    /* jc_event_admins_list for it */
+var newLink = null;       /* {event, url} — shown once, like newCode */
+var addingCode = false;   /* lock view opened from "Enter another code" (already in) */
 var scopes = [];          /* unlocked scopes: jc_me_get.admin_scopes / jc_admin_unlock */
 var events = [];          /* last jc_admin_events_list */
 var closing = null;       /* id of the event whose close form is open */
@@ -53,6 +61,8 @@ function ar(){ return jcLang() === "ar"; }
 function title(ev){ return ar() && ev.title_ar ? ev.title_ar : ev.title_en; }
 function has(s){ return scopes.indexOf(s) >= 0; }
 function isOrganizer(){ return has("events") || has("community"); }
+function isEventAdmin(){ return adminEvents.length > 0; }
+function canEnter(){ return isOrganizer() || isEventAdmin(); }
 function byId(id){ return events.filter(function(e){ return e.id === id; })[0]; }
 function fmtDate(iso){
   if (!iso) return "";
@@ -73,13 +83,14 @@ function slugify(t){
 }
 /* Any admin RPC: an expired / rotated grant comes back NOT_ADMIN → back to the lock. */
 function fail(e){
-  if (e.code === "NOT_ADMIN") { scopes = []; show("lock"); }
+  if (e.code === "NOT_ADMIN") { scopes = []; adminEvents = []; show("lock"); }
   showErr(e.code);
 }
 
 function show(name){
   current = name;
   newCode = null;         /* only rotate() draws the code, once (review PR #26) */
+  newLink = null;         /* same for a grant link */
   VIEWS[name]();
 }
 
@@ -90,7 +101,10 @@ var VIEWS = {
       '<h1>' + esc(jcT("adm_title")) + '</h1><p class="sub">' + esc(jcT("adm_lock_help")) + '</p>' +
       '<form class="panel" id="form" novalidate><label>' + esc(jcT("adm_code")) +
         '<input id="code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>' +
-        msgBox() + '<button class="btn" id="go" type="submit">' + esc(jcT("adm_unlock")) + '</button></form>';
+        msgBox() + '<button class="btn" id="go" type="submit">' + esc(jcT("adm_unlock")) + '</button>' +
+        (addingCode && canEnter() ? '<button class="btn ghost" id="back" type="button">' + esc(jcT("acct_back")) + '</button>' : '') +
+      '</form>';
+    on("back", function(){ addingCode = false; show("home"); });
     el("form").addEventListener("submit", function(ev){
       ev.preventDefault();
       var code = el("code").value.trim();
@@ -99,7 +113,8 @@ var VIEWS = {
       /* wrong code = HTTP 200 + {error: BAD_ADMIN}; rpc() rejects it (T3 contract) */
       rpc("jc_admin_unlock", { p_code: code }).then(function(s){
         scopes = s || [];
-        if (!isOrganizer()) { busy("go", false); return showErr("NOT_ORGANIZER"); }
+        if (!canEnter()) { busy("go", false); return showErr("NOT_ORGANIZER"); }
+        addingCode = false;
         loadHome();
       }, function(e){ busy("go", false); showErr(e.code); });
     });
@@ -108,9 +123,12 @@ var VIEWS = {
   home: function(){
     var html =
       '<h1>' + esc(jcT("adm_title")) + '</h1>' +
-      '<p class="sub">' + esc(jcFmt("adm_scopes", { s: scopes.map(function(s){ return jcT("scope_" + s); }).join(" · ") })) + '</p>' +
+      '<p class="sub">' + esc(scopes.length
+        ? jcFmt("adm_scopes", { s: scopes.map(function(s){ return jcT("scope_" + s); }).join(" · ") })
+        : jcT("adm_event_admin_sub")) + '</p>' +
       msgBox() +
-      '<div class="row"><button class="btn" type="button" id="newEv">' + esc(jcT("adm_new")) + '</button></div>' +
+      /* creating events is the community's step (T5.2 D2) */
+      (isOrganizer() ? '<div class="row"><button class="btn" type="button" id="newEv">' + esc(jcT("adm_new")) + '</button></div>' : '') +
       '<h2 class="group">' + esc(jcT("adm_events")) + '</h2>' +
       (events.length ? '<ul class="aevents">' + events.map(eventRow).join("") + '</ul>'
                      : '<p class="help">' + esc(jcT("adm_none")) + '</p>');
@@ -125,8 +143,12 @@ var VIEWS = {
                 '<button class="btn ghost" type="button" id="copyCode">' + esc(jcT("adm_copy")) + '</button></div>' : '');
         }).join("") + '</div>';
     }
-    html += '<div class="section"><div class="panel"><button class="btn ghost" type="button" id="exit">' + esc(jcT("adm_exit")) + '</button>' +
-      '<p class="help">' + esc(jcT("adm_exit_help")) + '</p></div></div>';
+    /* lock = drop CODE unlocks; event-admin grants are named and stay (a community admin removes them) */
+    html += '<div class="section"><div class="panel">' +
+      '<button class="btn ghost" type="button" id="addCode">' + esc(jcT("adm_add_code")) + '</button>' +
+      (scopes.length ? '<button class="btn ghost" type="button" id="exit">' + esc(jcT("adm_exit")) + '</button>' +
+        '<p class="help">' + esc(jcT("adm_exit_help")) + '</p>' : '') +
+      '</div></div>';
     el("view").innerHTML = html;
 
     on("newEv", function(){ openEditor(null); });
@@ -141,11 +163,16 @@ var VIEWS = {
         .then(function(){ el("copyCode").textContent = jcT("adm_copied"); },
               function(){ showErr("COPY_FAILED"); });   /* never let them think it copied */
     });
+    on("addCode", function(){ addingCode = true; show("lock"); });
     on("exit", function(){
       busy("exit", true);
-      rpc("jc_admin_exit").then(function(){ scopes = []; events = []; show("lock"); },
-                                function(e){ busy("exit", false); fail(e); });
+      rpc("jc_admin_exit").then(function(){
+        scopes = [];
+        if (isEventAdmin()) return loadHome();        /* still runs their own events */
+        events = []; show("lock");
+      }, function(e){ busy("exit", false); fail(e); });
     });
+    wireAdmins();
     var closeForm = el("closeForm");
     if (closeForm) closeForm.addEventListener("submit", function(e2){ e2.preventDefault(); closeEvent(); });
   },
@@ -225,7 +252,8 @@ function eventRow(e){
   function btn(a, label, ghost){
     return '<button class="btn' + (ghost ? ' ghost' : '') + ' small" type="button" data-act="' + a + '" data-id="' + esc(e.id) + '">' + esc(label) + '</button>';
   }
-  if (e.status === "draft") acts = btn("edit", jcT("adm_edit"), true) + btn("publish", jcT("adm_publish"));
+  if (e.status === "draft") acts = btn("edit", jcT("adm_edit"), true) +
+    (isOrganizer() ? btn("publish", jcT("adm_publish")) : '<span class="help">' + esc(jcT("adm_publish_note")) + '</span>');
   if (e.status === "live") {
     acts = btn("edit", jcT("adm_edit"), true) +
       btn(e.signups_open ? "pause" : "open", jcT(e.signups_open ? "adm_pause_signups" : "adm_open_signups"), true) +
@@ -233,19 +261,22 @@ function eventRow(e){
       '<a class="btn ghost small" href="../events/?id=' + esc(e.id) + '">' + esc(jcT("adm_view")) + '</a>';
   }
   if (e.status === "archived") acts = '<a class="btn ghost small" href="../events/?id=' + esc(e.id) + '">' + esc(jcT("adm_numbers")) + '</a>';
+  if (e.status !== "archived" && has("community")) acts += btn("admins", jcT("adm_admins"), true);
   return '<li data-event="' + esc(e.slug) + '"><div><b>' + esc(title(e)) + '</b><small>' + esc(line) + '</small></div>' +
     '<div class="acts">' + acts + '</div>' +
     (closing === e.id
       ? '<form class="closeform" id="closeForm" novalidate><p class="help">' + esc(jcFmt("adm_close_help", { slug: e.slug })) + '</p>' +
         '<input id="closeSlug" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="' + esc(e.slug) + '">' +
         '<button class="btn danger" id="closeGo" type="submit">' + esc(jcT("adm_close_go")) + '</button></form>'
-      : '') + '</li>';
+      : '') +
+    (admining === e.id ? adminsPanel(e) : '') + '</li>';
 }
 
 function act(a, id, b){
   var e = byId(id);
   if (!e) return;
   if (a === "edit") return openEditor(e);
+  if (a === "admins") return toggleAdmins(id);
   if (a === "close") { closing = closing === id ? null : id; show("home"); if (el("closeSlug")) el("closeSlug").focus(); return; }
   if (a === "publish" && !window.confirm(jcFmt("adm_publish_confirm", { t: title(e) }))) return;
   var call = a === "publish" ? rpc("jc_admin_event_publish", { p_event: id })
@@ -279,6 +310,97 @@ function rotate(scope, b){
     newCode = { scope: r.scope, code: r.code };   /* drawn once; the next show() drops it */
     VIEWS.home();
   }, function(err){ b.disabled = false; fail(err); });
+}
+
+/* ---------- event admins (T5.2 PR B; community admin only — the server enforces it) ---------- */
+function adminsPanel(e){
+  if (!adminsData) return '<div class="adminsbox"><p class="help">' + esc(jcT("working")) + '</p></div>';
+  var rows = adminsData.admins.map(function(a){
+    var home = a.number ? jcHomeLabel(a) : "";
+    return '<li><span><b>' + esc(a.name) + '</b>' + (home ? '<small>' + esc(home) + '</small>' : '') + '</span>' +
+      '<button class="mini danger" type="button" data-unadmin="' + esc(a.user_id) + '" data-name="' + esc(a.name) + '">' +
+      esc(jcT("adm_admins_remove")) + '</button></li>';
+  }).concat(adminsData.links.map(function(l){
+    return '<li><span><small>' + esc(jcFmt("adm_admins_pending", { d: fmtDate(l.expires_at) })) + '</small></span>' +
+      '<button class="mini" type="button" data-unlink="' + esc(l.id) + '">' + esc(jcT("adm_admins_cancel_link")) + '</button></li>';
+  }));
+  return '<div class="adminsbox"><b>' + esc(jcT("adm_admins_title")) + '</b>' +
+    (rows.length ? '<ul class="adminlist">' + rows.join("") + '</ul>' : '<p class="help">' + esc(jcT("adm_admins_none")) + '</p>') +
+    (newLink && newLink.event === e.id
+      ? '<div class="codebox" role="status"><span>' + esc(jcT("adm_admins_link_help")) + '</span>' +
+        '<b class="linkbox" id="newLink">' + esc(newLink.url) + '</b>' +
+        '<button class="btn ghost small" type="button" id="copyLink">' + esc(jcT("adm_copy")) + '</button>' +
+        (navigator.share ? '<button class="btn ghost small" type="button" id="shareLink">' + esc(jcT("mh_share")) + '</button>' : '') +
+        '</div>'
+      : '<button class="btn small" type="button" id="makeLink">' + esc(jcT("adm_admins_link")) + '</button>') +
+    '</div>';
+}
+
+function toggleAdmins(id){
+  closing = null;
+  if (admining === id) { admining = null; adminsData = null; return show("home"); }
+  admining = id; adminsData = null; show("home");
+  rpc("jc_event_admins_list", { p_event: id }).then(function(d){
+    if (admining !== id) return;
+    adminsData = d; show("home");
+  }, fail);
+}
+
+function wireAdmins(){
+  if (!admining) return;
+  var keepLink = newLink;
+  on("makeLink", function(){
+    busy("makeLink", true);
+    rpc("jc_event_admin_link_create", { p_event: admining }).then(function(r){
+      var url = location.origin + location.pathname + "?eventadmin=" + encodeURIComponent(r.token);
+      return rpc("jc_event_admins_list", { p_event: admining }).then(function(d){
+        adminsData = d;
+        current = "home";
+        newLink = { event: admining, url: url };     /* drawn once; the next show() drops it */
+        VIEWS.home();
+      });
+    }, function(err){ busy("makeLink", false); fail(err); });
+  });
+  on("copyLink", function(){
+    (navigator.clipboard ? navigator.clipboard.writeText(keepLink.url) : Promise.reject())
+      .then(function(){ el("copyLink").textContent = jcT("adm_copied"); },
+            function(){ showErr("COPY_FAILED"); });
+  });
+  on("shareLink", function(){ navigator.share({ url: keepLink.url }).catch(function(){}); });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-unadmin], [data-unlink]"), function(b){
+    b.addEventListener("click", function(){
+      if (b.dataset.unadmin && !window.confirm(jcFmt("adm_admins_remove_confirm", { n: b.dataset.name }))) return;
+      b.disabled = true;
+      rpc("jc_event_admin_revoke", { p_event: admining, p_user: b.dataset.unadmin || null, p_link: b.dataset.unlink || null })
+        .then(function(d){ adminsData = d; show("home"); showOk(jcT("adm_admins_removed")); },
+              function(err){ b.disabled = false; fail(err); });
+    });
+  });
+}
+
+/* The grant link's landing: say what the role is, ask, then accept (single use, server-checked). */
+function acceptView(token){
+  current = "accept";
+  try { history.replaceState(null, "", location.pathname); } catch(e){}   /* single use: drop it from the URL */
+  el("view").innerHTML =
+    '<h1>' + esc(jcT("acc_title")) + '</h1>' +
+    '<div class="panel"><p>' + esc(jcT("acc_body")) + '</p>' +
+      '<ul class="acclist"><li>' + esc(jcT("acc_can")) + '</li><li>' + esc(jcT("acc_see")) + '</li><li>' + esc(jcT("acc_ends")) + '</li></ul>' +
+      msgBox() +
+      '<button class="btn" type="button" id="accYes">' + esc(jcT("acc_yes")) + '</button>' +
+      '<button class="btn ghost" type="button" id="accNo">' + esc(jcT("acc_no")) + '</button></div>';
+  on("accNo", function(){ GRANT = null; if (canEnter()) loadHome(); else location.href = "../"; });
+  on("accYes", function(){
+    busy("accYes", true);
+    rpc("jc_event_admin_accept", { p_token: token }).then(function(r){
+      GRANT = null;
+      if (adminEvents.indexOf(r.event_id) < 0) adminEvents.push(r.event_id);
+      OPEN_EVENT = null;
+      return loadHome().then(function(){
+        showOk(jcFmt("acc_done", { t: ar() && r.title_ar ? r.title_ar : r.title_en }));
+      });
+    }, function(err){ busy("accYes", false); showErr(err.code); });
+  });
 }
 
 function openEditor(ev){
@@ -517,7 +639,7 @@ function loadHome(){
     OPEN_EVENT = null;                      /* once: Cancel / Save return to the list */
     if (ev) openEditor(ev); else show("home");
   },
-    function(e){ if (e.code === "NOT_ADMIN") { scopes = []; show("lock"); } else { show("lock"); showErr(e.code); } });
+    function(e){ if (e.code === "NOT_ADMIN") { scopes = []; adminEvents = []; show("lock"); } else { show("lock"); showErr(e.code); } });
 }
 
 /* ---------- boot ---------- */
@@ -533,6 +655,7 @@ el("langBtn").addEventListener("click", function(){
   jcSetLang(ar() ? "en" : "ar");
   paint();
   if (current === "editor") return drawQuestions();   /* never throw away the form */
+  if (current === "accept") return acceptView(GRANT);   /* same link, other language */
   if (current) show(current);
 });
 
@@ -541,13 +664,17 @@ paint();
 jcHit("admin");
 jcState().then(function(s){
   state = s;
-  if (s.status === "signed_out") { location.replace("../account/?next=" + encodeURIComponent("../admin/")); return; }
-  if (s.status === "not_member") { location.replace("../account/?view=join&next=" + encodeURIComponent("../admin/")); return; }
+  /* a grant link survives sign-in / joining: it comes back here (jcSafeNext allows it) */
+  var back = GRANT ? "../admin/?eventadmin=" + GRANT : "../admin/";
+  if (s.status === "signed_out") { location.replace("../account/?next=" + encodeURIComponent(back)); return; }
+  if (s.status === "not_member") { location.replace("../account/?view=join&next=" + encodeURIComponent(back)); return; }
   scopes = s.me.admin_scopes || [];
+  adminEvents = s.me.admin_events || [];
   return jcAnon("jc_config_get", { p_community: s.me.community }).catch(function(){ return null; }).then(function(c){
     cfg = c;
     paint();
-    if (isOrganizer()) return loadHome();
+    if (GRANT) return acceptView(GRANT);
+    if (canEnter()) return loadHome();
     show("lock");
   });
 }, function(e){

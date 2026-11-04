@@ -80,10 +80,11 @@ var VIEWS = {
       var live = evs.filter(function(e){ return e.status === "live"; })
                     .sort(function(a, b){ return when(a) - when(b); });
       var past = evs.filter(function(e){ return e.status === "archived"; });
-      /* organizers (events / community scope) manage every event for now; per-event
-         admins (T5.2 next) will narrow this to the events they were granted */
+      /* Admin badge: organizers (events / community scope) on every event; event admins
+         (T5.2 PR A/B) only on the events they run */
       var scopes = (state.me && state.me.admin_scopes) || [];
       var organizer = scopes.indexOf("events") >= 0 || scopes.indexOf("community") >= 0;
+      var runs = (state.me && state.me.admin_events) || [];
       /* live: View + Sign up (only while sign-ups are open and this home isn't in);
          no status pill — the button says it. Past: the whole card opens the numbers. */
       function row(e){
@@ -98,7 +99,7 @@ var VIEWS = {
         }
         return '<li class="evcard" data-event="' + esc(e.slug) + '">' +
           '<div class="evtop"><span>' + info + '</span>' +
-            (organizer ? '<a class="badge" href="../admin/?event=' + encodeURIComponent(e.id) + '">' + esc(jcT("ev_admin")) + '</a>' : '') +
+            (organizer || runs.indexOf(e.id) >= 0 ? '<a class="badge" href="../admin/?event=' + encodeURIComponent(e.id) + '">' + esc(jcT("ev_admin")) + '</a>' : '') +
           '</div>' +
           '<div class="evacts"><a class="btn ghost" href="' + url + '">' + esc(jcT("ev_view")) + '</a>' +
             (e.signups_open && e.my_status !== "in"

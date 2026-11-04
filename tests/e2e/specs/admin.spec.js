@@ -378,3 +378,129 @@ test("question size cap counts bytes the way the database stores them", async ({
   expect(r.stored).toBe(8193);                       // refused exactly when the stored text passes 8 KB…
   expect(r.plain).toBeLessThanOrEqual(8192);         // …while plain JSON still looked fine
 });
+
+// ---- T5.2 PR B: per-event admins ----
+
+const GRANT = "TOKEN_grantlink_abcdefgh";
+
+test("event admin (no code): straight to their events — no New event, Publish, Codes or Lock", async ({ page }) => {
+  const ab = adminBackend({ adminEvents: [LIVE_ID] });
+  const { calls } = await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await expect(page.locator("#code")).toHaveCount(0);                   // no lock screen
+  await expect(page.locator(".sub")).toHaveText("You help run these events.");
+  await expect(page.locator(".aevents li")).toHaveCount(1);
+  await expect(page.locator(".aevents li")).toContainText("Test Event");
+  await expect(page.locator("#newEv")).toHaveCount(0);
+  await expect(page.locator('[data-act="admins"]')).toHaveCount(0);     // appointing is the community's
+  await expect(page.locator("#exit")).toHaveCount(0);                   // nothing to lock: no code
+  await expect(page.locator("#addCode")).toBeVisible();
+  await page.locator('[data-act="pause"]').click();                    // runs their own event
+  await expect(page.locator("#msg")).toHaveText(/paused/i);
+  expect(lastCall(calls, "jc_admin_event_signups").args).toEqual({ p_event: LIVE_ID, p_open: false });
+});
+
+test("event admin of a draft sees Edit and 'a community admin publishes it' — no Publish", async ({ page }) => {
+  const ab = adminBackend({ adminEvents: [DRAFT_ID] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  const row = page.locator('[data-event="national-day-2026"]');
+  await expect(row.locator('[data-act="publish"]')).toHaveCount(0);
+  await expect(row).toContainText("A community admin publishes it.");
+  await expect(row.locator('[data-act="edit"]')).toBeVisible();
+});
+
+test("community admin: Admins panel — make a link (shown once), see holders, remove, cancel a link", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["community"],
+    admins: [{ user_id: "u-7", name: "Omar", village: "ain-al-maha", type: "villa", building: null, number: "7" }] });
+  const { calls } = await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  const row = page.locator('[data-event="test-event"]');
+  await row.locator('[data-act="admins"]').click();
+  await expect(row.locator(".adminlist li")).toHaveCount(1);
+  await expect(row.locator(".adminlist li").first()).toContainText("Omar");
+  await expect(row.locator(".adminlist li").first()).toContainText("Villa 7");
+  await row.locator("#makeLink").click();
+  await expect(page.locator("#newLink")).toHaveText("http://localhost:4173/commons/admin/?eventadmin=TOKEN_eventadmin_1abcdef");
+  expect(lastCall(calls, "jc_event_admin_link_create").args).toEqual({ p_event: LIVE_ID });
+  await expect(row.locator(".adminlist li")).toHaveCount(2);               // + the unused link
+  await expect(row.locator(".adminlist li").last()).toContainText("Unused link");
+  page.once("dialog", (d) => d.accept());
+  await row.locator('[data-unadmin="u-7"]').click();
+  await expect(page.locator("#msg")).toHaveText("Removed.");
+  await expect(page.locator("#newLink")).toHaveCount(0);                   // the link is shown once
+  expect(lastCall(calls, "jc_event_admin_revoke").args).toEqual({ p_event: LIVE_ID, p_user: "u-7", p_link: null });
+  await row.locator('[data-unlink="link-1"]').click();
+  await expect(row.locator(".adminlist li")).toHaveCount(0);
+  await expect(row).toContainText("No one yet.");
+  expect(lastCall(calls, "jc_event_admin_revoke").args).toEqual({ p_event: LIVE_ID, p_user: null, p_link: "link-1" });
+});
+
+test("the old shared events code runs events but can't appoint admins", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await expect(page.locator(".aevents li")).toHaveCount(3);
+  await expect(page.locator('[data-act="admins"]')).toHaveCount(0);
+});
+
+test("grant link: asks first (nothing on page load), says what the role sees, accepts once", async ({ page }) => {
+  const ab = adminBackend({ acceptable: [GRANT] });
+  const { calls } = await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/?eventadmin=" + GRANT);
+  await expect(page.locator("h1")).toHaveText("Help run an event");
+  await expect(page.locator(".acclist li")).toHaveCount(3);
+  await expect(page.locator(".acclist")).toContainText("house number, map pin and answers");
+  await expect(page.locator(".acclist")).toContainText("5 days after the event closes");
+  expect(new URL(page.url()).search).toBe("");                             // token dropped from the URL
+  expect(calls.some((c) => c.name === "jc_event_admin_accept")).toBe(false);
+  await page.locator("#accYes").click();
+  await expect(page.locator("#msg")).toHaveText("You're now an admin of Test Event.");
+  await expect(page.locator(".aevents li")).toHaveCount(1);
+  expect(calls.filter((c) => c.name === "jc_event_admin_accept").map((c) => c.args)).toEqual([{ p_token: GRANT }]);
+});
+
+test("grant link: used / expired → explained; language switch keeps the question", async ({ page }) => {
+  const ab = adminBackend({ acceptable: [] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/?eventadmin=" + GRANT);
+  await page.locator("#langBtn").click();
+  await expect(page.locator("h1")).toHaveText("ساعد في إدارة فعالية");
+  await page.locator("#langBtn").click();
+  await page.locator("#accYes").click();
+  await expect(page.locator("#msg")).toHaveText("This link has been used, has expired, or was cancelled — ask for a new one.");
+});
+
+test("grant link while signed out: sign in, then straight back to the question", async ({ page }) => {
+  const ab = adminBackend({ acceptable: [GRANT] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await page.goto("admin/?eventadmin=" + GRANT);
+  await expect(page).toHaveURL(/\/commons\/account\/\?next=/);
+  expect(new URL(page.url()).searchParams.get("next")).toBe("../admin/?eventadmin=" + GRANT);
+  await page.locator("#email").fill("a@example.com");
+  await page.locator("#password").fill("correct-horse");
+  await page.locator("#go").click();
+  await expect(page).toHaveURL(new RegExp("/commons/admin/"));
+  await expect(page.locator("h1")).toHaveText("Help run an event");
+});
+
+test("already in: 'Enter another code' opens the code box with Back; a community code adds Codes", async ({ page }) => {
+  const ab = adminBackend({ adminEvents: [LIVE_ID] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator("#addCode").click();
+  await expect(page.locator("#code")).toBeVisible();
+  await page.locator("#back").click();
+  await expect(page.locator(".aevents li")).toHaveCount(1);
+  await page.locator("#addCode").click();
+  await unlock(page, "COMMUNITY-1");
+  await expect(page.locator(".aevents li")).toHaveCount(3);                 // community admin: every event
+  await expect(page.locator("h2.group").filter({ hasText: /codes/i })).toBeVisible();
+});

@@ -14,7 +14,7 @@ Never reaches the real Supabase project: it runs on the same stubs as the specs
 `$ARGUMENTS` → `<path> [persona] [lang] [full]`, any order after the path:
 
 - **path** — under `/commons/`: `""` (hub), `events/`, `events/?id=11111111-1111-4111-8111-111111111111` (live test event), `events/?id=22222222-2222-4222-8222-222222222222` (archived Halloween), `home/`, `account/`, `admin/`
-- **persona** — `member` (default), `anon`, `member-no-home`, `member-no-pin`, `organizer`, `community-admin`
+- **persona** — `member` (default), `anon`, `member-no-home`, `member-no-pin`, `organizer`, `community-admin`, `event-admin` (runs only the live test event)
 - **lang** — `en` (default) or `ar`
 - **full** — whole page instead of one screen
 
