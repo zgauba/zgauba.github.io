@@ -297,6 +297,8 @@ test("write questions from scratch: pick-one with icons, yes/no, short answer �
   const { calls } = await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await openNewDraft(page, "Garage Sale");
+  await expect(page.locator("fieldset").filter({ hasText: "Sign-up questions" }))
+    .toContainText("Avoid names, phone numbers or children's ages");
   let q = await addQ(page);
   await q.locator('[data-q-label="en"]').fill("What are you selling?");
   await q.locator('[data-q-label="ar"]').fill("ماذا تبيع؟");

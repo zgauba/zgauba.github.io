@@ -170,7 +170,8 @@ var VIEWS = {
         }).join("") + '</fieldset>' +
         '<fieldset><legend>' + esc(jcT("ed_questions")) + '</legend><div id="qs"></div>' +
           (schemaLocked ? '<p class="help">' + esc(jcT("ed_q_locked")) + '</p>'
-            : '<button class="btn ghost" type="button" id="addQ">' + esc(jcT("ed_q_add")) + '</button>' +
+            : '<p class="help">' + esc(jcT("ed_q_privacy")) + '</p>' +
+              '<button class="btn ghost" type="button" id="addQ">' + esc(jcT("ed_q_add")) + '</button>' +
               '<div class="row"><button class="btn ghost small" type="button" id="useHalloween">' + esc(jcT("ed_q_halloween")) + '</button>' +
               '<button class="btn ghost small" type="button" id="clearQs">' + esc(jcT("ed_q_clear")) + '</button></div>') +
         '</fieldset>' +
