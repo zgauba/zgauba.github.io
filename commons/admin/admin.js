@@ -31,6 +31,8 @@ var ed = null;            /* editor state: { ev (original or null), qs, locked, 
 var vmap = null;          /* Leaflet map: the venue pin (editor) or a pin move (pinmove view) */
 var su = null;            /* sign-ups view (T5.2 PR 4): { ev, list (jc_admin_entries_list) | null, open: {id, what} | null } */
 var pm = null;            /* pin move: { x (an entry of su.list) } */
+var owner = false;        /* jc_me_get.is_owner — the platform owner reads feedback (T5.3) */
+var fb = null;            /* jc_feedback_list: { unread, items } */
 
 /* Halloween 2026, as residents knew it (jubail-halloween/): friendly wording and the
    pin hints PR 5 draws (ring = which gate, icon = what's handed out). Arabic: DRAFT. */
@@ -115,7 +117,7 @@ function title(ev){ return ar() && ev.title_ar ? ev.title_ar : ev.title_en; }
 function has(s){ return scopes.indexOf(s) >= 0; }
 function isOrganizer(){ return has("events") || has("community"); }
 function isEventAdmin(){ return adminEvents.length > 0; }
-function canEnter(){ return isOrganizer() || isEventAdmin(); }
+function canEnter(){ return isOrganizer() || isEventAdmin() || owner; }
 function byId(id){ return events.filter(function(e){ return e.id === id; })[0]; }
 function fmtDate(iso){
   if (!iso) return "";
@@ -141,7 +143,7 @@ function fail(e){
      re-read who this is, then land wherever they still belong */
   admining = null; adminsData = null; closing = null; su = null; pm = null;
   rpc("jc_me_get").then(function(me){
-    scopes = me.admin_scopes || []; adminEvents = me.admin_events || [];
+    scopes = me.admin_scopes || []; adminEvents = me.admin_events || []; owner = !!me.is_owner;
     if (!canEnter()) { show("lock"); return showErr("NOT_ADMIN"); }
     return loadHome().then(function(){ showErr("NOT_ADMIN"); });
   }, function(){ scopes = []; adminEvents = []; show("lock"); showErr("NOT_ADMIN"); });
@@ -154,7 +156,8 @@ function show(name){
   if (vmap) { vmap.remove(); vmap = null; }
   /* back, in the top bar: sign-ups → the events list; pin move → the sign-ups */
   jcBack(name === "signups" ? leaveSignups
-       : name === "pinmove" ? function(){ pm = null; show("signups"); } : null, "back");
+       : name === "pinmove" ? function(){ pm = null; show("signups"); }
+       : name === "feedback" ? function(){ show("home"); } : null, "back");
   VIEWS[name]();
 }
 
@@ -191,6 +194,9 @@ var VIEWS = {
         ? jcFmt("adm_scopes", { s: scopes.map(function(s){ return jcT("scope_" + s); }).join(" · ") })
         : jcT("adm_event_admin_sub")) + '</p>' +
       msgBox() +
+      /* T5.3: the platform owner's feedback inbox */
+      (owner ? '<div class="panel fbentry"><button class="btn' + (fb && fb.unread ? '' : ' ghost') + '" type="button" id="fbOpen">' +
+        esc(fb ? jcFmt("adm_fb_open", { n: fb.unread }) : jcT("adm_fb_title")) + '</button></div>' : '') +
       /* creating events is the community's step (T5.2 D2) */
       (isOrganizer() ? '<div class="row"><button class="btn" type="button" id="newEv">' + esc(jcT("adm_new")) + '</button></div>' : '') +
       '<h2 class="group">' + esc(jcT("adm_events")) + '</h2>' +
@@ -224,6 +230,7 @@ var VIEWS = {
     el("view").innerHTML = html;
 
     on("newEv", function(){ openEditor(null); });
+    on("fbOpen", function(){ show("feedback"); });
     Array.prototype.forEach.call(document.querySelectorAll("[data-act]"), function(b){
       b.addEventListener("click", function(){ act(b.dataset.act, b.dataset.id, b); });
     });
@@ -402,6 +409,33 @@ var VIEWS = {
       }).join("") : '<p class="help">' + esc(jcT("adm_su_none")) + '</p>');
     on("csv", downloadCsv);
     wireEntries();
+  },
+
+  /* T5.3 — feedback inbox (platform owner only; the server refuses anyone else) */
+  feedback: function(){
+    var html = '<h1>' + esc(jcT("adm_fb_title")) + '</h1>' + msgBox();
+    if (!fb) {
+      el("view").innerHTML = html + '<p class="help">' + esc(jcT("working")) + '</p>';
+      return rpc("jc_feedback_list").then(function(d){ fb = d; if (current === "feedback") VIEWS.feedback(); }, fail);
+    }
+    html += '<p class="sub">' + esc(jcFmt("adm_fb_unread", { n: fb.unread })) + '</p>' +
+      (fb.items.length ? '<ul class="fblist">' + fb.items.map(function(f){
+        return '<li class="' + (f.read ? 'read' : '') + '"><div class="fbhead"><span class="fbkind">' + esc(jcT("fb_kind_" + f.kind)) + '</span>' +
+          '<small>' + esc([f.home || jcT("adm_fb_no_home"), f.community_name, fmtDate(f.created_at)].filter(Boolean).join(" · ")) + '</small></div>' +
+          '<p class="fbbody" dir="auto">' + esc(f.body) + '</p>' +
+          (f.page ? '<small class="fbpage" dir="ltr">' + esc(f.page) + '</small>' : '') +
+          '<button class="mini" type="button" data-fb="' + esc(f.id) + '" data-read="' + (f.read ? '0' : '1') + '">' +
+            esc(jcT(f.read ? "adm_fb_mark_unread" : "adm_fb_mark_read")) + '</button></li>';
+      }).join("") + '</ul>' : '<p class="help">' + esc(jcT("adm_fb_none")) + '</p>');
+    el("view").innerHTML = html;
+    Array.prototype.forEach.call(document.querySelectorAll("[data-fb]"), function(b){
+      b.addEventListener("click", function(){
+        b.disabled = true;
+        rpc("jc_feedback_mark_read", { p_id: b.dataset.fb, p_read: b.dataset.read === "1" }).then(function(d){
+          fb = d; if (current === "feedback") VIEWS.feedback();
+        }, function(err){ b.disabled = false; fail(err); });
+      });
+    });
   },
 
   /* T5.2 PR 4 — move one sign-up's pin: the home's own pin (everywhere) or this event only */
@@ -1162,13 +1196,16 @@ function saveEvent(){
 }
 
 function loadHome(){
+  if (owner) rpc("jc_feedback_list").then(function(d){ fb = d; if (current === "home") VIEWS.home(); }, function(){});
   return rpc("jc_admin_events_list").then(function(list){
     events = list;
     var ev = OPEN_EVENT && events.filter(function(x){ return x.id === OPEN_EVENT; })[0];
     OPEN_EVENT = null;                      /* once: Cancel / Save return to the list */
     if (ev) openEditor(ev); else show("home");
   },
-    function(e){ if (e.code === "NOT_ADMIN") { scopes = []; adminEvents = []; show("lock"); showErr(e.code); } else { show("lock"); showErr(e.code); } });
+    function(e){
+      if (e.code === "NOT_ADMIN" && owner) { events = []; return show("home"); }   /* owner without an organizer code */
+      if (e.code === "NOT_ADMIN") { scopes = []; adminEvents = []; show("lock"); showErr(e.code); } else { show("lock"); showErr(e.code); } });
 }
 
 /* ---------- boot ---------- */
@@ -1206,6 +1243,7 @@ jcState().then(function(s){
   if (s.status === "not_member") { location.replace("../account/?view=join&next=" + encodeURIComponent(back)); return; }
   scopes = s.me.admin_scopes || [];
   adminEvents = s.me.admin_events || [];
+  owner = !!s.me.is_owner;
   return jcAnon("jc_config_get", { p_community: s.me.community }).catch(function(){ return null; }).then(function(c){
     cfg = c;
     paint();

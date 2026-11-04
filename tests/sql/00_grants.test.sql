@@ -36,7 +36,9 @@ declare
     -- T5.2 PR A (per-event admins)
     'jc_event_admin_link_create', 'jc_event_admin_accept', 'jc_event_admins_list', 'jc_event_admin_revoke',
     -- T5.2 PR 3b (event kinds)
-    'jc_admin_entry_spot_set'];
+    'jc_admin_entry_spot_set',
+    -- T5.3 (feedback)
+    'jc_feedback_send', 'jc_feedback_list', 'jc_feedback_mark_read'];
 begin
   -- Pre-launch suite: fixtures are written into 'jubail' and rolled back. Refuse to run
   -- once real residents exist — post-launch tests must move to a test community.

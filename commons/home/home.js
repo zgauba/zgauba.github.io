@@ -151,6 +151,15 @@ var VIEWS = {
           '<a class="btn ghost" id="toAdmin" href="../admin/">' + esc(jcT("mh_organizer")) + '</a>' +
           '<button class="btn ghost" type="button" id="signOut">' + esc(jcT("acct_sign_out")) + '</button>' +
         '</div>' +
+        /* T5.3 feedback: goes to the person who runs Commons, with this home (said up front) */
+        '<div class="section" id="feedback"><h2>' + esc(jcT("fb_title")) + '</h2><form class="panel" id="fbForm" novalidate>' +
+          '<div class="opts" role="group" aria-label="' + esc(jcT("fb_kind")) + '">' + ["idea", "problem", "other"].map(function(k){
+            return '<button type="button" data-fbkind="' + k + '" aria-pressed="' + (fbKind === k) + '">' + esc(jcT("fb_kind_" + k)) + '</button>';
+          }).join("") + '</div>' +
+          '<textarea id="fbBody" maxlength="1000" dir="auto" aria-label="' + esc(jcT("fb_title")) + '" placeholder="' + esc(jcT("fb_placeholder")) + '"></textarea>' +
+          '<p class="help">' + esc(jcFmt("fb_disclosure", { h: homeTitle() })) + '</p>' +
+          '<button class="btn" type="submit" id="fbSend">' + esc(jcT("fb_send")) + '</button>' +
+        '</form></div>' +
         '<div class="section"><div class="panel">' +
           '<button class="btn ghost danger" type="button" id="leave">' + esc(jcT("mh_leave")) + '</button>' +
           '<p class="help">' + esc(jcT("mh_delete_help")) + '</p>' +
@@ -202,6 +211,7 @@ var VIEWS = {
         state.me = m2; show("myhome"); showOk(jcT("mh_saved"));
       }, function(e){ busy("saveName", false); showErr(e.code); });
     });
+    wireFeedback();
     on("signOut", function(){ jcDb.auth.signOut().then(function(){ location.href = "../"; }); });
     on("leave", function(){
       if (!window.confirm(jcFmt("mh_leave_confirm", { h: homeTitle() }))) return;
@@ -317,6 +327,33 @@ function loadHistory(){
       : '<p class="help">' + esc(jcT("mh_history_none")) + '</p>';
     el("historySec").hidden = false;
   }, function(){ /* module off or offline: nothing to show */ });
+}
+
+/* ---------- feedback (T5.3) ---------- */
+var fbKind = "idea", fbDraft = "";
+function wireFeedback(){
+  var f = el("fbForm");
+  if (!f) return;
+  var t = el("fbBody");
+  t.value = fbDraft;                       /* survives a language switch / tab change */
+  t.addEventListener("input", function(){ fbDraft = t.value; });
+  Array.prototype.forEach.call(f.querySelectorAll("[data-fbkind]"), function(b){
+    b.addEventListener("click", function(){
+      fbKind = b.dataset.fbkind;
+      Array.prototype.forEach.call(f.querySelectorAll("[data-fbkind]"), function(x){ x.setAttribute("aria-pressed", String(x === b)); });
+    });
+  });
+  if (location.hash === "#feedback") { el("feedback").scrollIntoView(); t.focus(); }
+  f.addEventListener("submit", function(e){
+    e.preventDefault();
+    var body = t.value.trim();
+    if (!body) return showErr("FB_EMPTY");
+    busy("fbSend", true);
+    rpc("jc_feedback_send", { p_kind: fbKind, p_body: body, p_page: location.pathname.replace(/^.*\/commons/, "").slice(0, 60) || "/" })
+      .then(function(){
+        fbDraft = ""; t.value = ""; busy("fbSend", false); showOk(jcT("fb_sent"));
+      }, function(err){ busy("fbSend", false); showErr(err.code); });
+  });
 }
 
 function doInvite(){
