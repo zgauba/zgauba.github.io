@@ -32,7 +32,9 @@ declare
     -- T4
     'jc_admin_report', 'jc_health',
     -- T5.2 PR 3a
-    'jc_admin_broadcast_set', 'jc_admin_home_pin_set', 'jc_admin_entry_pin_set'];
+    'jc_admin_broadcast_set', 'jc_admin_home_pin_set', 'jc_admin_entry_pin_set',
+    -- T5.2 PR A (per-event admins)
+    'jc_event_admin_link_create', 'jc_event_admin_accept', 'jc_event_admins_list', 'jc_event_admin_revoke'];
 begin
   -- Pre-launch suite: fixtures are written into 'jubail' and rolled back. Refuse to run
   -- once real residents exist — post-launch tests must move to a test community.
