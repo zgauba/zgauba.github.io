@@ -28,7 +28,9 @@ var closing = null;       /* id of the event whose close form is open */
 var newCode = null;       /* {scope, code} — shown once: any later re-render drops it */
 var ed = null;            /* editor state: { ev (original or null), qs, locked, slugTouched,
                              kind, look, venue {lat,lng}|null, tpl (new events) } */
-var vmap = null;          /* Leaflet map for the venue pin while the editor is open */
+var vmap = null;          /* Leaflet map: the venue pin (editor) or a pin move (pinmove view) */
+var su = null;            /* sign-ups view (T5.2 PR 4): { ev, list (jc_admin_entries_list) | null, open: {id, what} | null } */
+var pm = null;            /* pin move: { x (an entry of su.list) } */
 
 /* Halloween 2026, as residents knew it (jubail-halloween/): friendly wording and the
    pin hints PR 5 draws (ring = which gate, icon = what's handed out). Arabic: DRAFT. */
@@ -132,7 +134,7 @@ function fail(e){
   if (e.code !== "NOT_ADMIN") return showErr(e.code);
   /* one event closing or one grant ending must not drop the others (code review PR B):
      re-read who this is, then land wherever they still belong */
-  admining = null; adminsData = null; closing = null;
+  admining = null; adminsData = null; closing = null; su = null; pm = null;
   rpc("jc_me_get").then(function(me){
     scopes = me.admin_scopes || []; adminEvents = me.admin_events || [];
     if (!canEnter()) { show("lock"); return showErr("NOT_ADMIN"); }
@@ -186,6 +188,14 @@ var VIEWS = {
       '<h2 class="group">' + esc(jcT("adm_events")) + '</h2>' +
       (events.length ? '<ul class="aevents">' + events.map(eventRow).join("") + '</ul>'
                      : '<p class="help">' + esc(jcT("adm_none")) + '</p>');
+    /* the banner (T5.2 PR 4): organizers any time; an event admin while an event they run is live */
+    if (isOrganizer() || events.some(function(e){ return e.status === "live"; })) {
+      html += '<h2 class="group">' + esc(jcT("adm_banner")) + '</h2>' +
+        '<form class="panel" id="bannerForm" novalidate><p class="help">' + esc(jcT("adm_banner_help")) + '</p>' +
+        '<textarea id="bannerText" maxlength="280" dir="auto" aria-label="' + esc(jcT("adm_banner")) + '"></textarea>' +
+        '<div class="row"><button class="btn" id="bannerSave" type="submit">' + esc(jcT("adm_banner_post")) + '</button>' +
+        '<button class="btn ghost" id="bannerClear" type="button">' + esc(jcT("adm_banner_clear")) + '</button></div></form>';
+    }
     if (has("community")) {
       html += '<h2 class="group">' + esc(jcT("adm_codes")) + '</h2><div class="panel"><p class="help">' + esc(jcT("adm_codes_help")) + '</p>' +
         ["join", "community", "events"].map(function(s){
@@ -227,6 +237,7 @@ var VIEWS = {
       }, function(e){ busy("exit", false); fail(e); });
     });
     wireAdmins();
+    wireBanner();
     var closeForm = el("closeForm");
     if (closeForm) closeForm.addEventListener("submit", function(e2){ e2.preventDefault(); closeEvent(); });
   },
@@ -353,6 +364,65 @@ var VIEWS = {
     });
     on("cancel", function(){ ed = null; show("home"); });
     el("form").addEventListener("submit", function(e2){ e2.preventDefault(); saveEvent(); });
+  },
+
+  /* T5.2 PR 4 — one event's sign-ups, by village. A closed event is read-only (the server's
+     5-day window decides how long it can be read at all). */
+  signups: function(){
+    var e = su.ev, venue = e.kind === "venue", ro = e.status !== "live";
+    var head = '<button class="btn ghost small" id="suBack" type="button">' + esc(jcT("adm_su_back")) + '</button>' +
+      '<h1>' + esc(title(e)) + '</h1>';
+    if (!su.list) {
+      el("view").innerHTML = head + msgBox() + '<p class="help">' + esc(jcT("working")) + '</p>';
+      return on("suBack", leaveSignups);
+    }
+    var ins = su.list.filter(function(x){ return x.status === "in"; });
+    var hidden = ins.filter(function(x){ return x.hidden; }).length;
+    var line = [jcFmt(venue ? "adm_households" : "adm_homes", { n: ins.length }),
+                e.capacity ? jcFmt("adm_su_cap", { c: e.capacity }) : null,
+                hidden ? jcFmt("adm_su_hidden_n", { n: hidden }) : null].filter(Boolean).join(" · ");
+    var groups = {};
+    ins.forEach(function(x){ (groups[x.village] = groups[x.village] || []).push(x); });   /* server order: building, number */
+    var villages = Object.keys(groups).sort(function(a, b){ return jcVillageName(cfg, a).localeCompare(jcVillageName(cfg, b)); });
+    el("view").innerHTML = head + '<p class="sub">' + esc(line) + '</p>' +
+      (ro ? '<p class="notice">' + esc(jcT("adm_su_readonly")) + '</p>' : '') +
+      msgBox() +
+      '<div class="panel"><button class="btn ghost" type="button" id="csv"' + (su.list.length ? '' : ' disabled') + '>' +
+        esc(jcT("adm_csv")) + '</button><p class="help">' + esc(jcT("adm_csv_help")) + '</p></div>' +
+      (ins.length ? villages.map(function(v){
+        return '<h2 class="group">' + esc(jcVillageName(cfg, v)) + ' · ' + esc(groups[v].length) + '</h2>' +
+          '<ul class="sulist">' + groups[v].map(function(x){ return entryCard(x, ro); }).join("") + '</ul>';
+      }).join("") : '<p class="help">' + esc(jcT("adm_su_none")) + '</p>');
+    on("suBack", leaveSignups);
+    on("csv", downloadCsv);
+    wireEntries();
+  },
+
+  /* T5.2 PR 4 — move one sign-up's pin: the home's own pin (everywhere) or this event only */
+  pinmove: function(){
+    var x = pm.x;
+    var where = x.event_lat != null ? "adm_pm_now_event" : x.home_lat != null ? "adm_pm_now_home" : "adm_pm_now_none";
+    el("view").innerHTML =
+      '<button class="btn ghost small" id="pmBack" type="button">' + esc(jcT("adm_su_back")) + '</button>' +
+      '<h1>' + esc(jcT("adm_pm_title")) + '</h1>' +
+      '<p class="sub">' + esc(jcHomeLabel(x) + " · " + jcVillageName(cfg, x.village)) + '</p>' +
+      '<div class="panel"><p class="help">' + esc(jcT(where)) + ' ' + esc(jcT("adm_pm_help")) + '</p>' +
+        '<div class="pinmap vpin"><div class="map" id="vmap"></div><div class="ring" aria-hidden="true"></div>' +
+          '<div class="layers"><button type="button" class="lang" id="layerBtn">' + esc(jcT("pin_street")) + '</button></div>' +
+          '<button type="button" class="lang locate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
+        '<span class="row"><input type="text" id="coords" dir="ltr" inputmode="decimal" autocomplete="off" placeholder="24.5301, 54.4312" aria-label="' + esc(jcT("pin_paste")) + '">' +
+          '<button type="button" class="btn ghost" id="coordsGo" style="flex:0 0 auto">' + esc(jcT("pin_paste_go")) + '</button></span>' +
+        msgBox() +
+        '<button class="btn" type="button" id="pmHome">' + esc(jcT("adm_pm_home")) + '</button>' +
+        '<button class="btn ghost" type="button" id="pmEvent">' + esc(jcT("adm_pm_event")) + '</button>' +
+        (x.event_lat != null ? '<button class="btn ghost" type="button" id="pmReset">' + esc(jcT("adm_pm_reset")) + '</button>' : '') +
+      '</div>';
+    var lat = x.event_lat != null ? x.event_lat : x.home_lat, lng = x.event_lat != null ? x.event_lng : x.home_lng;
+    vmap = initPinMap(lat != null ? [lat, lng] : null);
+    on("pmBack", function(){ pm = null; show("signups"); });
+    on("pmHome", function(){ movePin("home"); });
+    on("pmEvent", function(){ movePin("event"); });
+    on("pmReset", function(){ movePin("reset"); });
   }
 };
 
@@ -377,6 +447,7 @@ function eventRow(e){
       '<a class="btn ghost small" href="../events/?id=' + esc(e.id) + '">' + esc(jcT("adm_view")) + '</a>';
   }
   if (e.status === "archived") acts = '<a class="btn ghost small" href="../events/?id=' + esc(e.id) + '">' + esc(jcT("adm_numbers")) + '</a>';
+  if (e.status !== "draft") acts = btn("signups", jcT("adm_signups")) + acts;      /* T5.2 PR 4 */
   if (e.status !== "archived" && has("community")) acts += btn("admins", jcT("adm_admins"), true);
   return '<li data-event="' + esc(e.slug) + '"><div><b>' + esc(title(e)) + '</b><small>' + esc(line) + '</small></div>' +
     '<div class="acts">' + acts + '</div>' +
@@ -392,6 +463,7 @@ function act(a, id, b){
   var e = byId(id);
   if (!e) return;
   if (a === "edit") return openEditor(e);
+  if (a === "signups") return openSignups(e);
   if (a === "admins") return toggleAdmins(id);
   if (a === "close") { closing = closing === id ? null : id; admining = null; adminsData = null; show("home"); if (el("closeSlug")) el("closeSlug").focus(); return; }
   if (a === "publish" && !window.confirm(jcFmt("adm_publish_confirm", { t: title(e) }))) return;
@@ -546,39 +618,280 @@ function drawVenueState(){
 /* Same pin drop as a home: pan the map until the place is under the ring, then
    "The place is here". Nothing is taken from the map until that tap. */
 function initVenueMap(){
-  if (typeof L === "undefined") return;
+  vmap = initPinMap(ed.venue ? [ed.venue.lat, ed.venue.lng] : null);
+  if (!vmap) return;
+  on("setVenue", function(){
+    var p = vmap.getCenter();
+    ed.venue = { lat: Math.round(p.lat * 1e6) / 1e6, lng: Math.round(p.lng * 1e6) / 1e6 };
+    drawVenueState();
+  });
+}
+
+/* The pin-drop map in #vmap (venue pin, pin move): Streets / Satellite, Find me, paste
+   coordinates. center = [lat, lng] or null for the community's own view. */
+function initPinMap(center){
+  if (typeof L === "undefined") return null;
   var c = (cfg && cfg.map) || {};
-  var center = ed.venue ? [ed.venue.lat, ed.venue.lng] : [c.lat || 24.53, c.lng || 54.43];
-  vmap = L.map("vmap", { zoomControl: true }).setView(center, ed.venue ? 18 : Math.max(c.zoom || 15, 16));
+  var m = L.map("vmap", { zoomControl: true })
+    .setView(center || [c.lat || 24.53, c.lng || 54.43], center ? 18 : Math.max(c.zoom || 15, 16));
   var layer = "sat";
-  var tiles = L.tileLayer(jcTiles.sat.url, jcTiles.sat.opts).addTo(vmap);
+  var tiles = L.tileLayer(jcTiles.sat.url, jcTiles.sat.opts).addTo(m);
   on("layerBtn", function(){
     layer = layer === "sat" ? "street" : "sat";
-    vmap.removeLayer(tiles);
-    tiles = L.tileLayer(jcTiles[layer].url, jcTiles[layer].opts).addTo(vmap);
+    m.removeLayer(tiles);
+    tiles = L.tileLayer(jcTiles[layer].url, jcTiles[layer].opts).addTo(m);
     el("layerBtn").textContent = jcT(layer === "sat" ? "pin_street" : "pin_sat");
   });
   on("locateBtn", function(){
     if (!navigator.geolocation) return showErr("LOCATE_FAILED");
     navigator.geolocation.getCurrentPosition(function(pos){
-      if (vmap) vmap.setView([pos.coords.latitude, pos.coords.longitude], 18);
+      if (vmap === m) m.setView([pos.coords.latitude, pos.coords.longitude], 18);
     }, function(err){ showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED"); },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
   });
   on("coordsGo", function(){
     var p = jcParseLatLng(el("coords").value);
     if (!p) return showErr("BAD_COORDS");
-    vmap.setView(p, 18);
+    m.setView(p, 18);
   });
-  /* the box sits inside the event form: Enter means "Go", never "save the event" (review) */
+  /* the box may sit inside a form: Enter means "Go", never "save the event" (review) */
   el("coords").addEventListener("keydown", function(e){
     if (e.key === "Enter") { e.preventDefault(); el("coordsGo").click(); }
   });
-  on("setVenue", function(){
-    var p = vmap.getCenter();
-    ed.venue = { lat: Math.round(p.lat * 1e6) / 1e6, lng: Math.round(p.lng * 1e6) / 1e6 };
-    drawVenueState();
+  return m;
+}
+function centerOf(m){
+  var p = m.getCenter();
+  return { lat: Math.round(p.lat * 1e6) / 1e6, lng: Math.round(p.lng * 1e6) / 1e6 };
+}
+
+/* ---------- sign-ups (T5.2 PR 4) ---------- */
+function openSignups(e){
+  closing = null; admining = null; adminsData = null;
+  su = { ev: e, list: null, open: null };
+  show("signups");
+  rpc("jc_admin_entries_list", { p_event: e.id }).then(function(list){
+    if (!su || su.ev.id !== e.id) return;
+    su.list = list || []; show("signups");
+  }, fail);
+}
+function leaveSignups(){ su = null; pm = null; show("home"); }
+
+function fieldsOf(e){ return ((e && e.payload_schema) || {}).fields || {}; }
+function answerText(spec, v){
+  if (typeof v === "boolean") return jcT(v ? "ev_yes" : "ev_no");
+  return (spec && (jcOwn(spec["labels_" + jcLang()], v) || jcOwn(spec.labels_en, v))) || String(v);
+}
+function questionText(k, spec){ return (spec && (spec["label_" + jcLang()] || spec.label_en)) || k; }
+/* "Kids should come to…: Front gate" — every answer, short answers included (organizers only) */
+function answersOf(x){
+  var fields = fieldsOf(su.ev);
+  return Object.keys(x.payload || {}).map(function(k){
+    return questionText(k, fields[k]) + ": " + answerText(fields[k], x.payload[k]);
   });
+}
+
+function entryCard(x, ro){
+  var e = su.ev, venue = e.kind === "venue";
+  var flags = [];
+  if (x.hidden) flags.push(jcT("adm_su_hidden"));
+  if (x.spot) flags.push(jcFmt("adm_su_spot", { s: x.spot }));
+  if (!venue) flags.push(jcT(x.event_lat != null ? "adm_su_event_pin" : x.home_lat != null ? "adm_su_home_pin" : "adm_su_no_pin"));
+  if (x.reports_open) flags.push(jcFmt("adm_su_reports", { n: x.reports_open }));
+  var open = su.open && su.open.id === x.id ? su.open.what : null;
+  function b(a, label, cls){
+    return '<button class="mini' + (cls ? ' ' + cls : '') + '" type="button" data-su="' + a + '" data-id="' + esc(x.id) + '">' + esc(label) + '</button>';
+  }
+  var acts = ro ? '' : '<div class="acts">' +
+    b("note", jcT(x.org_note ? "adm_su_note_edit" : "adm_su_note")) +
+    (x.hidden ? b("show", jcT("adm_su_restore")) : b("hide", jcT("adm_su_hide"), "danger")) +
+    (venue ? '' : b("pin", jcT("adm_su_move_pin"))) +
+    (venue && e.spots ? b("spot", jcT(x.spot ? "adm_su_spot_change" : "adm_su_spot_set")) : '') + '</div>';
+  var form = '';
+  if (open === "note") form = '<form class="suform" data-form="note" data-id="' + esc(x.id) + '" novalidate>' +
+    '<label>' + esc(jcT("adm_su_note_label")) + '<textarea maxlength="280" dir="auto" data-in></textarea></label>' +
+    '<p class="help">' + esc(jcT("adm_su_note_help")) + '</p>' +
+    '<div class="row"><button class="btn small" type="submit">' + esc(jcT("ed_save")) + '</button>' +
+    (x.org_note ? '<button class="btn ghost small" type="button" data-clear>' + esc(jcT("adm_su_note_clear")) + '</button>' : '') +
+    '<button class="btn ghost small" type="button" data-cancel>' + esc(jcT("ev_cancel")) + '</button></div></form>';
+  if (open === "spot") form = '<form class="suform" data-form="spot" data-id="' + esc(x.id) + '" novalidate>' +
+    '<label>' + esc(jcT("adm_su_spot_label")) + '<input type="text" maxlength="12" autocapitalize="characters" autocomplete="off" spellcheck="false" dir="ltr" data-in></label>' +
+    '<div class="row"><button class="btn small" type="submit">' + esc(jcT("ed_save")) + '</button>' +
+    (x.spot ? '<button class="btn ghost small" type="button" data-clear>' + esc(jcT("adm_su_spot_clear")) + '</button>' : '') +
+    '<button class="btn ghost small" type="button" data-cancel>' + esc(jcT("ev_cancel")) + '</button></div></form>';
+  /* everything residents typed is escaped */
+  return '<li class="' + (x.hidden ? 'hidden' : '') + '" data-entry="' + esc(x.id) + '"><b>' + esc(jcHomeLabel(x)) + '</b>' +
+    (flags.length ? '<div class="flags">' + flags.map(function(f){ return '<span>' + esc(f) + '</span>'; }).join("") + '</div>' : '') +
+    answersOf(x).map(function(t){ return '<div class="meta" dir="auto">' + esc(t) + '</div>'; }).join("") +
+    /* typed in either language: each line picks its own direction */
+    (x.note ? '<div class="note" dir="auto">' + esc(x.note) + '</div>' : '') +
+    (x.org_note ? '<div class="orgnote"><small>' + esc(jcT("adm_su_note_label")) + '</small><span dir="auto">' + esc(x.org_note) + '</span></div>' : '') +
+    acts + form + '</li>';
+}
+
+function byEntry(id){ return ((su && su.list) || []).filter(function(x){ return x.id === id; })[0]; }
+/* a write that returns the whole list (moderate / spot / event pin) → redraw, then say so */
+function suWrite(name, args, okText, undo){
+  var id = su.ev.id;
+  return rpc(name, args).then(function(list){
+    if (!su || su.ev.id !== id) return;
+    su.list = list || []; su.open = null; pm = null;
+    show("signups");
+    okUndo(okText, undo);
+  }, fail);
+}
+/* the ok message, with an Undo button when the change can be put back */
+function okUndo(text, undo){
+  showOk(text);
+  if (!undo) return;
+  var u = document.createElement("button");
+  u.type = "button"; u.className = "mini"; u.id = "undo"; u.textContent = jcT("adm_undo");
+  u.style.marginInlineStart = "10px";
+  u.addEventListener("click", function(){ u.disabled = true; undo(); });
+  el("msg").appendChild(u);
+}
+
+function wireEntries(){
+  Array.prototype.forEach.call(document.querySelectorAll("[data-su]"), function(b){
+    b.addEventListener("click", function(){
+      var x = byEntry(b.dataset.id), a = b.dataset.su;
+      if (!x) return;
+      if (a === "note" || a === "spot") {
+        su.open = su.open && su.open.id === x.id && su.open.what === a ? null : { id: x.id, what: a };
+        show("signups");
+        var f = document.querySelector('[data-form] [data-in]');
+        if (f) { f.value = f.defaultValue = (a === "note" ? x.org_note : x.spot) || ""; f.focus(); }
+        return;
+      }
+      if (a === "pin") { pm = { x: x }; return show("pinmove"); }
+      b.disabled = true;
+      var hide = a === "hide";
+      suWrite("jc_admin_entry_moderate", { p_entry: x.id, p_hidden: hide, p_org_note: null },
+        jcFmt(hide ? "adm_su_hidden_ok" : "adm_su_restored_ok", { h: jcHomeLabel(x) }),
+        function(){ suWrite("jc_admin_entry_moderate", { p_entry: x.id, p_hidden: !hide, p_org_note: null }, jcT("adm_undone")); });
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-form]"), function(f){
+    var x = byEntry(f.dataset.id), what = f.dataset.form, inp = f.querySelector("[data-in]");
+    function send(v){
+      var btns = f.querySelectorAll("button");
+      Array.prototype.forEach.call(btns, function(n){ n.disabled = true; });
+      var p = what === "note"
+        ? suWrite("jc_admin_entry_moderate", { p_entry: x.id, p_hidden: null, p_org_note: v },
+                  jcFmt(v ? "adm_su_note_ok" : "adm_su_note_cleared", { h: jcHomeLabel(x) }))
+        : suWrite("jc_admin_entry_spot_set", { p_entry: x.id, p_spot: v },
+                  v ? jcFmt("adm_su_spot_ok", { h: jcHomeLabel(x), s: v.toUpperCase() }) : jcFmt("adm_su_spot_cleared", { h: jcHomeLabel(x) }));
+      p.then(function(){ Array.prototype.forEach.call(btns, function(n){ n.disabled = false; }); });
+    }
+    f.addEventListener("submit", function(e2){
+      e2.preventDefault();
+      var v = inp.value.trim();
+      if (what === "spot" && v && !/^[A-Za-z0-9][A-Za-z0-9 -]{0,11}$/.test(v)) return showErr("BAD_SPOT");
+      if (what === "note" && v.length > 280) return showErr("BAD_NOTE");
+      send(v);
+    });
+    var clr = f.querySelector("[data-clear]");
+    if (clr) clr.addEventListener("click", function(){ send(""); });
+    f.querySelector("[data-cancel]").addEventListener("click", function(){ su.open = null; show("signups"); });
+  });
+}
+
+/* Pin move (plan Q2): "home" = the home's own pin, everywhere (jc_admin_home_pin_set);
+   "event" = this event only (jc_admin_entry_pin_set); "reset" = drop the event-only pin.
+   The confirm names the home (premortem #1); Undo puts the old spot back. */
+function movePin(how){
+  var x = pm.x, h = jcHomeLabel(x);
+  if (how !== "reset" && !vmap) return showErr("BAD_PIN");      /* no map (Leaflet didn't load) = no new spot */
+  var p = how === "reset" ? null : centerOf(vmap);
+  if (!window.confirm(jcFmt("adm_pm_confirm_" + how, { h: h }))) return;
+  ["pmHome", "pmEvent", "pmReset"].forEach(function(id){ if (el(id)) el(id).disabled = true; });
+  if (how === "home") {
+    var id = su.ev.id;
+    return rpc("jc_admin_home_pin_set", { p_home: x.home_id, p_lat: p.lat, p_lng: p.lng }).then(function(r){
+      return rpc("jc_admin_entries_list", { p_event: id }).then(function(list){
+        if (!su || su.ev.id !== id) return;
+        su.list = list || []; pm = null; show("signups");
+        var from = r && r.from;
+        okUndo(jcFmt(x.event_lat != null ? "adm_pm_home_ok_shadowed" : "adm_pm_home_ok", { h: h }), from ? function(){
+          rpc("jc_admin_home_pin_set", { p_home: x.home_id, p_lat: from[0], p_lng: from[1] }).then(function(){
+            return rpc("jc_admin_entries_list", { p_event: id }).then(function(l2){
+              if (!su || su.ev.id !== id) return;
+              su.list = l2 || []; show("signups"); showOk(jcT("adm_undone"));
+            });
+          }).then(null, fail);
+        } : null);
+      });
+    }, function(err){
+      ["pmHome", "pmEvent", "pmReset"].forEach(function(id2){ if (el(id2)) el(id2).disabled = false; });
+      fail(err);
+    }).then(null, fail);                    /* the list refresh after a successful move */
+  }
+  var was = x.event_lat != null ? { lat: x.event_lat, lng: x.event_lng } : null;
+  suWrite("jc_admin_entry_pin_set", { p_entry: x.id, p_lat: p ? p.lat : null, p_lng: p ? p.lng : null },
+    jcFmt(how === "reset" ? "adm_pm_reset_ok" : "adm_pm_event_ok", { h: h }),
+    function(){
+      suWrite("jc_admin_entry_pin_set", { p_entry: x.id, p_lat: was ? was.lat : null, p_lng: was ? was.lng : null }, jcT("adm_undone"));
+    }).then(function(){
+      ["pmHome", "pmEvent", "pmReset"].forEach(function(id){ if (el(id)) el(id).disabled = false; });
+    });
+}
+
+/* CSV, built on this phone from what the screen already has (plan Q1) — nothing stored.
+   Cells a spreadsheet would read as a formula get a leading ' (resident-typed text). */
+function csvCell(v){
+  var s = v == null ? "" : String(v);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+function downloadCsv(){
+  var e = su.ev, fields = fieldsOf(e), keys = Object.keys(fields);
+  var head = [jcT("csv_village"), jcT("csv_home"), jcT("csv_status"), jcT("csv_hidden")]
+    .concat(e.spots ? [jcT("csv_spot")] : [])
+    .concat(e.kind === "venue" ? [] : [jcT("csv_pin"), jcT("csv_lat"), jcT("csv_lng")])
+    .concat(keys.map(function(k){ return questionText(k, fields[k]); }))
+    .concat([jcT("csv_note"), jcT("csv_org_note"), jcT("csv_reports"), jcT("csv_signed_up"), jcT("csv_updated")]);
+  var rows = su.list.map(function(x){
+    var evPin = x.event_lat != null;
+    return [jcVillageName(cfg, x.village), jcHomeLabel(x), jcT("csv_st_" + x.status) === "csv_st_" + x.status ? x.status : jcT("csv_st_" + x.status),
+            x.hidden ? jcT("ev_yes") : ""]
+      .concat(e.spots ? [x.spot || ""] : [])
+      .concat(e.kind === "venue" ? [] : [jcT(evPin ? "csv_pin_event" : x.home_lat != null ? "csv_pin_home" : "csv_pin_none"),
+        evPin ? x.event_lat : x.home_lat, evPin ? x.event_lng : x.home_lng])
+      .concat(keys.map(function(k){ var p = x.payload || {}; return k in p ? answerText(fields[k], p[k]) : ""; }))
+      .concat([x.note || "", x.org_note || "", x.reports_open || 0, x.created_at || "", x.updated_at || ""]);
+  });
+  /* BOM: Excel reads the file as UTF-8 (Arabic village names, notes) */
+  var text = "﻿" + [head].concat(rows).map(function(r){ return r.map(csvCell).join(","); }).join("\r\n");
+  var url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
+  var a = document.createElement("a");
+  a.href = url; a.download = e.slug + "-signups.csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 10000);
+}
+
+/* ---------- the banner (T5.2 PR 4) ---------- */
+function wireBanner(){
+  var f = el("bannerForm");
+  if (!f) return;
+  var t = el("bannerText");
+  t.value = t.defaultValue = (cfg && cfg.broadcast) || "";
+  function post(text){
+    if (text && !window.confirm(jcT("adm_banner_confirm"))) return;
+    busy(text ? "bannerSave" : "bannerClear", true);
+    rpc("jc_admin_broadcast_set", { p_text: text }).then(function(r){
+      cfg = Object.assign({}, cfg || {}, { broadcast: (r && r.broadcast) || "" });
+      paint(); show("home");
+      showOk(jcT(cfg.broadcast ? "adm_banner_posted" : "adm_banner_cleared"));
+    }, function(err){ busy(text ? "bannerSave" : "bannerClear", false); fail(err); });
+  }
+  f.addEventListener("submit", function(e){
+    e.preventDefault();
+    var v = t.value.trim();
+    if (!v) return showErr("BANNER_EMPTY");
+    if (v.length > 280) return showErr("TOO_LONG");
+    post(v);
+  });
+  on("bannerClear", function(){ post(""); });
 }
 
 /* ---------- questions: schema <-> editable list ---------- */

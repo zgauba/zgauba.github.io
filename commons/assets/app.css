@@ -37,6 +37,9 @@ input:focus-visible, button:focus-visible, a:focus-visible{outline:2px solid var
 .msg{display:none; border-radius:10px; padding:9px 12px; font-size:13.5px; margin:0}
 .msg.err{display:block; background:var(--jc-surface-2); border:1px solid var(--jc-danger); color:var(--jc-danger)}
 .msg.ok{display:block; background:var(--jc-surface-2); border:1px solid var(--jc-good); color:var(--jc-good)}
+/* organizers' banner on member pages (nav.js jcBanner; the hub styles its own #bcast) */
+.bcast{background:var(--jc-danger); color:#2d0808; border-radius:var(--jc-radius); padding:10px 14px;
+  font-weight:700; margin-bottom:16px; overflow-wrap:anywhere}
 .who{font-size:14px; color:var(--jc-muted); margin:0; overflow-wrap:anywhere}
 .who b{color:var(--jc-ink)}
 /* Sub-menu tabs inside a page — event detail (Map · List · My home) and My Home

@@ -65,6 +65,41 @@ function eventsBackend(opts = {}) {
 const ADMIN_DRAFT_ID = "33333333-3333-4333-8333-333333333333";
 const ADMIN_LIVE_ID = "44444444-4444-4444-8444-444444444444";
 const ADMIN_PAST_ID = "55555555-5555-4555-8555-555555555555";
+const ADMIN_MARKET_ID = "77777777-7777-4777-8777-777777777777";
+// a one-place event with numbered spots (T5.2 3b) — pass as opts.extraEvents
+const ADMIN_MARKET = { id: ADMIN_MARKET_ID, slug: "kids-market", title_en: "Kids Market", title_ar: null, description_en: null,
+  description_ar: null, starts_at: "2026-11-20T12:00:00Z", ends_at: "2026-11-20T15:00:00Z", status: "live", signups_open: true,
+  features: {}, theme: {}, safety: {}, kind: "venue", look: "market", venue_name_en: "Central Park", venue_name_ar: null,
+  venue_lat: 24.531, venue_lng: 54.432, capacity: 30, spots: true, entries: 2,
+  payload_schema: { fields: { selling: { type: "enum", values: ["toys_books", "food"], required: true,
+    label_en: "What will you sell?", labels_en: { toys_books: "Toys & books", food: "Food & treats" } } } } };
+// jc_admin_entries_list rows (T5.2 3b shape), per event
+function adminEntries() {
+  const base = { type: "villa", building: null, payload: {}, note: null, live_state: null, supply_level: null,
+    hidden: false, org_note: null, spot: null, reports_open: 0, status: "in", event_lat: null, event_lng: null,
+    created_at: "2026-11-04T08:00:00Z", updated_at: "2026-11-04T08:00:00Z" };
+  return {
+    [ADMIN_LIVE_ID]: [
+      Object.assign({}, base, { id: "a1", home_id: "h-a1", village: "ain-al-maha", number: "12", home_lat: 24.5302, home_lng: 54.4322,
+        payload: { treats: "candy" }, note: "=HYPERLINK(\"x\")", reports_open: 2 }),
+      Object.assign({}, base, { id: "a2", home_id: "h-a2", village: "ain-al-maha", number: "14", home_lat: null, home_lng: null,
+        payload: { treats: "candy" }, org_note: "Pin looks off" }),
+      Object.assign({}, base, { id: "a3", home_id: "h-a3", village: "seef-al-jubail", type: "townhouse", number: "7",
+        home_lat: 24.53, home_lng: 54.43, event_lat: 24.5311, event_lng: 54.4311, payload: { treats: "candy" } }),
+      Object.assign({}, base, { id: "a4", home_id: "h-a4", village: "seef-al-jubail", number: "9", status: "withdrawn",
+        home_lat: 24.53, home_lng: 54.43 }),
+    ],
+    [ADMIN_MARKET_ID]: [
+      Object.assign({}, base, { id: "m1", home_id: "h-m1", village: "ain-al-maha", number: "3", home_lat: 24.53, home_lng: 54.43,
+        payload: { selling: "food" }, spot: "A1" }),
+      Object.assign({}, base, { id: "m2", home_id: "h-m2", village: "seef-al-jubail", number: "5", home_lat: 24.53, home_lng: 54.43,
+        payload: { selling: "toys_books" } }),
+    ],
+    [ADMIN_PAST_ID]: [
+      Object.assign({}, base, { id: "p1", home_id: "h-p1", village: "ain-al-maha", number: "1", home_lat: 24.53, home_lng: 54.43 }),
+    ],
+  };
+}
 
 function adminBackend(opts = {}) {
   const st = {
@@ -72,6 +107,8 @@ function adminBackend(opts = {}) {
     adminEvents: opts.adminEvents || [],      // T5.2 PR A: events this person runs (jc_me_get.admin_events)
     admins: opts.admins || [],                // community admin's view of one event's admins
     links: [],                                // open grant links: { id, token, event }
+    entries: adminEntries(),                  // T5.2 PR 4: jc_admin_entries_list per event
+    broadcast: opts.broadcast || "",
     events: [
       { id: ADMIN_DRAFT_ID, slug: "national-day-2026", title_en: "National Day", title_ar: null, description_en: null, description_ar: null,
         starts_at: null, ends_at: null, status: "draft", signups_open: true, features: {}, theme: {},
@@ -95,6 +132,16 @@ function adminBackend(opts = {}) {
   const visible = () => (admin() ? st.events : st.events.filter((e) => st.adminEvents.includes(e.id)));
   const adminsList = () => ok({ admins: st.admins, links: st.links.map((l) => ({ id: l.id, expires_at: "2026-11-07T10:00:00Z" })) });
   const find = (id) => st.events.find((e) => e.id === id);
+  // an entry write: the entry's own event decides; returns that event's list (like the server)
+  const entryWrite = (id, fn) => {
+    const ev = Object.keys(st.entries).find((k) => st.entries[k].some((x) => x.id === id));
+    if (!ev) return raise("NOT_FOUND");
+    if (!(admin() || mine(ev))) return raise("NOT_ADMIN");
+    if ((find(ev) || {}).status !== "live") return raise("EVENT_ARCHIVED");
+    const x = st.entries[ev].find((o) => o.id === id);
+    const err = fn(x, st.entries[ev]);
+    return err ? raise(err) : ok(st.entries[ev]);
+  };
   return {
     st,
     rpc: Object.assign({
@@ -149,6 +196,33 @@ function adminBackend(opts = {}) {
         const e = find(l.event);
         return ok({ event_id: e.id, title_en: e.title_en, title_ar: e.title_ar });
       },
+      // T5.2 PR 4 — sign-ups tab (as jc_assert_event_admin: organizers, or that event's admins)
+      jc_admin_entries_list: (a) => (admin() || mine(a.p_event) ? ok(st.entries[a.p_event] || []) : raise("NOT_ADMIN")),
+      jc_admin_entry_moderate: (a) => entryWrite(a.p_entry, (x) => {
+        if (a.p_hidden !== null) x.hidden = a.p_hidden;
+        if (a.p_org_note !== null) x.org_note = a.p_org_note.trim() || null;
+      }),
+      jc_admin_entry_spot_set: (a) => entryWrite(a.p_entry, (x, list) => {
+        const v = (a.p_spot || "").trim().toUpperCase() || null;
+        if (v && !/^[A-Z0-9][A-Z0-9 -]{0,11}$/.test(v)) return "BAD_SPOT";
+        if (v && list.some((o) => o !== x && o.status === "in" && o.spot === v)) return "SPOT_TAKEN";
+        x.spot = v;
+      }),
+      jc_admin_entry_pin_set: (a) => entryWrite(a.p_entry, (x) => { x.event_lat = a.p_lat; x.event_lng = a.p_lng; }),
+      jc_admin_home_pin_set: (a) => {
+        if (!admin() && !st.adminEvents.length) return raise("NOT_ADMIN");
+        let from = null;
+        Object.values(st.entries).flat().filter((x) => x.home_id === a.p_home).forEach((x) => {
+          from = x.home_lat == null ? null : [x.home_lat, x.home_lng];
+          x.home_lat = a.p_lat; x.home_lng = a.p_lng;
+        });
+        return ok({ home_id: a.p_home, lat: a.p_lat, lng: a.p_lng, from });
+      },
+      jc_admin_broadcast_set: (a) => {
+        if (!admin() && !st.adminEvents.length) return raise("NOT_ADMIN");
+        st.broadcast = (a.p_text || "").trim();
+        return ok({ broadcast: st.broadcast });
+      },
       jc_admin_code_rotate: (a) => (st.scopes.includes("community")
         ? ok({ scope: a.p_scope, code: "NEWCODE" + a.p_scope.toUpperCase(), version: 2 }) : raise("NOT_ADMIN")),
     }, opts.rpc || {}),
@@ -164,4 +238,4 @@ async function signIn(page) {
 }
 
 module.exports = { eventsBackend, adminBackend, signIn, LIVE_ID, PAST_ID, SCHEMA, LIVE, PAST, ENTRIES, STATS,
-  ADMIN_DRAFT_ID, ADMIN_LIVE_ID, ADMIN_PAST_ID };
+  ADMIN_DRAFT_ID, ADMIN_LIVE_ID, ADMIN_PAST_ID, ADMIN_MARKET_ID, ADMIN_MARKET };

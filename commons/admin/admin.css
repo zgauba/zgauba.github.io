@@ -78,3 +78,18 @@ label.check span small{display:block; color:var(--jc-muted); font-size:12.5px; f
 .notice{margin:0; padding:10px 12px; border-radius:10px; border:1px solid var(--jc-accent);
   background:var(--jc-surface); font-size:13.5px; line-height:1.4}
 .pinmap.vpin{height:240px; min-height:240px}
+
+/* T5.2 PR 4 — sign-ups tab */
+.sulist{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px}
+.sulist li{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius); padding:12px 14px;
+  display:flex; flex-direction:column; gap:6px; font-size:14px}
+.sulist li.hidden{opacity:.65; border-style:dashed}
+.sulist b{font-size:15px}
+.sulist .meta{color:var(--jc-muted); font-size:13px; overflow-wrap:anywhere}
+.sulist .note{font-size:13.5px; font-style:italic; overflow-wrap:anywhere}
+.sulist .orgnote{font-size:13.5px; border-inline-start:3px solid var(--jc-accent); padding-inline-start:8px; overflow-wrap:anywhere}
+.sulist .orgnote small{display:block; color:var(--jc-muted); font-size:12px}
+.flags{display:flex; flex-wrap:wrap; gap:5px}
+.flags span{border:1px solid var(--jc-line); border-radius:var(--jc-radius-pill); padding:2px 9px; font-size:12px; color:var(--jc-muted)}
+.suform{display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--jc-line); padding-top:10px}
+#bannerForm textarea{min-height:60px}
