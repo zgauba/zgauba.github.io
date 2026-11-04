@@ -33,7 +33,7 @@ test("sign-ups: grouped by village with counts; withdrawn left out; flags, notes
   await expect(card(page, "7").locator(".flags")).toContainText("Pin moved for this event");
   await expect(card(page, "12").locator(".meta")).toHaveText(["treats: candy"]);
   await expect(page.locator('[data-su="spot"]')).toHaveCount(0);                  // a homes event has no spots
-  await page.locator("#suBack").click();
+  await page.locator("#jcBackBtn").click();                                      // back lives in the top bar
   await expect(page.locator("#newEv")).toBeVisible();
 });
 
@@ -232,7 +232,7 @@ test("Arabic: the tab, flags and buttons in Arabic, right to left", async ({ pag
   await openSignups(page, "test-event");
   await page.locator("#langBtn").click();
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
-  await expect(page.locator("#suBack")).toHaveText("→ العودة إلى الفعاليات");
+  await expect(page.locator("#jcBackBtn")).toHaveAttribute("aria-label", "رجوع");
   await expect(page.locator("h2.group")).toContainText(["عين المها · 2"]);    // Seef has no Arabic name yet
   await expect(page.locator('[data-su="hide"]').first()).toHaveText("إخفاء");
   await expect(page.locator(".flags").filter({ hasText: "بلاغات من الجيران" })).toHaveCount(1);

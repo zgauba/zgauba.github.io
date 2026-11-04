@@ -152,6 +152,9 @@ function show(name){
   newCode = null;         /* only rotate() draws the code, once (review PR #26) */
   newLink = null;         /* same for a grant link */
   if (vmap) { vmap.remove(); vmap = null; }
+  /* back, in the top bar: sign-ups → the events list; pin move → the sign-ups */
+  jcBack(name === "signups" ? leaveSignups
+       : name === "pinmove" ? function(){ pm = null; show("signups"); } : null, "back");
   VIEWS[name]();
 }
 
@@ -371,15 +374,14 @@ var VIEWS = {
      5-day window decides how long it can be read at all). */
   signups: function(){
     var e = su.ev, venue = e.kind === "venue", ro = e.status !== "live";
-    var head = '<button class="btn ghost small" id="suBack" type="button">' + esc(jcT("adm_su_back")) + '</button>' +
-      '<h1>' + esc(title(e)) + '</h1>';
+    var head = '<h1>' + esc(title(e)) + '</h1>';
     if (!su.list) {
       el("view").innerHTML = head + msgBox() + (su.failed
         ? '<button class="btn" type="button" id="suRetry">' + esc(jcT("adm_retry")) + '</button>'
         : '<p class="help">' + esc(jcT("working")) + '</p>');
       on("suRetry", function(){ openSignups(su.ev); });
       if (su.failed) showErr(su.failed);
-      return on("suBack", leaveSignups);
+      return;
     }
     var ins = su.list.filter(function(x){ return x.status === "in"; });
     var hidden = ins.filter(function(x){ return x.hidden; }).length;
@@ -398,7 +400,6 @@ var VIEWS = {
         return '<h2 class="group">' + esc(jcVillageName(cfg, v)) + ' · ' + esc(groups[v].length) + '</h2>' +
           '<ul class="sulist">' + groups[v].map(function(x){ return entryCard(x, ro); }).join("") + '</ul>';
       }).join("") : '<p class="help">' + esc(jcT("adm_su_none")) + '</p>');
-    on("suBack", leaveSignups);
     on("csv", downloadCsv);
     wireEntries();
   },
@@ -408,7 +409,6 @@ var VIEWS = {
     var x = pm.x;
     var where = x.event_lat != null ? "adm_pm_now_event" : x.home_lat != null ? "adm_pm_now_home" : "adm_pm_now_none";
     el("view").innerHTML =
-      '<button class="btn ghost small" id="pmBack" type="button">' + esc(jcT("adm_su_back")) + '</button>' +
       '<h1>' + esc(jcT("adm_pm_title")) + '</h1>' +
       '<p class="sub">' + esc(jcHomeLabel(x) + " · " + jcVillageName(cfg, x.village)) + '</p>' +
       '<div class="panel"><p class="help">' + esc(jcT(where)) + ' ' + esc(jcT("adm_pm_help")) + '</p>' +
@@ -420,7 +420,6 @@ var VIEWS = {
       '</div>';
     var lat = x.event_lat != null ? x.event_lat : x.home_lat, lng = x.event_lat != null ? x.event_lng : x.home_lng;
     vmap = initPinMap(lat != null ? [lat, lng] : null);
-    on("pmBack", function(){ pm = null; show("signups"); });
     on("pmHome", function(){ movePin("home"); });
     on("pmEvent", function(){ movePin("event"); });
     on("pmReset", function(){ movePin("reset"); });

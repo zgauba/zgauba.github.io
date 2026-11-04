@@ -171,3 +171,20 @@ test("static page heads are community-agnostic (what link previews show)", async
   const root = await (await page.request.get("./")).text();
   expect(root).toMatch(/<meta property="og:title" content="Commons">/);
 });
+
+// Zee 2026-11-04: icons looked different sizes — each glyph's dots now span its whole box
+test("icons: every glyph fills its square box on the long side", async ({ page }) => {
+  await page.goto("./");
+  const gaps = await page.evaluate(() => Object.keys(JC_ICONS).map((k) => {
+    const host = document.createElement("div");
+    host.innerHTML = jcIcon(k, 100);
+    document.body.appendChild(host);
+    const svg = host.firstChild, s = svg.getBoundingClientRect();
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    svg.querySelectorAll("circle").forEach((c) => { const r = c.getBoundingClientRect();
+      x0 = Math.min(x0, r.left); y0 = Math.min(y0, r.top); x1 = Math.max(x1, r.right); y1 = Math.max(y1, r.bottom); });
+    host.remove();
+    return [k, Math.round(Math.max(x1 - x0, y1 - y0) / s.width * 100)];
+  }));
+  for (const [k, pct] of gaps) expect(pct, k).toBeGreaterThanOrEqual(99);
+});
