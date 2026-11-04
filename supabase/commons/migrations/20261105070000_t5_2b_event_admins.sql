@@ -27,6 +27,7 @@ create table public.jc_event_admins (
 );
 alter table public.jc_event_admins enable row level security;
 create index jc_event_admins_user on public.jc_event_admins (user_id);
+create index jc_event_admins_granted_by on public.jc_event_admins (granted_by) where granted_by is not null;
 
 create table public.jc_event_admin_links (
   id            uuid primary key default gen_random_uuid(),
@@ -43,16 +44,33 @@ create table public.jc_event_admin_links (
 );
 alter table public.jc_event_admin_links enable row level security;
 create index jc_event_admin_links_event on public.jc_event_admin_links (event_id);
+-- account deletion sets these null: index them so it doesn't scan (database review M4)
+create index jc_event_admin_links_created_by on public.jc_event_admin_links (created_by) where created_by is not null;
+create index jc_event_admin_links_used_by on public.jc_event_admin_links (used_by) where used_by is not null;
+
+-- Who posted the community banner: null = an organizer (or nobody); an event id = that event's
+-- admins, and it clears when the event closes (security review M1).
+alter table public.jc_communities add column broadcast_event uuid references public.jc_events(id) on delete set null;
 
 -- ---------- 2. internal checks (never callable from the app) ----------
 
--- (jc_admin_has(scope) — S4, internal: a valid grant for the scope or community-wide — reused.)
-
 -- Community-level events organizer: the community admin — or, until PR C, the legacy shared
--- `events` code (jc_admin_has('events') also accepts 'community').
+-- `events` code. Like jc_assert_admin (minus the raise) it SLIDES the 60-day unlock: an
+-- organizer who only uses event screens must not lapse (database review H1). Not
+-- jc_admin_has — that one is read-only on purpose (S4 visibility predicates).
 create function public.jc_events_organizer() returns boolean
-language sql security definer set search_path = public, pg_temp
-as $$ select jc_admin_has('events') $$;
+language plpgsql security definer set search_path = public, pg_temp
+as $$
+begin
+  update jc_admin_grants g set last_used_at = now()
+   where g.user_id = auth.uid()
+     and g.scope in ('events', 'community')
+     and g.last_used_at > now() - interval '60 days'
+     and g.code_version = (select c.version from jc_codes c
+                            where c.community_id = g.community_id and c.scope = g.scope);
+  return found;
+end;
+$$;
 
 -- May the caller act on this event? Organizer: any event in their community. Event admin: their
 -- event while it isn't closed — or, for reads only, up to 5 days after it closed (D4).
@@ -84,9 +102,9 @@ as $$
 declare v_comm text; v_token text; v_exp timestamptz;
 begin
   v_comm := jc_assert_admin('community');
-  if not exists (select 1 from jc_events where id = p_event and community_id = v_comm and status <> 'archived') then
-    raise exception 'NOT_FOUND';
-  end if;
+  -- the event row lock serializes creators (the 10-link cap) and orders us against close
+  perform 1 from jc_events where id = p_event and community_id = v_comm and status <> 'archived' for update;
+  if not found then raise exception 'NOT_FOUND'; end if;
   if (select count(*) from jc_event_admin_links
        where event_id = p_event and used_at is null and revoked_at is null and expires_at > now()) >= 10 then
     raise exception 'TOO_MANY_LINKS';
@@ -114,7 +132,7 @@ begin
      or l.used_at is not null or l.revoked_at is not null or l.expires_at <= now() then
     raise exception 'BAD_LINK';
   end if;
-  select * into ev from jc_events where id = l.event_id;
+  select * into ev from jc_events where id = l.event_id for share;   -- a concurrent close waits / is seen
   if ev.status = 'archived' then raise exception 'BAD_LINK'; end if;
   insert into jc_event_admins (event_id, user_id, community_id, granted_by)
   values (l.event_id, v_user, v_comm, l.created_by)
@@ -325,6 +343,9 @@ begin
   on conflict (event_id) do update set snapshot = excluded.snapshot, source = 'snapshot', taken_at = now();
   update jc_event_entries set archived_at = now() where event_id = ev.id and archived_at is null;
   update jc_events set status = 'archived', archived_at = now() where id = ev.id;
+  -- T5.2b: a banner this event's admins posted goes with the event
+  update jc_communities set broadcast = '', broadcast_event = null
+   where id = v_comm and broadcast_event = ev.id;
   perform jc_admin_log_add(v_comm, 'event_close', jsonb_build_object(
     'event_id', ev.id, 'slug', ev.slug, 'homes', v_snap -> 'homes'));
   return v_snap;
@@ -453,14 +474,22 @@ $function$;
 create or replace function public.jc_admin_broadcast_set(p_text text)
  returns jsonb language plpgsql security definer set search_path to 'public', 'pg_temp'
 as $function$
-declare v_comm text; v_text text; v_user uuid; v_home uuid;                   -- T5.2b
+declare v_comm text; v_text text; v_user uuid; v_home uuid; v_org boolean; v_event uuid;   -- T5.2b
 begin
-  -- T5.2b: event admins may post the banner while an event they run is LIVE (event-day alerts)
+  -- T5.2b: event admins may post the banner while an event they run is LIVE (event-day alerts),
+  -- but never over an organizer's banner; theirs is tied to the event and clears at its close
   select o_user, o_community, o_home into v_user, v_comm, v_home from jc_me();
-  if not jc_events_organizer() and not exists (
-       select 1 from jc_event_admins ea join jc_events ev on ev.id = ea.event_id
-        where ea.user_id = v_user and ev.community_id = v_comm and ev.status = 'live') then
-    raise exception 'NOT_ADMIN';
+  v_org := jc_events_organizer();
+  if not v_org then
+    select ev.id into v_event from jc_event_admins ea join jc_events ev on ev.id = ea.event_id
+     where ea.user_id = v_user and ev.community_id = v_comm and ev.status = 'live'
+     order by ev.starts_at nulls last, ev.created_at limit 1;
+    if v_event is null then raise exception 'NOT_ADMIN'; end if;
+    perform 1 from jc_communities c where c.id = v_comm for update;
+    if exists (select 1 from jc_communities c where c.id = v_comm
+                and c.broadcast_event is null and c.broadcast <> '') then
+      raise exception 'BANNER_IN_USE';
+    end if;
   end if;
   if length(p_text) > 2000 then raise exception 'TOO_LONG'; end if;
   -- every member sees this on every page: also drop marks that hide or reorder words
@@ -469,8 +498,10 @@ begin
   -- jc_clean_text trims spaces only: a banner of just line breaks / tabs means "no banner"
   v_text := btrim(v_text, E' \t\n\r');
   if char_length(v_text) > 280 then raise exception 'TOO_LONG'; end if;
-  update jc_communities set broadcast = v_text where id = v_comm;
-  perform jc_admin_log_add(v_comm, 'broadcast_set', jsonb_build_object('text', v_text));
+  update jc_communities set broadcast = v_text,
+         broadcast_event = case when v_org or v_text = '' then null else v_event end   -- T5.2b
+   where id = v_comm;
+  perform jc_admin_log_add(v_comm, 'broadcast_set', jsonb_build_object('text', v_text, 'event_id', v_event));
   return jsonb_build_object('broadcast', v_text);
 end;
 $function$;

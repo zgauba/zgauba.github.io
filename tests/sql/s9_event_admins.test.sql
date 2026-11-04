@@ -163,6 +163,21 @@ begin
   if pg_temp.err(format('select jc_admin_home_pin_set(%L, 24.5332, 54.4332)', h_r3)) is distinct from 'NOT_ADMIN' then raise exception 'FAIL Q05p home pin (not signed up)'; end if;
   -- banner: allowed while an event they run is live
   if pg_temp.err('select jc_admin_broadcast_set(''Road closed by the souk'')') is not null then raise exception 'FAIL Q05q broadcast during live'; end if;
+  -- event admins can't appoint, list or remove admins
+  if pg_temp.err(format('select jc_event_admin_link_create(%L)', ev_a)) is distinct from 'NOT_ADMIN' then raise exception 'FAIL Q05q1 event admin made a link'; end if;
+  if pg_temp.err(format('select jc_event_admins_list(%L)', ev_a)) is distinct from 'NOT_ADMIN' then raise exception 'FAIL Q05q2 event admin listed admins'; end if;
+  if pg_temp.err(format('select jc_event_admin_revoke(%L, %L, null)', ev_a, e1)) is distinct from 'NOT_ADMIN' then raise exception 'FAIL Q05q3 event admin revoked'; end if;
+  execute 'reset role';
+  if (select broadcast_event from jc_communities where id = 'testville9') is distinct from ev_a then raise exception 'FAIL Q05q4 banner not tied to event A'; end if;
+  execute 'set local role authenticated';
+  -- an organizer's banner can't be replaced by an event admin
+  perform pg_temp.as_user(c1); perform jc_admin_broadcast_set('Official notice');
+  perform pg_temp.as_user(e1);
+  if pg_temp.err('select jc_admin_broadcast_set(''mine now'')') is distinct from 'BANNER_IN_USE' then raise exception 'FAIL Q05q5 overwrote organizer banner'; end if;
+  if pg_temp.err('select jc_admin_broadcast_set('''')') is distinct from 'BANNER_IN_USE' then raise exception 'FAIL Q05q6 cleared organizer banner'; end if;
+  perform pg_temp.as_user(c1); perform jc_admin_broadcast_set('');
+  perform pg_temp.as_user(e1); perform jc_admin_broadcast_set('Lanterns at 7');
+  k := k + 6;
   if pg_temp.err(format('select jc_event_close(%L, ''event-b'')', ev_b)) is distinct from 'NOT_ADMIN' then raise exception 'FAIL Q05r close other'; end if;
   k := k + 18;
   -- publish is the community's step, even for that event's own admin
@@ -193,6 +208,12 @@ begin
   -- ---------- Q06 close + the 5-day read-only window ----------
   perform pg_temp.as_user(e1);
   if pg_temp.err(format('select jc_event_close(%L, ''event-a'')', ev_a)) is not null then raise exception 'FAIL Q06a close own'; end if;
+  execute 'reset role';
+  if exists (select 1 from jc_communities where id = 'testville9' and (broadcast <> '' or broadcast_event is not null)) then
+    raise exception 'FAIL Q06a1 event banner survived the close'; end if;
+  execute 'set local role authenticated';
+  perform pg_temp.as_user(e1);
+  k := k + 1;
   if pg_temp.err(format('select jc_admin_entries_list(%L)', ev_a)) is not null then raise exception 'FAIL Q06b read in window'; end if;
   if jsonb_array_length(jc_admin_events_list()) <> 1 then raise exception 'FAIL Q06c list in window'; end if;
   if pg_temp.err(format('select jc_admin_event_signups(%L, true)', ev_a)) is distinct from 'NOT_ADMIN' then raise exception 'FAIL Q06d write in window'; end if;
@@ -208,6 +229,10 @@ begin
   execute 'set local role authenticated';
   perform pg_temp.as_user(e1);
   if pg_temp.err(format('select jc_admin_entries_list(%L)', ev_a)) is not null then raise exception 'FAIL Q06i read at day 4'; end if;
+  if pg_temp.err(format('select jc_admin_entry_moderate(%L, false, null)', en_a)) is distinct from 'NOT_ADMIN' then raise exception 'FAIL Q06i1 moderate at day 4'; end if;
+  if pg_temp.err(format('select jc_admin_entry_pin_set(%L, 24.5313, 54.4313)', en_a)) is distinct from 'NOT_ADMIN' then raise exception 'FAIL Q06i2 entry pin at day 4'; end if;
+  if pg_temp.err(format('select jc_admin_home_pin_set(%L, 24.5313, 54.4313)', h_r1)) is distinct from 'NOT_ADMIN' then raise exception 'FAIL Q06i3 home pin at day 4'; end if;
+  k := k + 3;
   execute 'reset role';
   update jc_events set archived_at = now() - interval '6 days' where id = ev_a;
   execute 'set local role authenticated';
@@ -231,10 +256,24 @@ begin
   if pg_temp.err(format('select jc_admin_entries_list(%L)', ev_b)) is distinct from 'NOT_ADMIN' then raise exception 'FAIL Q07f revoked still reads'; end if;
   perform pg_temp.as_user(r1);
   if pg_temp.err(format('select jc_event_admins_list(%L)', ev_b)) is distinct from 'NOT_ADMIN' then raise exception 'FAIL Q07g resident lists admins'; end if;
+  -- e2 now runs only draft D: no live event of theirs → no banner
+  perform pg_temp.as_user(e2);
+  if pg_temp.err('select jc_admin_broadcast_set(''draft'')') is distinct from 'NOT_ADMIN' then raise exception 'FAIL Q07h banner from a draft-only admin'; end if;
+  k := k + 1;
   k := k + 7;
 
   -- ---------- Q08 legacy `events` code: still runs every event (until PR C) ----------
+  execute 'reset role';
+  update jc_admin_grants set last_used_at = now() - interval '30 days' where user_id = lg;
+  execute 'set local role authenticated';
   perform pg_temp.as_user(lg);
+  perform jc_admin_entries_list(ev_b);
+  execute 'reset role';
+  if (select last_used_at from jc_admin_grants where user_id = lg) < now() - interval '1 minute' then
+    raise exception 'FAIL Q08x organizer read did not slide the 60-day unlock'; end if;
+  execute 'set local role authenticated';
+  perform pg_temp.as_user(lg);
+  k := k + 1;
   if pg_temp.err('select jc_admin_event_save(null, ''{"slug": "legacy-new", "title_en": "Legacy"}'')') is not null then raise exception 'FAIL Q08a legacy create'; end if;
   if pg_temp.err(format('select jc_admin_event_publish(%L)', ev_d)) is not null then raise exception 'FAIL Q08b legacy publish'; end if;
   if pg_temp.err(format('select jc_admin_entries_list(%L)', ev_b)) is not null then raise exception 'FAIL Q08c legacy entries'; end if;
@@ -247,7 +286,11 @@ begin
   if exists (select 1 from jc_event_admins where user_id = e2) then raise exception 'FAIL Q09b grant survived account deletion'; end if;
   if (select count(*) from jc_admin_log where community_id = 'testville9' and action like 'event_admin_%') < 5 then
     raise exception 'FAIL Q09c grant actions not logged'; end if;
-  k := k + 3;
+  delete from auth.users where id = c1;   -- the granting admin leaves: links + grants stay, refs go null
+  if exists (select 1 from jc_event_admin_links where created_by = c1)
+     or not exists (select 1 from jc_event_admin_links where community_id = 'testville9' and created_by is null) then
+    raise exception 'FAIL Q09d links after the granting admin left'; end if;
+  k := k + 4;
 
   perform set_config('jc_test.checks', (coalesce(nullif(current_setting('jc_test.checks', true), ''), '0')::int + k)::text, true);
   raise notice 's9_event_admins: % checks passed', k;
