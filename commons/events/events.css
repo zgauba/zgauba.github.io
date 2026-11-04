@@ -5,11 +5,11 @@
 a.evcard:visited{color:var(--jc-ink)}
 .evlist b{display:block; font-size:16px}
 .evlist small{color:var(--jc-muted); font-size:13px}
-.evcard .badge ~ span{padding-inline-end:64px}   /* title clear of the badge */
+.evtop{display:flex; align-items:flex-start; justify-content:space-between; gap:10px}
 .evacts{display:flex; gap:8px}
 .evacts .btn{flex:1; font-size:14px; padding:10px 12px}
 /* organizers: straight to this event's editor (Zee, T5.2 polish) */
-.badge{position:absolute; top:12px; inset-inline-end:12px; font-size:11px; font-weight:800; letter-spacing:.04em;
+.badge{flex:0 0 auto; font-size:11px; font-weight:800; letter-spacing:.04em;
   text-transform:uppercase; text-decoration:none; border-radius:var(--jc-radius-pill); padding:4px 10px;
   color:var(--jc-accent); border:1px solid var(--jc-accent)}
 a.badge:visited{color:var(--jc-accent)}

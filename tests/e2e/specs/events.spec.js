@@ -43,9 +43,9 @@ test("list: upcoming soonest first (undated last); no Sign up when closed or alr
   await expect(page.locator('[data-event="late"] .evacts a')).toHaveText(["View", "Sign up"]);
 });
 
-test("organizers see an Admin badge that opens that event's editor", async ({ page }) => {
+for (const scope of ["events", "community"]) test(`organizers (${scope} scope) see an Admin badge that opens that event's editor`, async ({ page }) => {
   const eb = eventsBackend();
-  const ab = adminBackend({ scopes: ["events"] });
+  const ab = adminBackend({ scopes: [scope] });
   await stubBackend(page, { rpc: Object.assign({}, ab.rpc, eb.rpc, {
     jc_admin_events_list: () => ok([Object.assign({}, LIVE, { entries: 0 })]) }) });
   await signIn(page);

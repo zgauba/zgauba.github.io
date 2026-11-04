@@ -97,8 +97,9 @@ var VIEWS = {
           return '<li data-event="' + esc(e.slug) + '"><a class="evcard" href="' + url + '"><span>' + info + '</span></a></li>';
         }
         return '<li class="evcard" data-event="' + esc(e.slug) + '">' +
-          (organizer ? '<a class="badge" href="../admin/?event=' + encodeURIComponent(e.id) + '">' + esc(jcT("ev_admin")) + '</a>' : '') +
-          '<span>' + info + '</span>' +
+          '<div class="evtop"><span>' + info + '</span>' +
+            (organizer ? '<a class="badge" href="../admin/?event=' + encodeURIComponent(e.id) + '">' + esc(jcT("ev_admin")) + '</a>' : '') +
+          '</div>' +
           '<div class="evacts"><a class="btn ghost" href="' + url + '">' + esc(jcT("ev_view")) + '</a>' +
             (e.signups_open && e.my_status !== "in"
               ? '<a class="btn" href="' + url + '&amp;tab=mine">' + esc(jcT("ev_signup_cta")) + '</a>' : '') +

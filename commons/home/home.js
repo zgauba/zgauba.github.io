@@ -12,6 +12,7 @@ if (INVITE && !/^[A-Za-z0-9_-]{16,64}$/.test(INVITE)) INVITE = null;
 var VIEW = params.get("view");
 var MH_TABS = ["home", "household", "account"];
 var mhTab = MH_TABS.indexOf(params.get("tab")) >= 0 ? params.get("tab") : "home";
+var draftName = null;   /* display name typed but not saved, kept while switching tabs */
 var NEXT = params.get("next");
 if (NEXT && jcSafeNext(NEXT) !== NEXT) NEXT = null;   /* only our own pages, never off-site */
 
@@ -200,6 +201,7 @@ var VIEWS = {
       msgBox() + body;
     MH_TABS.forEach(function(t){
       on("mh-" + t, function(){
+        if (el("dname")) draftName = el("dname").value;   /* an unsaved name survives a tab switch */
         mhTab = t;
         try { history.replaceState(null, "", t === "home" ? location.pathname : "?tab=" + t); } catch(e){}
         show("myhome");
@@ -207,7 +209,10 @@ var VIEWS = {
     });
 
     /* defaultValue too: a prefilled field is not "being typed in" (update.js busy()) */
-    if (el("dname")) el("dname").value = el("dname").defaultValue = acct.display_name || "";
+    if (el("dname")) {
+      el("dname").value = el("dname").defaultValue = acct.display_name || "";
+      if (draftName !== null) { el("dname").value = draftName; draftName = null; }
+    }
     if (el("history")) loadHistory();
     on("toPin", function(){ show("pin"); });
     on("toEdit", function(){ show("edit"); });
@@ -378,6 +383,7 @@ function doAccept(token){
     if (r && r.status === "joined") {
       state.me = r.me;
       mhTab = "household";
+      try { history.replaceState(null, "", "?tab=household"); } catch(e){}
       show("myhome");
       showOk(jcFmt("invite_joined", { h: homeTitle() }));
     } else {
