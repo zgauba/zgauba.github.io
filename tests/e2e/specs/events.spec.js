@@ -410,3 +410,76 @@ test("event admins get the Admin badge only on the events they run", async ({ pa
   await expect(page.locator('[data-event="national-day-2026"] .badge')).toHaveAttribute("href", "../admin/?event=" + LIVE_ID);
   await expect(page.locator('[data-event="other-live"] .badge')).toHaveCount(0);
 });
+
+// ── Zee 2026-11-04: event page above the fold ──
+test("event page: back lives in the top bar (left of the logo), not a '‹ Events' line; none on the list", async ({ page }) => {
+  const eb = eventsBackend();
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  const back = page.locator(".topbar #jcBackBtn");
+  await expect(back).toHaveAttribute("href", "./");
+  await expect(back).toHaveAttribute("aria-label", "Events");
+  const [b, logo] = [await back.boundingBox(), await page.locator(".topbar a.home").boundingBox()];
+  expect(b.x + b.width).toBeLessThanOrEqual(logo.x + 1);                       // left of the logo
+  await expect(page.locator("#view .links")).toHaveCount(0);
+  await back.click();
+  await expect(page.locator("h1")).toHaveText("Events");
+  await expect(page.locator("#jcBackBtn")).toHaveCount(0);
+});
+
+test("event page: the whole map fits between the tabs and the tab bar — no scrolling", async ({ page }) => {
+  const eb = eventsBackend();
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  const map = page.locator("#map");
+  await expect(map).toBeVisible();
+  const bar = await page.locator("#tabbar").boundingBox();
+  // the stub has an unpinned home, so the "not on the map yet" line sits under the map: it fits too
+  const last = await page.locator("#mapAfter").boundingBox();
+  const m = await map.boundingBox();
+  expect(m.y + m.height).toBeLessThan(last.y);
+  expect(last.y + last.height).toBeLessThanOrEqual(bar.y);                      // nothing hidden behind the tab bar
+  expect(bar.y - (last.y + last.height)).toBeLessThan(24);                      // and no wasted space under it
+  expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBeLessThan(30);
+});
+
+test("event page: a long description shows two lines and More / Less; the RTL back arrow is mirrored", async ({ page }) => {
+  const long = Array(12).fill("Bring a lantern, meet neighbors, share sweets.").join(" ");
+  const eb = eventsBackend({ rpc: { jc_event_get: () => ok({ event: Object.assign({}, LIVE, { description_en: long }),
+    mine: null, stats: null, entries: ENTRIES }) } });
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  const desc = page.locator("#desc");
+  const h2 = (await desc.boundingBox()).height;
+  expect(h2).toBeLessThan(60);                                                 // ~2 lines at 15px/1.6
+  await page.locator("#descMore").click();
+  await expect(page.locator("#descMore")).toHaveText("Less");
+  expect((await desc.boundingBox()).height).toBeGreaterThan(h2 * 2);
+  await page.locator("#langBtn").click();
+  const t = await page.locator("#jcBackBtn svg").evaluate((s) => getComputedStyle(s).transform);
+  expect(t).toBe("matrix(-1, 0, 0, 1, 0, 0)");
+});
+
+test("event page: a short description has no More button", async ({ page }) => {
+  const eb = eventsBackend();
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await expect(page.locator("#desc")).toHaveText("Flags up, doors open.");
+  await expect(page.locator("#descMore")).toBeHidden();
+});
+
+test("Arabic map: Streets / Satellite never sits on top of the zoom buttons", async ({ page }) => {
+  const eb = eventsBackend();
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await page.locator("#langBtn").click();
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  const z = await page.locator(".leaflet-control-zoom").boundingBox();
+  const l = await page.locator("#layerBtn").boundingBox();
+  expect(l.x).toBeGreaterThan(z.x + z.width);                                   // apart, not overlapping
+});

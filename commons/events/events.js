@@ -66,6 +66,8 @@ function whatsappUrl(){
 function show(name){
   if (map) { map.remove(); map = null; }
   current = name;
+  jcBack(name === "list" ? null : "./", jcT("ev_back"));   /* back to the events list, in the top bar */
+  document.body.classList.remove("evfit");
   VIEWS[name]();
 }
 
@@ -121,11 +123,12 @@ var VIEWS = {
   detail: function(){
     var ev = data.event, entries = data.entries || [];
     el("view").innerHTML =
-      '<div class="links" style="margin:0 0 10px"><a href="./">‹ ' + esc(jcT("ev_back")) + '</a></div>' +
       '<div class="evhead"><h1>' + esc(title(ev)) + '</h1>' +
         '<p class="sub">' + esc([fmtDate(ev.starts_at), jcT(ev.signups_open ? "ev_open" : "ev_closed"),
                                  jcFmt("ev_homes_in", { n: entries.length })].join(" · ")) + '</p>' +
-        (desc(ev) ? '<p>' + esc(desc(ev)) + '</p>' : '') + '</div>' +
+        /* two lines, then "More" — the map stays above the fold (Zee, 2026-11-04) */
+        (desc(ev) ? '<p class="desc" id="desc" dir="auto">' + esc(desc(ev)) + '</p>' +
+          '<button type="button" class="more" id="descMore" hidden>' + esc(jcT("ev_more")) + '</button>' : '') + '</div>' +
       '<div class="subtabs" role="tablist">' + TABS.map(function(t){
         return '<button type="button" role="tab" id="tab-' + t + '" aria-selected="' + (tab === t) + '">' +
           esc(jcT("ev_tab_" + t)) + '</button>';
@@ -139,6 +142,7 @@ var VIEWS = {
         show("detail");
       });
     });
+    wireDesc();
     if (tab === "map") renderMap(entries);
     else if (tab === "list") renderList(entries, "");
     else if (editing) renderForm();
@@ -157,8 +161,7 @@ var VIEWS = {
           esc(obj[k]) + '</em></div>';
       }).join("") + '</div>';
     }
-    var html = '<div class="links" style="margin:0 0 10px"><a href="./">‹ ' + esc(jcT("ev_back")) + '</a></div>' +
-      '<h1>' + esc(title(ev)) + '</h1><p class="sub">' + esc(jcT("st_title")) +
+    var html = '<h1>' + esc(title(ev)) + '</h1><p class="sub">' + esc(jcT("st_title")) +
         (ev.status === "archived" && ev.ends_at ? ' · ' + esc(fmtDate(ev.ends_at)) : '') + '</p>' + msgBox() +
       '<div class="big"><div><b>' + esc(st.homes || 0) + '</b><span>' + esc(jcT("st_homes")) + '</span></div>' +
         '<div><b>' + esc(Object.keys(byVillage).length) + '</b><span>' + esc(jcT("st_villages")) + '</span></div>' +
@@ -349,15 +352,51 @@ function popupHtml(e){
     '<a target="_blank" rel="noopener" href="' + esc(pinUrl(e)) + '">' + esc(jcT("ev_view_pin")) + '</a></div></div>';
 }
 
+/* "More" only when the description is actually cut off; it stays open across tab switches */
+var descOpen = false;
+function wireDesc(){
+  var d = el("desc"), b = el("descMore");
+  if (!d || !b) return;
+  d.classList.toggle("open", descOpen);
+  b.hidden = !descOpen && d.scrollHeight <= d.clientHeight + 1;
+  b.textContent = jcT(descOpen ? "ev_less" : "ev_more");
+  b.onclick = function(){ descOpen = !descOpen; wireDesc(); fitMap(); };
+}
+
+/* The map fills what's left of the screen between the tabs and the tab bar, so it's all
+   visible without scrolling (Zee, 2026-11-04). Never below 260px; recomputed on resize,
+   rotation and Safari's toolbar growing / shrinking. */
+function fitMap(){
+  var m = el("map");
+  if (!m) return;
+  var vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  var bar = el("tabbar") ? el("tabbar").getBoundingClientRect().height : 0;
+  var after = el("mapAfter") ? el("mapAfter").getBoundingClientRect().height + 8 : 0;
+  var top = m.getBoundingClientRect().top + window.scrollY;
+  var h = Math.max(260, Math.floor(vh - top - bar - after - 12));
+  if (Math.abs(m.offsetHeight - h) < 2) return;
+  m.style.height = h + "px";
+  if (map) map.invalidateSize();
+}
+var fitTimer = null;
+function fitSoon(){ clearTimeout(fitTimer); fitTimer = setTimeout(fitMap, 120); }
+window.addEventListener("resize", fitSoon);
+window.addEventListener("orientationchange", fitSoon);
+if (window.visualViewport) window.visualViewport.addEventListener("resize", fitSoon);
+
 function renderMap(entries){
   var unpinned = entries.filter(function(e){ return !hasPos(e); }).length;
   el("body").innerHTML =
     '<div class="evmapwrap"><div class="evmap" id="map"></div>' +
       '<button type="button" class="lang maplayer" id="layerBtn">' + esc(jcT(layer === "sat" ? "pin_street" : "pin_sat")) + '</button>' +
       '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
-    (unpinned ? '<p class="help" style="margin-top:8px">' + esc(unpinned) + ' · ' + esc(jcT("ev_unpinned")) +
+    (unpinned ? '<p class="help" id="mapAfter" style="margin-top:8px">' + esc(unpinned) + ' · ' + esc(jcT("ev_unpinned")) +
       ' — <a href="#" id="seeList">' + esc(jcT("ev_list")) + '</a></p>' : '');
   on("seeList", function(e){ e.preventDefault(); el("tab-list").click(); });
+  document.body.classList.add("evfit");     /* the map screen doesn't scroll: no spare padding under it */
+  fitMap();                                 /* before Leaflet measures the box… */
+  requestAnimationFrame(fitSoon);           /* …and again once the page has settled (fonts, header) */
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitSoon);
   var c = (cfg && cfg.map) || {};
   map = L.map("map", { zoomControl: true }).setView([c.lat || 24.53, c.lng || 54.43], c.zoom || 14);
   var tiles = L.tileLayer(jcTiles[layer].url, jcTiles[layer].opts).addTo(map);
@@ -445,7 +484,8 @@ function loadEvent(){
     jcHit(wantStats ? "stats" : "events");
     show(wantStats ? "stats" : "detail");
   }, function(e){
-    el("view").innerHTML = '<div class="links" style="margin:0 0 10px"><a href="./">‹ ' + esc(jcT("ev_back")) + '</a></div>' + msgBox();
+    jcBack("./", jcT("ev_back"));
+    el("view").innerHTML = msgBox();
     showErr(e.code);
   });
 }

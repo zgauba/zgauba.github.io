@@ -14,12 +14,21 @@ a.evcard:visited{color:var(--jc-ink)}
   color:var(--jc-accent); border:1px solid var(--jc-accent)}
 a.badge:visited{color:var(--jc-accent)}
 h2.group{font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--jc-muted); margin:18px 0 8px}
-.evhead .sub{margin-bottom:10px}
+.evhead .sub{margin-bottom:6px}
+.evhead h1{margin-bottom:2px}
+/* description: two lines, then More (wireDesc) */
+.evhead .desc{margin:0; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-clamp:2;
+  overflow:hidden; white-space:pre-wrap; overflow-wrap:anywhere}
+.evhead .desc.open{display:block; -webkit-line-clamp:unset; line-clamp:none}
+.evhead .more{font:inherit; font-size:13.5px; font-weight:700; color:var(--jc-accent); background:none; border:0;
+  padding:2px 0; cursor:pointer}
+.evhead + .subtabs{margin:10px 0 10px}
+body.evfit main{padding-bottom:0}
 .seg2{display:flex; gap:6px; margin:6px 0 12px}
 .seg2 button{flex:1; font:inherit; font-weight:700; cursor:pointer; color:var(--jc-muted); background:var(--jc-surface);
   border:1px solid var(--jc-line); border-radius:10px; padding:8px}
 .seg2 button[aria-pressed="true"]{color:var(--jc-ink); border-color:var(--jc-accent)}
-.evmap{height:46vh; min-height:280px; border-radius:var(--jc-radius); overflow:hidden; border:1px solid var(--jc-line)}
+.evmap{height:46vh; min-height:260px; border-radius:var(--jc-radius); overflow:hidden; border:1px solid var(--jc-line)}
 .entries{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
 .entries li{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:10px; padding:10px 12px; font-size:14px}
 .entries li.mine{border-color:var(--jc-accent)}
@@ -30,7 +39,7 @@ h2.group{font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:v
 .orgnote b{color:var(--jc-warn); font-size:12.5px; text-transform:uppercase; letter-spacing:.04em}
 .orgnote p{margin:4px 0 0; white-space:pre-wrap; overflow-wrap:anywhere}
 .evmapwrap{position:relative}
-.evmapwrap .maplayer{position:absolute; top:10px; inset-inline-end:10px; z-index:600}
+.evmapwrap .maplayer{position:absolute; top:10px; right:10px; z-index:600}   /* physical, as .pinmap .layers: Leaflet zoom stays top-left in Arabic */
 .evmapwrap .maplocate{position:absolute; bottom:40px; left:50%; transform:translateX(-50%); z-index:600;
   background:var(--jc-accent); color:var(--jc-accent-ink); border-color:var(--jc-accent); padding:9px 18px; font-size:14px}
 .popacts{display:flex; gap:12px; margin-top:6px}

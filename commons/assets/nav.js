@@ -47,3 +47,25 @@ function jcBanner(cfg){
   }
   box.textContent = "⚠️ " + b;
 }
+
+/* Back, in the top bar left of the logo (Zee, 2026-11-04 — replaces "‹ Events" lines).
+   target = a URL, a function, or null to remove it. Flipped for right-to-left. */
+function jcBack(target, label){
+  var bar = document.querySelector(".topbar");
+  if (!bar) return;
+  var b = el("jcBackBtn");
+  if (!target) { if (b) b.remove(); return; }
+  if (!b) {
+    b = document.createElement("a");
+    b.id = "jcBackBtn";
+    b.className = "back";
+    b.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+      '<path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    bar.insertBefore(b, bar.firstChild);
+  }
+  b.setAttribute("aria-label", label || jcT("back"));
+  if (typeof target === "function") {
+    b.href = "#";
+    b.onclick = function(e){ e.preventDefault(); target(); };
+  } else { b.href = target; b.onclick = null; }
+}
