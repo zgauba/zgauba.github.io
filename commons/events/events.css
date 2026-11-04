@@ -25,6 +25,9 @@ h2.group{font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:v
 .evhead + .subtabs{margin:10px 0 10px}
 /* the map screen: no spare padding, and no "100vh" minimum (taller than the visible area on iOS) */
 body.evfit{min-height:0}
+/* one-place events (PR 4b) */
+.venueline{margin-top:8px; overflow-wrap:anywhere}
+.spot{margin:0; font-size:17px; font-weight:800; color:var(--jc-ink)}
 body.evfit main{padding-bottom:0}
 .seg2{display:flex; gap:6px; margin:6px 0 12px}
 .seg2 button{flex:1; font:inherit; font-weight:700; cursor:pointer; color:var(--jc-muted); background:var(--jc-surface);

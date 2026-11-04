@@ -494,3 +494,112 @@ test("back label follows the language, even where the view doesn't re-render (lo
   const b = await page.locator("#jcBackBtn").boundingBox();
   expect(b.width).toBeGreaterThanOrEqual(44);                                     // Apple's tap-target minimum
 });
+
+// ── T5.2 PR 4b: one-place events (kind "venue") ──
+const VENUE_ID = "88888888-8888-4888-8888-888888888888";
+const VENUE = Object.assign({}, LIVE, { id: VENUE_ID, slug: "kids-market", title_en: "Kids Market", kind: "venue", look: "market",
+  venue_name_en: "Central Park", venue_name_ar: "الحديقة المركزية", venue_lat: 24.531, venue_lng: 54.432,
+  capacity: 10, spots: true, households_in: 7, places_left: 3,
+  payload_schema: { fields: { selling: { type: "enum", values: ["toys", "food"], required: true, label_en: "What will you sell?",
+    labels_en: { toys: "Toys", food: "Food" } } } } });
+function venueBackend(over = {}) {
+  const st = { mine: over.mine || null, ev: Object.assign({}, VENUE, over.ev || {}) };
+  const get = () => ({ event: st.ev, mine: st.mine, stats: null, entries: [] });     // venue: never which homes
+  return { st, rpc: {
+    jc_events_list: () => ok([Object.assign({}, st.ev, { homes_in: st.ev.households_in, full: st.ev.places_left === 0,
+      my_status: st.mine ? st.mine.status : null })]),
+    jc_event_get: () => ok(get()),
+    jc_event_signup: (a) => {
+      if (over.fullOnSignup) { st.ev = Object.assign({}, st.ev, { households_in: 10, places_left: 0 }); return raise("FULL"); }
+      const p = Object.assign({}, a.p_payload); delete p.note;
+      st.mine = { id: "m", status: "in", payload: p, note: a.p_payload.note || null, spot: null };
+      st.ev = Object.assign({}, st.ev, { households_in: st.ev.households_in + 1, places_left: st.ev.places_left - 1 });
+      return ok(get());
+    },
+    jc_entry_withdraw: () => { st.mine = Object.assign({}, st.mine, { status: "withdrawn" }); return ok(get()); },
+  } };
+}
+
+test("one-place: list says households coming + where; map is the place with Directions; no List tab", async ({ page }) => {
+  const vb = venueBackend();
+  await stubBackend(page, { rpc: vb.rpc });
+  await signIn(page);
+  await page.goto("events/");
+  await expect(page.locator('[data-event="kids-market"] small')).toContainText("at Central Park · 7 households coming");
+  await page.goto("events/?id=" + VENUE_ID + "&tab=list");                       // List doesn't exist here → Map
+  await expect(page.locator(".subtabs button")).toHaveText(["Map", "My home"]);
+  await expect(page.locator(".evhead .sub")).toContainText("7 households coming · 3 places left");
+  await expect(page.locator(".venueline")).toContainText("Central Park");
+  await expect(page.locator(".venueline a")).toHaveAttribute("href", /destination=24\.531%2C54\.432/);
+  await expect(page.locator(".leaflet-tooltip")).toHaveText("Central Park");
+  await expect(page.locator("path.leaflet-interactive")).toHaveCount(1);          // one pin: the place
+});
+
+test("one-place: no home pin needed — sign up, 'is coming', spot pending then shown", async ({ page }) => {
+  const vb = venueBackend();
+  const { calls } = await stubBackend(page, { rpc: Object.assign({}, vb.rpc,
+    { jc_me_get: (a, c) => (c.signedIn ? ok(MEMBER_NO_PIN) : raise("NOT_SIGNED_IN")) }) });
+  await signIn(page);
+  await page.goto("events/?id=" + VENUE_ID + "&tab=mine");
+  await page.locator("#toSignup").click();                                        // straight to the form, not the pin screen
+  await expect(page).toHaveURL(/events\//);
+  await page.locator('[data-field="selling"][data-value="\\"food\\""]').click();
+  await page.locator("#go").click();
+  await expect(page.locator("#msg")).toHaveText("Villa 12 is coming.");
+  expect(calls.filter((c) => c.name === "jc_event_signup")).toHaveLength(1);
+  await expect(page.locator(".spot")).toHaveText("The organizers will give you a spot number.");
+  await expect(page.locator(".pinline")).toHaveCount(0);
+  await expect(page.locator(".evhead .sub")).toContainText("8 households coming · 2 places left");
+  vb.st.mine.spot = "B2";
+  await page.reload();
+  await expect(page.locator(".spot")).toHaveText("Your spot: B2");
+});
+
+test("one-place full: no Sign up anywhere, says Full", async ({ page }) => {
+  const vb = venueBackend({ ev: { households_in: 10, places_left: 0 } });
+  await stubBackend(page, { rpc: vb.rpc });
+  await signIn(page);
+  await page.goto("events/");
+  await expect(page.locator('[data-event="kids-market"] small')).toContainText("Full");
+  await expect(page.locator('[data-event="kids-market"] .evacts a')).toHaveText(["View"]);
+  await page.goto("events/?id=" + VENUE_ID + "&tab=mine");
+  await expect(page.locator(".evhead .sub")).toContainText("Full");
+  await expect(page.locator("#toSignup")).toHaveCount(0);
+  await expect(page.locator("#cta")).toContainText("This event is full.");
+});
+
+test("one-place: the last place goes while the form is open → FULL, fresh count", async ({ page }) => {
+  const vb = venueBackend({ fullOnSignup: true });
+  await stubBackend(page, { rpc: vb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + VENUE_ID + "&tab=mine");
+  await page.locator("#toSignup").click();
+  await page.locator('[data-field="selling"][data-value="\\"toys\\""]').click();
+  await page.locator("#go").click();
+  await expect(page.locator("#msg")).toHaveText("This event is full.");
+  await expect(page.locator(".evhead .sub")).toContainText("Full");
+  await expect(page.locator("#form")).toHaveCount(0);
+});
+
+test("one-place in Arabic: place name, counts, tabs", async ({ page }) => {
+  const vb = venueBackend();
+  await stubBackend(page, { rpc: vb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + VENUE_ID);
+  await page.locator("#langBtn").click();
+  await expect(page.locator(".evhead .sub")).toContainText("7 منزلاً سيحضر · 3 أماكن متبقية");
+  await expect(page.locator(".venueline")).toContainText("الحديقة المركزية");
+  await expect(page.locator(".subtabs button")).toHaveText(["الخريطة", "منزلي"]);
+});
+
+test("one-place archive: households total only, no villages", async ({ page }) => {
+  const ev = Object.assign({}, VENUE, { status: "archived" });
+  await stubBackend(page, { rpc: { jc_event_get: () => ok({ event: ev, mine: null, entries: null,
+    stats: { homes: 23, done: 0, by_village: {}, by_type: {}, payload: { selling: { toys: 15, food: 8 } } } }) } });
+  await signIn(page);
+  await page.goto("events/?id=" + VENUE_ID);
+  await expect(page.locator(".big b")).toHaveText(["23"]);
+  await expect(page.locator(".big span")).toHaveText(["households"]);
+  await expect(page.getByText("By village")).toHaveCount(0);
+  await expect(page.locator("h2.group")).toHaveText(["What will you sell?"]);
+});
