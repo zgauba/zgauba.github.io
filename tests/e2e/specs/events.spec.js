@@ -587,7 +587,7 @@ test("one-place in Arabic: place name, counts, tabs", async ({ page }) => {
   await signIn(page);
   await page.goto("events/?id=" + VENUE_ID);
   await page.locator("#langBtn").click();
-  await expect(page.locator(".evhead .sub")).toContainText("7 منزلاً سيحضر · 3 أماكن متبقية");
+  await expect(page.locator(".evhead .sub")).toContainText("المنازل الحاضرة: 7 · الأماكن المتبقية: 3");   // number-safe Arabic
   await expect(page.locator(".venueline")).toContainText("الحديقة المركزية");
   await expect(page.locator(".subtabs button")).toHaveText(["الخريطة", "منزلي"]);
 });
@@ -602,4 +602,52 @@ test("one-place archive: households total only, no villages", async ({ page }) =
   await expect(page.locator(".big span")).toHaveText(["households"]);
   await expect(page.getByText("By village")).toHaveCount(0);
   await expect(page.locator("h2.group")).toHaveText(["What will you sell?"]);
+});
+
+// ── PR 4b review fixes ──
+test("one-place: an organizer-typed place name is shown as text, never run as HTML (map label + line)", async ({ page }) => {
+  const vb = venueBackend({ ev: { venue_name_en: '<img src=x onerror="window.__xss=1"><b>Park</b>' } });
+  await stubBackend(page, { rpc: vb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + VENUE_ID);
+  await expect(page.locator(".leaflet-tooltip")).toHaveText('<img src=x onerror="window.__xss=1"><b>Park</b>');
+  await expect(page.locator(".leaflet-tooltip img, .leaflet-tooltip b, .venueline img")).toHaveCount(0);
+  expect(await page.evaluate(() => window.__xss)).toBeUndefined();
+});
+
+test("one-place: no usable location → name without Directions, no broken pin", async ({ page }) => {
+  const vb = venueBackend({ ev: { venue_lng: null } });
+  await stubBackend(page, { rpc: vb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + VENUE_ID);
+  await expect(page.locator(".venueline")).toHaveText("📍 Central Park");
+  await expect(page.locator(".venueline a")).toHaveCount(0);
+  await expect(page.locator("path.leaflet-interactive")).toHaveCount(0);
+});
+
+test("one-place: list counts every household like the event page (households_in), singular wording", async ({ page }) => {
+  const vb = venueBackend({ ev: { households_in: 1, places_left: 1, capacity: 2 } });
+  await stubBackend(page, { rpc: Object.assign({}, vb.rpc, {
+    jc_events_list: () => ok([Object.assign({}, vb.st.ev, { homes_in: 0, households_in: 1, full: false, my_status: null })]),   // the 1 is hidden
+  }) });
+  await signIn(page);
+  await page.goto("events/");
+  await expect(page.locator('[data-event="kids-market"] small')).toContainText("1 household coming");
+  await page.goto("events/?id=" + VENUE_ID);
+  await expect(page.locator(".evhead .sub")).toContainText("1 household coming · 1 place left");
+});
+
+test("one-place: FULL and then the refresh fails → form closed anyway, says Full", async ({ page }) => {
+  const vb = venueBackend({ fullOnSignup: true });
+  let gets = 0;
+  await stubBackend(page, { rpc: Object.assign({}, vb.rpc, {
+    jc_event_get: (a, c) => (++gets > 1 ? raise("NETWORK") : vb.rpc.jc_event_get(a, c)),
+  }) });
+  await signIn(page);
+  await page.goto("events/?id=" + VENUE_ID + "&tab=mine");
+  await page.locator("#toSignup").click();
+  await page.locator('[data-field="selling"][data-value="\\"toys\\""]').click();
+  await page.locator("#go").click();
+  await expect(page.locator("#msg")).toHaveText("This event is full.");
+  await expect(page.locator("#form")).toHaveCount(0);
 });

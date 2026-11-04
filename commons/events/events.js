@@ -28,8 +28,9 @@ function placeName(ev){ return ar() && ev.venue_name_ar ? ev.venue_name_ar : (ev
 /* "12 households coming · 8 places left" / "Full" — counts only, never which homes */
 function comingLine(n, ev, full){
   if (full) return jcT("ev_full");
-  return ev.capacity != null && ev.places_left != null
-    ? jcFmt("ev_coming_left", { n: n, k: ev.places_left }) : jcFmt("ev_coming", { n: n });
+  var line = jcFmt(n === 1 ? "ev_coming_1" : "ev_coming", { n: n });
+  if (ev.capacity != null && ev.places_left != null) line += " · " + jcFmt(ev.places_left === 1 ? "ev_left_1" : "ev_left", { k: ev.places_left });
+  return line;
 }
 function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
 function showErr(code){ var m = el("msg"); if (!m) return; m.className = "msg err"; m.textContent = jcErrText({ code: code }); }
@@ -104,7 +105,9 @@ var VIEWS = {
       function row(e){
         var url = "?id=" + encodeURIComponent(e.id);
         var line = [fmtDate(e.starts_at), isVenue(e)
-          ? (e.status === "archived" ? jcFmt("ev_came", { n: e.homes_in || 0 }) : e.full ? jcT("ev_full") : jcFmt("ev_coming", { n: e.homes_in || 0 }))
+          /* households_in = every "in" household, as the event page counts (homes_in skips hidden ones) */
+          ? (e.status === "archived" ? jcFmt("ev_came", { n: e.homes_in || 0 })
+             : comingLine(e.households_in != null ? e.households_in : (e.homes_in || 0), {}, e.full))
           : jcFmt("ev_homes_in", { n: e.homes_in || 0 })];
         if (isVenue(e) && placeName(e)) line.splice(1, 0, jcFmt("ev_at", { v: placeName(e) }));
         if (e.status === "archived") line.push(jcT("ev_see_numbers"));
@@ -333,7 +336,7 @@ function renderForm(){
       if (e.code === "FULL") {                   /* the last place went meanwhile: show the new count */
         return rpc("jc_event_get", { p_event: ev.id }).then(function(d){
           data = d; editing = false; show("detail"); showErr("FULL");
-        }, function(){ busy("go", false); showErr("FULL"); });
+        }, function(){ editing = false; show("detail"); showErr("FULL"); });   /* never back into the same form (review) */
       }
       busy("go", false); showErr(e.code);
     });
@@ -426,7 +429,10 @@ window.addEventListener("orientationchange", fitSoon);
 function renderMap(entries){
   var ev = data.event, venue = isVenue(ev);
   /* one place: the venue is the only pin (the server sends no homes for it) */
-  if (venue) entries = ev.venue_lat != null ? [{ venue: true, lat: ev.venue_lat, lng: ev.venue_lng }] : [];
+  if (venue) {
+    var spot = { venue: true, lat: ev.venue_lat, lng: ev.venue_lng };
+    entries = hasPos(spot) ? [spot] : [];   /* both coordinates, or no pin (review) */
+  }
   var unpinned = venue ? 0 : entries.filter(function(e){ return !hasPos(e); }).length;
   el("body").innerHTML =
     '<div class="evmapwrap"><div class="evmap" id="map"></div>' +
@@ -434,8 +440,9 @@ function renderMap(entries){
       '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
     (unpinned ? '<p class="help" id="mapAfter" style="margin-top:8px">' + esc(unpinned) + ' · ' + esc(jcT("ev_unpinned")) +
       ' — <a href="#" id="seeList">' + esc(jcT("ev_list")) + '</a></p>' : '') +
-    (venue && entries.length ? '<p class="help venueline" id="mapAfter" dir="auto">📍 <b>' + esc(placeName(ev)) + '</b> — ' +
-      '<a target="_blank" rel="noopener" href="' + esc(directionsUrl(entries[0])) + '">' + esc(jcT("ev_directions")) + '</a></p>' : '');
+    (venue ? '<p class="help venueline" id="mapAfter" dir="auto">📍 <b>' + esc(placeName(ev) || jcT("ev_the_place")) + '</b>' +
+      (entries.length ? ' — <a target="_blank" rel="noopener" href="' + esc(directionsUrl(entries[0])) + '">' + esc(jcT("ev_directions")) + '</a>' : '') +
+      '</p>' : '');
   on("seeList", function(e){ e.preventDefault(); el("tab-list").click(); });
   document.body.classList.add("evfit");     /* the map screen doesn't scroll: no spare padding under it */
   fitMap();                                 /* before Leaflet measures the box… */
@@ -459,7 +466,9 @@ function renderMap(entries){
     pts.push([e.lat, e.lng]);
     if (e.venue) {
       markers.push(L.circleMarker([e.lat, e.lng], { radius: 12, weight: 3, color: ink, fillColor: accent, fillOpacity: .9 })
-        .addTo(map).bindTooltip(placeName(ev), { permanent: true, direction: "top", offset: [0, -12] }));
+        /* Leaflet sets string tooltip content as HTML: the organizer-typed name is escaped (review: XSS) */
+        .addTo(map).bindTooltip('<span dir="auto">' + esc(placeName(ev) || jcT("ev_the_place")) + '</span>',
+                                { permanent: true, direction: "top", offset: [0, -12] }));
       return;
     }
     var m = L.circleMarker([e.lat, e.lng], {
