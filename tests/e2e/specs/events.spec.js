@@ -1,21 +1,61 @@
 // T5.1 — Events: list, detail (map/list), schema-driven signup, withdraw, stats, "Our year".
 const { test, expect } = require("@playwright/test");
 const { stubBackend, ok, raise, CONFIG, MEMBER, MEMBER_NO_PIN, HOME_V12 } = require("./stub");
-const { eventsBackend, signIn, LIVE_ID, PAST_ID, SCHEMA, LIVE, PAST, ENTRIES, STATS } = require("./backends");
+const { eventsBackend, adminBackend, signIn, LIVE_ID, PAST_ID, SCHEMA, LIVE, PAST, ENTRIES, STATS } = require("./backends");
 
-test("list: live events, then Past with 'see the numbers'", async ({ page }) => {
+test("list: live events with View + Sign up (no status pill), then Past with 'see the numbers'", async ({ page }) => {
   const eb = eventsBackend();
   const { calls } = await stubBackend(page, { rpc: eb.rpc });
   await signIn(page);
   await page.goto("events/");
   await expect(page.locator("h1")).toHaveText("Events");
-  const live = page.locator('a[data-event="national-day-2026"]');
+  const live = page.locator('[data-event="national-day-2026"]');
   await expect(live).toContainText("National Day Gathering");
   await expect(live).toContainText("37 homes in");
-  await expect(live.locator(".pill")).toHaveText("sign-ups open");
+  await expect(live.locator(".pill")).toHaveCount(0);                     // the button says it
+  await expect(live.locator(".evacts a")).toHaveText(["View", "Sign up"]);
+  await expect(live.locator(".evacts a").first()).toHaveAttribute("href", "?id=" + LIVE_ID);
+  await expect(live.locator(".evacts a").last()).toHaveAttribute("href", "?id=" + LIVE_ID + "&tab=mine");
+  await expect(live.locator(".badge")).toHaveCount(0);                    // residents: no Admin badge
   await expect(page.locator("h2.group")).toHaveText("Past");
-  await expect(page.locator('a[data-event="halloween-2026"]')).toContainText("see the numbers");
+  await expect(page.locator('[data-event="halloween-2026"] a')).toContainText("see the numbers");
+  await expect(page.locator('[data-event="halloween-2026"] .evacts')).toHaveCount(0);
   expect(calls.filter((c) => c.name === "jc_hit").map((c) => c.args.p_page)).toContain("events");
+});
+
+test("list: upcoming soonest first (undated last); no Sign up when closed or already in", async ({ page }) => {
+  const ev = (slug, starts, extra) => Object.assign({}, LIVE, { id: slug, slug: slug, title_en: slug, starts_at: starts,
+    homes_in: 0, my_status: null }, extra || {});
+  await stubBackend(page, { rpc: { jc_events_list: () => ok([          // server order: newest first
+    ev("late", "2026-12-20T14:00:00Z"),
+    ev("undated", null),
+    ev("closed", "2026-12-10T14:00:00Z", { signups_open: false }),
+    ev("joined", "2026-11-20T14:00:00Z", { my_status: "in" }),
+  ]) } });
+  await signIn(page);
+  await page.goto("events/");
+  await expect(page.locator(".evlist li")).toHaveCount(4);
+  expect(await page.locator(".evlist li").evaluateAll((ls) => ls.map((l) => l.dataset.event)))
+    .toEqual(["joined", "closed", "late", "undated"]);
+  await expect(page.locator('[data-event="closed"]')).toContainText("sign-ups closed");
+  await expect(page.locator('[data-event="closed"] .evacts a')).toHaveText(["View"]);
+  await expect(page.locator('[data-event="joined"] .evacts a')).toHaveText(["View"]);
+  await expect(page.locator('[data-event="late"] .evacts a')).toHaveText(["View", "Sign up"]);
+});
+
+test("organizers see an Admin badge that opens that event's editor", async ({ page }) => {
+  const eb = eventsBackend();
+  const ab = adminBackend({ scopes: ["events"] });
+  await stubBackend(page, { rpc: Object.assign({}, ab.rpc, eb.rpc, {
+    jc_admin_events_list: () => ok([Object.assign({}, LIVE, { entries: 0 })]) }) });
+  await signIn(page);
+  await page.goto("events/");
+  const badge = page.locator('[data-event="national-day-2026"] .badge');
+  await expect(badge).toHaveText("Admin");
+  await expect(badge).toHaveAttribute("href", "../admin/?event=" + LIVE_ID);
+  await badge.click();
+  await expect(page).toHaveURL(new RegExp("/commons/admin/\\?event=" + LIVE_ID));
+  await expect(page.locator("#title_en")).toHaveValue("National Day Gathering");   // straight into the editor
 });
 
 test("module off → explained, no blank page", async ({ page }) => {
@@ -272,7 +312,7 @@ test("tabs: Map · List · My home; the tab is kept in the URL", async ({ page }
   await stubBackend(page, { rpc: eb.rpc });
   await signIn(page);
   await page.goto("events/?id=" + LIVE_ID);
-  await expect(page.locator('.evtabs [role="tab"]')).toHaveText(["Map", "List", "My home"]);
+  await expect(page.locator('.subtabs [role="tab"]')).toHaveText(["Map", "List", "My home"]);
   await expect(page.locator("#tab-map")).toHaveAttribute("aria-selected", "true");
   await page.locator("#tab-list").click();
   await expect(page).toHaveURL(new RegExp("events/\\?id=" + LIVE_ID + "&tab=list$"));

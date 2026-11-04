@@ -72,11 +72,14 @@ h2.choose{font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:
 /* hub: the community name fits on one line beside the language button */
 body:not(.mode-picker) h1{font-size:22px}
 body:not(.mode-picker) .brandrow svg{width:30px; height:30px}
-body.mode-picker header{flex-direction:column; align-items:center; text-align:center; position:relative; padding-top:46px}
+/* the mark sits beside the language button (not under it): the button is narrow and
+   pinned to the end edge, the mark centered — no reserved band above it (Zee, T5.2 polish) */
+body.mode-picker main{padding-top:18px}
+body.mode-picker header{flex-direction:column; align-items:center; text-align:center; position:relative; padding-top:4px}
 body.mode-picker .hdr-actions{position:absolute; top:0; inset-inline-end:0}
-body.mode-picker .brandrow{flex-direction:column; gap:14px}
+body.mode-picker .brandrow{flex-direction:column; gap:6px}
 body.mode-picker .brandrow svg{width:76px; height:76px}
-body.mode-picker h1{font-size:34px}
+body.mode-picker h1{font-size:34px; line-height:1.1}
 body.mode-picker .tagline{margin:6px auto 22px; font-size:17px; color:var(--jc-ink)}
 .community .who{display:flex; align-items:center; gap:12px}
 .community{background:var(--jc-surface); border:1px solid var(--jc-accent); border-radius:var(--jc-radius);

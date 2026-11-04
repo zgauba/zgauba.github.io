@@ -71,7 +71,7 @@ test("signed-in member: the hub (broadcast + enabled module), not the picker", a
   await signIn(page);
   await expect(page.locator("#brand")).toHaveText("Jubail Commons");
   await expect(page.locator("#bcast")).toHaveText("⚠️ Road closed at Souk");
-  await expect(page.locator("#cards a.go[href='events/']")).toHaveText("Sign your home up");
+  await expect(page.locator("#cards a.go[href='events/']")).toHaveText("See events");
   await expect(page.locator("#cards .card svg.ico")).toHaveCount(4);  // + The Community
   await expect(page.locator("#picker")).toBeHidden();
   await expect(page.locator("#authLink")).toBeHidden();  // the My Home tab is the account page
