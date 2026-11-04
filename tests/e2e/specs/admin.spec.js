@@ -202,8 +202,9 @@ test("community admin: change a code — shown once, gone after navigating", asy
   await page.locator('[data-rotate="join"]').click();
   await expect(page.locator("#newCode")).toHaveText("NEWCODEJOIN");
   expect(lastCall(calls, "jc_admin_code_rotate").args).toEqual({ p_scope: "join" });
-  await page.locator("#newEv").click();
-  await page.locator("#cancel").click();
+  // any later action drops it (review PR #26): pausing sign-ups re-renders the page
+  await page.locator('li[data-event="test-event"] [data-act="pause"]').click();
+  await expect(page.locator("#msg")).toHaveText("Sign-ups are paused.");
   await expect(page.locator("#newCode")).toHaveCount(0);
   // declining the confirm sends nothing
   page.once("dialog", (d) => d.dismiss());
@@ -256,4 +257,23 @@ test("My Home links to the organizer tools; signed-out visitors go to sign in fi
   await signIn(page);
   await page.goto("home/");
   await expect(page.locator("#toAdmin")).toHaveAttribute("href", "../admin/");
+});
+
+test("copying a new code that the browser blocks says so (never a silent failure)", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["community"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.evaluate(() => { Object.defineProperty(navigator, "clipboard", { value: { writeText: () => Promise.reject(new Error("blocked")) } }); });
+  page.once("dialog", (d) => d.accept());
+  await page.locator('[data-rotate="events"]').click();
+  await page.locator("#copyCode").click();
+  await expect(page.locator("#msg")).toHaveText("Couldn't copy — select the code and copy it by hand.");
+  await expect(page.locator("#newCode")).toHaveText("NEWCODEEVENTS");
+});
+
+test("signing in from the organizer page comes back to it", async ({ page }) => {
+  await stubBackend(page);
+  await page.goto("./");
+  expect(await page.evaluate(() => jcSafeNext("../admin/"))).toBe("../admin/");
 });

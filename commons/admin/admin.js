@@ -11,7 +11,7 @@ var state = null, cfg = null, current = null;
 var scopes = [];          /* unlocked scopes: jc_me_get.admin_scopes / jc_admin_unlock */
 var events = [];          /* last jc_admin_events_list */
 var closing = null;       /* id of the event whose close form is open */
-var newCode = null;       /* {scope, code} — shown once, cleared on any navigation */
+var newCode = null;       /* {scope, code} — shown once: any later re-render drops it */
 var ed = null;            /* editor state: { ev (original or null), schema, slugTouched } */
 
 /* Halloween 2026, as residents knew it (jubail-halloween/): friendly wording and the
@@ -74,7 +74,7 @@ function fail(e){
 
 function show(name){
   current = name;
-  if (name !== "home") newCode = null;
+  newCode = null;         /* only rotate() draws the code, once (review PR #26) */
   VIEWS[name]();
 }
 
@@ -133,7 +133,8 @@ var VIEWS = {
     });
     on("copyCode", function(){
       (navigator.clipboard ? navigator.clipboard.writeText(newCode.code) : Promise.reject())
-        .then(function(){ el("copyCode").textContent = jcT("adm_copied"); }, function(){});
+        .then(function(){ el("copyCode").textContent = jcT("adm_copied"); },
+              function(){ showErr("COPY_FAILED"); });   /* never let them think it copied */
     });
     on("exit", function(){
       busy("exit", true);
@@ -256,8 +257,9 @@ function rotate(scope, b){
   if (!window.confirm(jcFmt("adm_rotate_confirm", { s: jcT("adm_code_" + scope) }))) return;
   b.disabled = true;
   rpc("jc_admin_code_rotate", { p_scope: scope }).then(function(r){
-    newCode = { scope: r.scope, code: r.code };   /* shown once; gone on the next navigation */
-    show("home");
+    current = "home";
+    newCode = { scope: r.scope, code: r.code };   /* drawn once; the next show() drops it */
+    VIEWS.home();
   }, function(err){ b.disabled = false; fail(err); });
 }
 
