@@ -1,17 +1,22 @@
 /* Events page — UC-C1 browse & sign up, UC-C2 archive stats (wireframe v4.1 bands
-   05 + 07). Views: list · detail (map/list) · signup · stats.
-   ?id=<event uuid> → detail (archived events → stats); ?id=…&view=stats → stats.
+   05 + 07). Views: list · detail (tabs: Map · List · My home) · stats.
+   ?id=<event uuid>[&tab=map|list|mine] → detail (archived events → stats);
+   ?id=…&view=stats → stats.
    CONTRACT (plan premortem #1): jc_event_signup REPLACES the home's payload + note,
-   so the form always sends the full set, prefilled from `mine`. Event-day live
-   controls (giant switch, supply, crowd reports) are T5.2. */
+   so the form always sends the full set, prefilled from `mine`.
+   The event uses the HOME's pin — there is no per-event pin to set here. A home with
+   no pin is sent to the pin screen and straight back to this tab (T5.2 plan Q4).
+   Event-day live controls (giant switch, supply, crowd reports) are T5.2 PR 5. */
 
 var params = new URLSearchParams(location.search);
 var EVENT_ID = params.get("id");
 if (EVENT_ID && !/^[0-9a-f-]{36}$/i.test(EVENT_ID)) EVENT_ID = null;
+var TABS = ["map", "list", "mine"];
 
 var state = null, cfg = null, current = null, map = null;
 var data = null;          /* last jc_event_get */
-var mode = "map";         /* detail: map | list */
+var tab = TABS.indexOf(params.get("tab")) >= 0 ? params.get("tab") : "map";
+var editing = false;      /* My home tab: the sign-up form is open */
 
 /* ---------- helpers ---------- */
 function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
@@ -44,7 +49,12 @@ function valueLabel(spec, v){
   if (spec && spec.type === "bool" && (v === "true" || v === "false")) return jcT(v === "true" ? "ev_yes" : "ev_no");  /* stats keys are strings */
   return (m && m[v]) || human(v);
 }
-function goList(){ location.href = "./"; }
+/* Usable coordinates only (T5.1 review): anything else is "not on the map yet". */
+function hasPos(e){ return !!e && Number.isFinite(e.lat) && Number.isFinite(e.lng); }
+function eventUrl(t){ return "../events/?id=" + data.event.id + "&tab=" + t; }
+/* the pin screen, coming back to this event's My home tab when the pin is saved */
+function pinUrl4Me(){ return "../home/?view=pin&next=" + encodeURIComponent(eventUrl("mine")); }
+function goPin(){ location.href = pinUrl4Me(); }
 /* The community's WhatsApp group (config links.whatsapp). Config is admin data, but a
    link must still be a real WhatsApp address — never javascript:/data:/elsewhere. */
 function whatsappUrl(){
@@ -86,122 +96,33 @@ var VIEWS = {
     });
   },
 
+  /* Halloween-site layout: the event header, then tabs. My home holds everything about
+     MY home's sign-up — no map there: the event uses the home's pin. */
   detail: function(){
-    var ev = data.event, mine = data.mine, entries = data.entries || [];
-    var h = myHome();
-    var isIn = mine && mine.status === "in";
+    var ev = data.event, entries = data.entries || [];
     el("view").innerHTML =
       '<div class="links" style="margin:0 0 10px"><a href="./">‹ ' + esc(jcT("ev_back")) + '</a></div>' +
       '<div class="evhead"><h1>' + esc(title(ev)) + '</h1>' +
         '<p class="sub">' + esc([fmtDate(ev.starts_at), jcT(ev.signups_open ? "ev_open" : "ev_closed"),
                                  jcFmt("ev_homes_in", { n: entries.length })].join(" · ")) + '</p>' +
         (desc(ev) ? '<p>' + esc(desc(ev)) + '</p>' : '') + '</div>' +
+      '<div class="evtabs" role="tablist">' + TABS.map(function(t){
+        return '<button type="button" role="tab" id="tab-' + t + '" aria-selected="' + (tab === t) + '">' +
+          esc(jcT("ev_tab_" + t)) + '</button>';
+      }).join("") + '</div>' +
       msgBox() +
-      '<div class="cta" id="cta"></div>' +
-      '<div class="seg2" role="group">' +
-        '<button type="button" id="modeMap" aria-pressed="' + (mode === "map") + '">' + esc(jcT("ev_map")) + '</button>' +
-        '<button type="button" id="modeList" aria-pressed="' + (mode === "list") + '">' + esc(jcT("ev_list")) + '</button></div>' +
       '<div id="body"></div>';
-
-    /* the call to action for MY home */
-    var cta = "";
-    if (!h) {
-      cta = '<p class="help">' + esc(jcT("ev_no_home")) + '</p><a class="btn" href="../home/">' + esc(jcT("ev_claim")) + '</a>';
-    } else if (isIn) {
-      cta = '<p class="status ok">' + esc(jcFmt("ev_signed_up", { h: myLabel() })) + '</p>' +
-        (ev.signups_open ? '<button class="btn" type="button" id="toSignup">' + esc(jcFmt("ev_update_btn", { h: myLabel() })) + '</button>' : '') +
-        '<button class="btn ghost" type="button" id="withdraw">' + esc(jcFmt("ev_withdraw", { h: myLabel() })) + '</button>' +
-        (h.lat == null ? '<p class="help">' + esc(jcT("ev_no_pin_nudge")) + ' <a href="../home/?view=pin">' + esc(jcT("ev_pin_it")) + '</a></p>' : '');
-    } else if (ev.signups_open) {
-      cta = '<button class="btn" type="button" id="toSignup">' + esc(jcFmt("ev_signup_btn", { h: myLabel() })) + '</button>';
-    } else {
-      cta = '<p class="help">' + esc(jcT("err_SIGNUPS_CLOSED")) + '</p>';
-    }
-    /* the organizers' note to MY home (Halloween parity: "your pin looks misplaced…") */
-    if (mine && mine.org_note) {
-      cta = '<div class="orgnote" role="note"><b>' + esc(jcT("ev_org_note")) + '</b><p>' + esc(mine.org_note) + '</p></div>' + cta;
-    }
-    var wa = whatsappUrl();
-    if (wa) cta += '<a class="btn ghost" target="_blank" rel="noopener" href="' + esc(wa) + '">' + esc(jcT("ev_whatsapp")) + '</a>';
-    el("cta").innerHTML = cta;
-    on("toSignup", function(){ show("signup"); });
-    on("withdraw", function(){
-      if (!window.confirm(jcFmt("ev_withdraw_confirm", { h: myLabel() }))) return;
-      busy("withdraw", true);
-      rpc("jc_entry_withdraw", { p_event: ev.id }).then(function(d){
-        data = d; show("detail"); showOk(jcFmt("ev_withdrawn", { h: myLabel() }));
-      }, function(e){ busy("withdraw", false); showErr(e.code); });
-    });
-    on("modeMap", function(){ mode = "map"; show("detail"); });
-    on("modeList", function(){ mode = "list"; show("detail"); });
-
-    if (mode === "map") renderMap(entries); else renderList(entries, "");
-  },
-
-  signup: function(){
-    var ev = data.event, mine = data.mine || {};
-    var prev = mine.status === "in" ? (mine.payload || {}) : {};
-    var fields = (ev.payload_schema && ev.payload_schema.fields) || {};
-    var chosen = {};
-    Object.keys(prev).forEach(function(k){ chosen[k] = prev[k]; });
-    var html = '<h1>' + esc(jcFmt(mine.status === "in" ? "ev_update_btn" : "ev_signup_btn", { h: myLabel() })) + '</h1>' +
-      '<p class="sub">' + esc(title(ev)) + '</p><form class="panel" id="form" novalidate>';
-    Object.keys(fields).forEach(function(k){
-      var spec = fields[k] || {};
-      var lab = '<legend>' + esc(fieldLabel(k, spec)) + (spec.required ? ' <span class="req">(' + esc(jcT("ev_required")) + ')</span>' : '') + '</legend>';
-      if (spec.type === "enum" || spec.type === "bool") {
-        var vals = spec.type === "bool" ? [true, false] : (spec.values || []);
-        html += '<fieldset class="field">' + lab + '<div class="opts">' + vals.map(function(v){
-          return '<button type="button" data-field="' + esc(k) + '" data-value="' + esc(JSON.stringify(v)) + '" aria-pressed="' +
-            (chosen[k] === v) + '">' + esc(valueLabel(spec, v)) + '</button>';
-        }).join("") + '</div></fieldset>';
-      } else {
-        html += '<label class="field">' + esc(fieldLabel(k, spec)) +
-          (spec.required ? ' <span class="req">(' + esc(jcT("ev_required")) + ')</span>' : '') +
-          '<input type="text" data-text="' + esc(k) + '" maxlength="' + esc(spec.max || 200) + '"></label>';
-      }
-    });
-    html += '<label class="field">' + esc(jcT("ev_note")) + '<textarea id="note" maxlength="280"></textarea></label>' +
-      '<p class="help">' + esc(jcT("ev_note_help")) + '</p>' + msgBox() +
-      '<button class="btn" id="go" type="submit">' + esc(jcT("ev_save")) + '</button>' +
-      '<button class="btn ghost" id="cancel" type="button">' + esc(jcT("ev_cancel")) + '</button></form>';
-    el("view").innerHTML = html;
-    Array.prototype.forEach.call(document.querySelectorAll("[data-text]"), function(i){
-      i.value = i.defaultValue = prev[i.dataset.text] != null ? String(prev[i.dataset.text]) : "";
-    });
-    el("note").value = el("note").defaultValue = mine.status === "in" ? (mine.note || "") : "";
-    Array.prototype.forEach.call(document.querySelectorAll("[data-field]"), function(b){
-      b.addEventListener("click", function(){
-        var k = b.dataset.field;
-        chosen[k] = JSON.parse(b.dataset.value);
-        Array.prototype.forEach.call(document.querySelectorAll('[data-field="' + k + '"]'), function(x){
-          x.setAttribute("aria-pressed", String(x === b));
-        });
+    TABS.forEach(function(t){
+      on("tab-" + t, function(){
+        tab = t; editing = false;
+        try { history.replaceState(null, "", "?id=" + ev.id + "&tab=" + t); } catch(e){}
+        show("detail");
       });
     });
-    on("cancel", function(){ show("detail"); });
-    el("form").addEventListener("submit", function(ev2){
-      ev2.preventDefault();
-      /* the FULL payload — every answer + the note — never a partial update */
-      var payload = {};
-      Object.keys(fields).forEach(function(k){
-        var spec = fields[k] || {};
-        if (spec.type === "text") {
-          var t = document.querySelector('[data-text="' + k + '"]').value.trim();
-          if (t) payload[k] = t;
-        } else if (chosen[k] !== undefined) {
-          payload[k] = chosen[k];
-        }
-        if (spec.required && payload[k] === undefined) payload.__missing = true;
-      });
-      if (payload.__missing) return showErr("PAYLOAD_INCOMPLETE");
-      var note = el("note").value.trim();
-      if (note) payload.note = note;
-      busy("go", true);
-      rpc("jc_event_signup", { p_event: ev.id, p_payload: payload }).then(function(d){
-        data = d; show("detail"); showOk(jcFmt("ev_signed_up", { h: myLabel() }));
-      }, function(e){ busy("go", false); showErr(e.code); });
-    });
+    if (tab === "map") renderMap(entries);
+    else if (tab === "list") renderList(entries, "");
+    else if (editing) renderForm();
+    else renderMine();
   },
 
   stats: function(){
@@ -234,6 +155,134 @@ var VIEWS = {
   }
 };
 
+/* ---------- My home tab: my sign-up, or the form ---------- */
+function renderMine(){
+  var ev = data.event, mine = data.mine, h = myHome();
+  var isIn = mine && mine.status === "in";
+  var html = "";
+  /* the organizers' note to MY home (Halloween parity: "your pin looks misplaced…") */
+  if (mine && mine.org_note) {
+    html += '<div class="orgnote" role="note"><b>' + esc(jcT("ev_org_note")) + '</b><p>' + esc(mine.org_note) + '</p></div>';
+  }
+  if (!h) {
+    html += '<p class="help">' + esc(jcT("ev_no_home")) + '</p><a class="btn" href="../home/">' + esc(jcT("ev_claim")) + '</a>';
+  } else if (isIn) {
+    var fields = (ev.payload_schema && ev.payload_schema.fields) || {};
+    var rows = Object.keys(fields).filter(function(k){ return mine.payload && mine.payload[k] !== undefined; }).map(function(k){
+      var v = mine.payload[k];
+      return '<li><span>' + esc(fieldLabel(k, fields[k])) + '</span><b>' +
+        esc(fields[k].type === "text" ? String(v) : valueLabel(fields[k], v)) + '</b></li>';
+    });
+    html += '<p class="status ok">' + esc(jcFmt("ev_signed_up", { h: myLabel() })) + '</p>' +
+      (rows.length ? '<ul class="answers">' + rows.join("") + '</ul>' : '') +
+      (mine.note ? '<p class="mynote">' + esc(mine.note) + '</p>' : '') +
+      pinLine(h) +
+      (ev.signups_open ? '<button class="btn" type="button" id="toSignup">' + esc(jcFmt("ev_update_btn", { h: myLabel() })) + '</button>' : '') +
+      '<button class="btn ghost" type="button" id="withdraw">' + esc(jcFmt("ev_withdraw", { h: myLabel() })) + '</button>';
+  } else if (!ev.signups_open) {
+    html += '<p class="help">' + esc(jcT("err_SIGNUPS_CLOSED")) + '</p>';
+  } else if (!hasPos(h)) {
+    /* no pin → the pin screen, then straight back here (never a refusal) */
+    html += '<p class="help">' + esc(jcFmt("ev_pin_first", { h: myLabel() })) + '</p>' +
+      '<a class="btn" id="toPin" href="' + esc(pinUrl4Me()) + '">' + esc(jcT("ev_pin_first_btn")) + '</a>';
+  } else {
+    html += pinLine(h) +
+      '<button class="btn" type="button" id="toSignup">' + esc(jcFmt("ev_signup_btn", { h: myLabel() })) + '</button>';
+  }
+  var wa = whatsappUrl();
+  if (wa) html += '<a class="btn ghost" target="_blank" rel="noopener" href="' + esc(wa) + '">' + esc(jcT("ev_whatsapp")) + '</a>';
+  el("body").innerHTML = '<div class="cta" id="cta">' + html + '</div>';
+  on("toSignup", function(){
+    if (!hasPos(myHome())) return goPin();
+    editing = true; show("detail");
+  });
+  on("withdraw", function(){
+    if (!window.confirm(jcFmt("ev_withdraw_confirm", { h: myLabel() }))) return;
+    busy("withdraw", true);
+    rpc("jc_entry_withdraw", { p_event: ev.id }).then(function(d){
+      data = d; show("detail"); showOk(jcFmt("ev_withdrawn", { h: myLabel() }));
+    }, function(e){ busy("withdraw", false); showErr(e.code); });
+  });
+}
+
+/* "📍 Villa 12's pin is on the map — Change": the home's pin, edited on My Home */
+function pinLine(h){
+  return hasPos(h)
+    ? '<p class="help pinline">' + esc(jcFmt("ev_pin_line", { h: myLabel() })) + ' <a href="' + esc(pinUrl4Me()) + '">' + esc(jcT("ev_pin_change")) + '</a></p>'
+    : '<p class="help pinline">' + esc(jcT("ev_no_pin_nudge")) + ' <a href="' + esc(pinUrl4Me()) + '">' + esc(jcT("ev_pin_it")) + '</a></p>';
+}
+
+function renderForm(){
+  var ev = data.event, mine = data.mine || {};
+  var prev = mine.status === "in" ? (mine.payload || {}) : {};
+  var fields = (ev.payload_schema && ev.payload_schema.fields) || {};
+  var chosen = {};
+  Object.keys(prev).forEach(function(k){ chosen[k] = prev[k]; });
+  var html = '<h2 class="formtitle">' + esc(jcFmt(mine.status === "in" ? "ev_update_btn" : "ev_signup_btn", { h: myLabel() })) + '</h2>' +
+    '<form class="panel" id="form" novalidate>';
+  Object.keys(fields).forEach(function(k){
+    var spec = fields[k] || {};
+    var lab = '<legend>' + esc(fieldLabel(k, spec)) + (spec.required ? ' <span class="req">(' + esc(jcT("ev_required")) + ')</span>' : '') + '</legend>';
+    if (spec.type === "enum" || spec.type === "bool") {
+      var vals = spec.type === "bool" ? [true, false] : (spec.values || []);
+      html += '<fieldset class="field">' + lab + '<div class="opts">' + vals.map(function(v){
+        return '<button type="button" data-field="' + esc(k) + '" data-value="' + esc(JSON.stringify(v)) + '" aria-pressed="' +
+          (chosen[k] === v) + '">' + esc(valueLabel(spec, v)) + '</button>';
+      }).join("") + '</div></fieldset>';
+    } else {
+      html += '<label class="field">' + esc(fieldLabel(k, spec)) +
+        (spec.required ? ' <span class="req">(' + esc(jcT("ev_required")) + ')</span>' : '') +
+        '<input type="text" data-text="' + esc(k) + '" maxlength="' + esc(spec.max || 200) + '"></label>';
+    }
+  });
+  html += '<label class="field">' + esc(jcT("ev_note")) + '<textarea id="note" maxlength="280"></textarea></label>' +
+    '<p class="help">' + esc(jcT("ev_note_help")) + '</p>' +
+    '<button class="btn" id="go" type="submit">' + esc(jcT("ev_save")) + '</button>' +
+    '<button class="btn ghost" id="cancel" type="button">' + esc(jcT("ev_cancel")) + '</button></form>';
+  el("body").innerHTML = html;
+  /* no selectors built from schema keys (T5.1 review): match on dataset values instead */
+  var texts = Array.prototype.slice.call(document.querySelectorAll("#form [data-text]"));
+  var opts = Array.prototype.slice.call(document.querySelectorAll("#form [data-field]"));
+  texts.forEach(function(i){
+    i.value = i.defaultValue = prev[i.dataset.text] != null ? String(prev[i.dataset.text]) : "";
+  });
+  el("note").value = el("note").defaultValue = mine.status === "in" ? (mine.note || "") : "";
+  opts.forEach(function(b){
+    b.addEventListener("click", function(){
+      var k = b.dataset.field;
+      chosen[k] = JSON.parse(b.dataset.value);
+      opts.forEach(function(x){ if (x.dataset.field === k) x.setAttribute("aria-pressed", String(x === b)); });
+    });
+  });
+  on("cancel", function(){ editing = false; show("detail"); });
+  el("form").addEventListener("submit", function(ev2){
+    ev2.preventDefault();
+    /* the FULL payload — every answer + the note — never a partial update */
+    var payload = {}, missing = false;
+    Object.keys(fields).forEach(function(k){
+      var spec = fields[k] || {};
+      if (spec.type === "text") {
+        var input = texts.filter(function(i){ return i.dataset.text === k; })[0];
+        var t = input ? input.value.trim() : "";
+        if (t) payload[k] = t;
+      } else if (chosen[k] !== undefined) {
+        payload[k] = chosen[k];
+      }
+      if (spec.required && payload[k] === undefined) missing = true;
+    });
+    if (missing) return showErr("PAYLOAD_INCOMPLETE");
+    var note = el("note").value.trim();
+    if (note) payload.note = note;
+    busy("go", true);
+    rpc("jc_event_signup", { p_event: ev.id, p_payload: payload }).then(function(d){
+      data = d; editing = false; show("detail"); showOk(jcFmt("ev_signed_up", { h: myLabel() }));
+    }, function(e){
+      if (e.code === "NO_PIN") return goPin();   /* server safety net (T5.2 PR 3): same redirect */
+      busy("go", false); showErr(e.code);
+    });
+  });
+}
+
 /* ---------- map + list (Halloween-site parity, plan audit 2026-11-03) ---------- */
 var TILES = {
   sat: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
@@ -257,7 +306,7 @@ function locate(done){
   }, function(err){ showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED"); },
   { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
 }
-function dist(e){ return userPos && e.lat != null ? userPos.distanceTo(L.latLng(e.lat, e.lng)) : null; }
+function dist(e){ return userPos && hasPos(e) ? userPos.distanceTo(L.latLng(e.lat, e.lng)) : null; }
 function fmtDist(m){ return m < 1000 ? Math.round(m / 10) * 10 + " m" : (m / 1000).toFixed(1) + " km"; }
 /* house-number order: building, then the number's digits numerically (9 before 10), then the rest */
 function byNumber(a, b){
@@ -289,14 +338,14 @@ function popupHtml(e){
 }
 
 function renderMap(entries){
-  var unpinned = entries.filter(function(e){ return e.lat == null; }).length;
+  var unpinned = entries.filter(function(e){ return !hasPos(e); }).length;
   el("body").innerHTML =
     '<div class="evmapwrap"><div class="evmap" id="map"></div>' +
       '<button type="button" class="lang maplayer" id="layerBtn">' + esc(jcT(layer === "sat" ? "pin_street" : "pin_sat")) + '</button>' +
       '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
     (unpinned ? '<p class="help" style="margin-top:8px">' + esc(unpinned) + ' · ' + esc(jcT("ev_unpinned")) +
       ' — <a href="#" id="seeList">' + esc(jcT("ev_list")) + '</a></p>' : '');
-  on("seeList", function(e){ e.preventDefault(); mode = "list"; show("detail"); });
+  on("seeList", function(e){ e.preventDefault(); el("tab-list").click(); });
   var c = (cfg && cfg.map) || {};
   map = L.map("map", { zoomControl: true }).setView([c.lat || 24.53, c.lng || 54.43], c.zoom || 14);
   var tiles = L.tileLayer(TILES[layer].url, TILES[layer].opts).addTo(map);
@@ -311,7 +360,7 @@ function renderMap(entries){
   var ink = styles.getPropertyValue("--jc-ink").trim() || "#f6f2e9";
   var markers = [], pts = [], me = null;
   entries.forEach(function(e){
-    if (e.lat == null) return;
+    if (!hasPos(e)) return;
     pts.push([e.lat, e.lng]);
     var m = L.circleMarker([e.lat, e.lng], {
       radius: e.mine ? 10 : 7, weight: e.mine ? 3 : 2, color: e.mine ? ink : accent, fillColor: accent, fillOpacity: .85
@@ -360,14 +409,14 @@ function renderList(entries, q){
         : byNumber);
       return '<h2 class="group">' + esc(jcVillageName(cfg, v)) + ' · ' + esc(list.length) + '</h2><ul class="entries">' + list.map(function(e){
         var bits = answers(e);
-        if (e.lat == null) bits.push(jcT("ev_unpinned"));
+        if (!hasPos(e)) bits.push(jcT("ev_unpinned"));
         var d = dist(e);
         return '<li class="' + (e.mine ? "mine" : "") + '"><b>' + esc(jcHomeLabel(e)) + '</b>' +
           (e.mine ? ' <span class="meta">· ' + esc(jcT("ev_mine")) + '</span>' : '') +
           (d !== null ? ' <span class="meta">· ' + esc(fmtDist(d)) + '</span>' : '') +
           (bits.length ? '<div class="meta">' + esc(bits.join(" · ")) + '</div>' : '') +
           (e.note ? '<div class="note">' + esc(e.note) + '</div>' : '') +
-          (e.lat != null ? '<div class="popacts"><a target="_blank" rel="noopener" href="' + esc(directionsUrl(e)) + '">' +
+          (hasPos(e) ? '<div class="popacts"><a target="_blank" rel="noopener" href="' + esc(directionsUrl(e)) + '">' +
             esc(jcT("ev_directions")) + '</a></div>' : '') + '</li>';
       }).join("") + '</ul>';
     }).join("");
@@ -401,7 +450,7 @@ function paint(){
 el("langBtn").addEventListener("click", function(){
   jcSetLang(ar() ? "en" : "ar");
   paint();
-  if (current === "signup") return;        /* don't throw away a half-filled form */
+  if (editing) return;                     /* don't throw away a half-filled form */
   if (current) show(current);
 });
 

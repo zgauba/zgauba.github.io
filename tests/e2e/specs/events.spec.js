@@ -1,6 +1,6 @@
 // T5.1 — Events: list, detail (map/list), schema-driven signup, withdraw, stats, "Our year".
 const { test, expect } = require("@playwright/test");
-const { stubBackend, ok, raise, CONFIG, MEMBER, HOME_V12 } = require("./stub");
+const { stubBackend, ok, raise, CONFIG, MEMBER, MEMBER_NO_PIN, HOME_V12 } = require("./stub");
 
 const LIVE_ID = "11111111-1111-4111-8111-111111111111";
 const PAST_ID = "22222222-2222-4222-8222-222222222222";
@@ -96,7 +96,7 @@ test("detail: map pins only pinned homes; list groups by village, search, unpinn
   await page.goto("events/?id=" + LIVE_ID);
   await expect(page.locator("h1")).toHaveText("National Day Gathering");
   await expect(page.locator("#map path.leaflet-interactive")).toHaveCount(1);   // e2 has no pin
-  await page.locator("#modeList").click();
+  await page.locator("#tab-list").click();
   await expect(page.locator("h2.group")).toHaveText(["Ain Al Maha · 1", "Seef Al Jubail · 1"]);  // alphabetical, with counts
   await expect(page.locator(".entries li").filter({ hasText: "Townhouse 40" })).toContainText("Not on the map yet");
   await expect(page.locator(".entries li").filter({ hasText: "Villa 3" })).toContainText("Ring twice");
@@ -109,8 +109,11 @@ test("signup: required answers enforced; full payload + note sent; 'Villa 12 is 
   const { calls } = await stubBackend(page, { rpc: eb.rpc });
   await signIn(page);
   await page.goto("events/?id=" + LIVE_ID);
+  await page.locator("#tab-mine").click();
+  await expect(page.locator("#map")).toHaveCount(0);                     // no map beside sign-up
+  await expect(page.locator(".pinline")).toContainText("Villa 12 is pinned on the map.");
   await page.locator("#toSignup").click();
-  await expect(page.locator("h1")).toHaveText("Sign Villa 12 up");
+  await expect(page.locator("h2.formtitle")).toHaveText("Sign Villa 12 up");
   await page.locator('[data-field="treats"][data-value=\'"candy"\']').click();
   await page.locator("#go").click();
   await expect(page.locator("#msg")).toHaveText("Please answer the required questions.");
@@ -129,8 +132,10 @@ test("updating one answer keeps the other answers AND the note", async ({ page }
   const eb = eventsBackend({ mine: { id: "m", status: "in", payload: { treats: "candy", handout: "door" }, note: "Knock loudly" } });
   const { calls } = await stubBackend(page, { rpc: eb.rpc });
   await signIn(page);
-  await page.goto("events/?id=" + LIVE_ID);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
   await expect(page.locator(".status.ok")).toHaveText("Villa 12 is in.");
+  await expect(page.locator(".answers")).toContainText("Candy");
+  await expect(page.locator(".mynote")).toHaveText("Knock loudly");
   await page.locator("#toSignup").click();
   await expect(page.locator("#note")).toHaveValue("Knock loudly");
   await page.locator('[data-field="treats"][data-value=\'"both"\']').click();
@@ -145,7 +150,7 @@ test("withdraw (confirmed) → withdrawn, sign-up offered again", async ({ page 
   const eb = eventsBackend({ mine: { id: "m", status: "in", payload: { treats: "candy", handout: "door" }, note: null } });
   await stubBackend(page, { rpc: eb.rpc });
   await signIn(page);
-  await page.goto("events/?id=" + LIVE_ID);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
   page.once("dialog", (d) => d.accept());
   await page.locator("#withdraw").click();
   await expect(page.locator("#msg")).toHaveText("Villa 12 has withdrawn.");
@@ -156,7 +161,7 @@ test("sign-ups closed: no sign-up button; a race shows the server's answer", asy
   const eb = eventsBackend({ signupsOpen: false });
   await stubBackend(page, { rpc: eb.rpc });
   await signIn(page);
-  await page.goto("events/?id=" + LIVE_ID);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
   await expect(page.locator("#toSignup")).toHaveCount(0);
   await expect(page.locator("#cta")).toContainText("Sign-ups for this event are closed.");
 });
@@ -170,7 +175,7 @@ test("no home yet → claim first", async ({ page }) => {
   await page.locator("#password").fill("correct-horse");
   await page.locator("#go").click();
   await expect(page).toHaveURL(/\/commons\/home\/$/);
-  await page.goto("events/?id=" + LIVE_ID);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
   await expect(page.locator("#cta a.btn")).toHaveAttribute("href", "../home/");
 });
 
@@ -200,7 +205,7 @@ test("hostile note / house number rendered as text (list + map tooltip)", async 
     await page.locator("#map path.leaflet-interactive").nth(1).click();
     await expect(page.locator(".leaflet-popup-content")).toContainText("<svg");
     await expect(page.locator(".leaflet-popup-content")).toContainText("<img");
-    await page.locator("#modeList").click();
+    await page.locator("#tab-list").click();
     await expect(page.locator(".entries .note").filter({ hasText: "<img" })).toHaveCount(1);
     expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
     expect(await page.locator("#view img, #view svg[onload]").count()).toBe(0);
@@ -272,7 +277,7 @@ test("list: house numbers in natural order (9 before 10); nearest-first after lo
     await stubBackend(page, { rpc: eb.rpc });
     await signIn(page);
     await page.goto("events/?id=" + LIVE_ID);
-    await page.locator("#modeList").click();
+    await page.locator("#tab-list").click();
     const seef = page.locator("h2.group:has-text('Seef') + ul.entries li b");
     await expect(seef).toHaveText(["Villa 3", "Villa 9", "Villa 10"]);
     await page.locator("#sortDist").click();
@@ -303,6 +308,8 @@ test("the organizers' note to my home is shown on the event", async ({ page }) =
   await stubBackend(page, { rpc: eb.rpc });
   await signIn(page);
   await page.goto("events/?id=" + LIVE_ID);
+  await expect(page.locator(".orgnote")).toHaveCount(0);                 // it lives on My home
+  await page.locator("#tab-mine").click();
   await expect(page.locator(".orgnote")).toContainText("Message from the organizers");
   await expect(page.locator(".orgnote")).toContainText("Your pin looks misplaced");
 });
@@ -312,10 +319,90 @@ test("WhatsApp link: shown when configured, never for a non-WhatsApp URL", async
   let wa = "https://chat.whatsapp.com/AbC123xyz";
   await stubBackend(page, { rpc: Object.assign(eb.rpc, { jc_config_get: () => ok(Object.assign({}, CONFIG, { links: { whatsapp: wa } })) }) });
   await signIn(page);
-  await page.goto("events/?id=" + LIVE_ID);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
   await expect(page.getByRole("link", { name: "Message the organizers on WhatsApp" })).toHaveAttribute("href", wa);
   wa = "javascript:alert(1)";
-  await page.goto("events/?id=" + LIVE_ID);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
   await expect(page.locator("h1")).toHaveText("National Day Gathering");
   await expect(page.getByRole("link", { name: "Message the organizers on WhatsApp" })).toHaveCount(0);
+});
+
+// ---- T5.2 PR 1: tabs, no map beside sign-up, pin required → redirect (never refuse) ----
+
+const PIN_NEXT = "../home/?view=pin&next=" + encodeURIComponent("../events/?id=" + LIVE_ID + "&tab=mine");
+
+test("tabs: Map · List · My home; the tab is kept in the URL", async ({ page }) => {
+  const eb = eventsBackend();
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await expect(page.locator('.evtabs [role="tab"]')).toHaveText(["Map", "List", "My home"]);
+  await expect(page.locator("#tab-map")).toHaveAttribute("aria-selected", "true");
+  await page.locator("#tab-list").click();
+  await expect(page).toHaveURL(new RegExp("events/\\?id=" + LIVE_ID + "&tab=list$"));
+  await expect(page.locator("#map")).toHaveCount(0);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=nonsense");               // unknown tab → Map
+  await expect(page.locator("#tab-map")).toHaveAttribute("aria-selected", "true");
+});
+
+test("no pin: My home sends them to pin first — no form, no sign-up call", async ({ page }) => {
+  const eb = eventsBackend();
+  const { calls } = await stubBackend(page, { rpc: Object.assign(eb.rpc, {
+    jc_me_get: (a, c) => c.signedIn ? ok(MEMBER_NO_PIN) : raise("NOT_SIGNED_IN") }) });
+  await signIn(page, /\/commons\/(home\/)?$/);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
+  await expect(page.locator("#cta .help")).toContainText("Before Villa 12 can sign up, pin it on the map");
+  await expect(page.locator("#toPin")).toHaveAttribute("href", PIN_NEXT);
+  await expect(page.locator("#form, #toSignup")).toHaveCount(0);
+  expect(calls.some((c) => c.name === "jc_event_signup")).toBe(false);
+});
+
+test("server safety net: NO_PIN on sign-up redirects to the pin screen, not an error", async ({ page }) => {
+  const eb = eventsBackend({ rpc: { jc_event_signup: () => raise("NO_PIN") } });
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
+  await page.locator("#toSignup").click();
+  await page.locator('[data-field="treats"][data-value=\'"candy"\']').click();
+  await page.locator('[data-field="handout"][data-value=\'"door"\']').click();
+  await page.locator("#go").click();
+  await expect(page).toHaveURL(/\/commons\/home\/\?view=pin&next=/);
+  await expect(page.locator("h1")).toHaveText("Pin your home");
+});
+
+// T5.1 review Lows: no selector built from schema keys; no in-band "__missing" sentinel.
+test("odd schema keys can't break the form; a field named __missing is just a field", async ({ page }) => {
+  const odd = { fields: { 'x"y': { type: "text", required: true }, __missing: { type: "bool", required: true } } };
+  const eb = eventsBackend({ rpc: { jc_event_get: () => ok({ event: Object.assign({}, LIVE, { payload_schema: odd }),
+    mine: null, stats: null, entries: [] }) } });
+  const { calls } = await stubBackend(page, { rpc: eb.rpc });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
+  await page.locator("#toSignup").click();
+  await page.locator("[data-text]").fill("hello");
+  await page.locator('[data-field="__missing"][data-value="true"]').click();   // "true" is what tripped the old sentinel
+  await page.locator("#go").click();
+  await expect.poll(() => calls.filter((c) => c.name === "jc_event_signup").length).toBe(1);
+  expect(calls.find((c) => c.name === "jc_event_signup").args.p_payload).toEqual({ 'x"y': "hello", __missing: true });
+  expect(errors).toEqual([]);
+});
+
+test("non-numeric coordinates are treated as unpinned (no marker, no crash)", async ({ page }) => {
+  ENTRIES.push({ id: "bad", mine: false, village: "seef-al-jubail", type: "villa", building: null, number: "77",
+    lat: "24.5", lng: "54.4", payload: {}, note: null });
+  try {
+    const eb = eventsBackend();
+    await stubBackend(page, { rpc: eb.rpc });
+    const errors = [];
+    page.on("pageerror", (e) => errors.push(String(e)));
+    await signIn(page);
+    await page.goto("events/?id=" + LIVE_ID);
+    await expect(page.locator("#map path.leaflet-interactive")).toHaveCount(1);   // only e1
+    await page.locator("#tab-list").click();
+    await expect(page.locator(".entries li").filter({ hasText: "Villa 77" })).toContainText("Not on the map yet");
+    await expect(page.locator(".entries li").filter({ hasText: "Villa 77" }).locator(".popacts")).toHaveCount(0);
+    expect(errors).toEqual([]);
+  } finally { ENTRIES.pop(); }
 });
