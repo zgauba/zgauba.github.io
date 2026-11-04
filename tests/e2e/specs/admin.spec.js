@@ -43,10 +43,10 @@ test("new event from the Halloween template: short name follows the title; quest
   await signIn(page);
   await page.goto("admin/");
   await page.locator("#newEv").click();
+  await page.locator('[data-tpl="halloween"]').click();                           // T5.2 2c: start from a template
   await expect(page.locator("#form")).toHaveAttribute("data-no-autoreload", "");   // auto-update never reloads mid-edit
   await page.locator("#title_en").fill("Halloween 2027!");
   await expect(page.locator("#slug")).toHaveValue("halloween-2027");
-  await page.locator("#useHalloween").click();
   // the template opens as editable cards (PR 2b)
   await expect(page.locator(".qcard")).toHaveCount(3);
   await expect(page.locator('.qcard[data-q="2"] [data-q-label="en"]')).toHaveValue("Kids should come to…");
@@ -58,7 +58,8 @@ test("new event from the Halloween template: short name follows the title; quest
   await expect(page.locator("#msg")).toHaveText("Saved.");
   const f = lastCall(calls, "jc_admin_event_save").args;
   expect(f.p_event).toBeNull();
-  expect(Object.keys(f.p_fields).sort()).toEqual(["features", "payload_schema", "slug", "title_en"]);  // empty fields not sent
+  expect(Object.keys(f.p_fields).sort()).toEqual(["features", "look", "payload_schema", "slug", "title_en"]);  // empty fields + default kind not sent
+  expect(f.p_fields.look).toBe("halloween");
   expect(f.p_fields.features).toEqual({ giant_switch: true });
   expect(f.p_fields.payload_schema.fields.entrance).toMatchObject({ pin: "ring", label_en: "Kids should come to…",
     labels_en: { front: "Front gate", garden: "Garden gate (park side)", both: "Both gates" } });
@@ -96,6 +97,7 @@ test("editor checks: short name format, end before start", async ({ page }) => {
   await signIn(page);
   await page.goto("admin/");
   await page.locator("#newEv").click();
+  await page.locator('[data-tpl="blank"]').click();
   // the date pickers once pushed the page wider than the phone (taps landed on the wrong thing)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.locator("#title_en").fill("Fun");
@@ -225,6 +227,7 @@ test("signing in from the organizer page comes back to it", async ({ page }) => 
 async function openNewDraft(page, title) {
   await page.goto("admin/");
   await page.locator("#newEv").click();
+  await page.locator('[data-tpl="blank"]').click();
   await page.locator("#title_en").fill(title);
 }
 async function addQ(page) {
@@ -534,4 +537,126 @@ test("one event's NOT_ADMIN (it just closed) keeps the person's other events —
   await expect(page.locator("#code")).toHaveCount(0);                    // not the lock screen
   await expect(page.locator(".aevents li")).toHaveCount(1);
   await expect(page.locator(".aevents li")).toContainText("National Day");
+});
+
+// ---- T5.2 PR 2c: templates, kind, look, venue ----
+
+test("New event opens six templates; Cancel goes back; Blank starts empty as a homes event", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["community"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator("#newEv").click();
+  await expect(page.locator("[data-tpl]")).toHaveCount(6);
+  await page.locator("#cancel").click();
+  await expect(page.locator(".aevents li")).toHaveCount(3);
+  await page.locator("#newEv").click();
+  await page.locator('[data-tpl="blank"]').click();
+  await expect(page.locator('input[name="kind"][value="homes"]')).toBeChecked();
+  await expect(page.locator("#venueBox")).toBeHidden();
+  await expect(page.locator("#look")).toHaveValue("plain");
+  await expect(page.locator(".qcard")).toHaveCount(0);
+});
+
+test("Market template: one place + JICM notice + spots; place pinned from pasted coordinates; saved as a venue", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["community"] });
+  const { calls } = await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator("#newEv").click();
+  await page.locator('[data-tpl="market"]').click();
+  await expect(page.locator('input[name="kind"][value="venue"]')).toBeChecked();
+  await expect(page.locator("#venueBox")).toBeVisible();
+  await expect(page.locator("#venueBox .notice")).toContainText("community management (JICM)");
+  await expect(page.locator("#spots")).toBeChecked();
+  await expect(page.locator("#look")).toHaveValue("market");
+  await expect(page.locator(".qcard")).toHaveCount(2);
+  await expect(page.locator("#venueState")).toHaveText("No place pinned yet — needed before you publish.");
+  await page.locator("#title_en").fill("Kids Market");
+  await page.locator("#venue_name_en").fill("Central Park");
+  await page.locator("#coords").fill("24.5305, 54.4305");
+  await page.locator("#coordsGo").click();
+  await page.locator("#setVenue").click();
+  await expect(page.locator("#venueState")).toHaveText("Place pinned.");
+  await page.locator("#capacity").fill("2.5");
+  await page.locator("#save").click();
+  await expect(page.locator("#msg")).toContainText("a whole number from 1 to 5000");
+  expect(calls.filter((c) => c.name === "jc_admin_event_save")).toHaveLength(0);
+  await page.locator("#capacity").fill("30");
+  await page.locator("#save").click();
+  await expect(page.locator("#msg")).toHaveText("Saved.");
+  const f = lastCall(calls, "jc_admin_event_save").args.p_fields;
+  expect(f).toMatchObject({ kind: "venue", look: "market", venue_name_en: "Central Park",
+    venue_lat: 24.5305, venue_lng: 54.4305, capacity: 30, spots: true });
+  expect(f.venue_name_ar).toBeUndefined();                               // blanks aren't sent
+  expect(Object.keys(f.payload_schema.fields).sort()).toEqual(["selling", "table"]);
+  await expect(page.locator('li[data-event="kids-market"] small')).toContainText("at Central Park");
+  await expect(page.locator('li[data-event="kids-market"] small')).toContainText("0 households");
+});
+
+test("a one-place draft without its place can't publish (NO_VENUE explained)", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["community"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator("#newEv").click();
+  await page.locator('[data-tpl="gathering"]').click();
+  await expect(page.locator("#spots")).not.toBeChecked();
+  await page.locator("#title_en").fill("Iftar");
+  await page.locator("#save").click();
+  await expect(page.locator('li[data-event="iftar"] small')).toContainText("no place yet");
+  page.once("dialog", (d) => d.accept());
+  await page.locator('li[data-event="iftar"] [data-act="publish"]').click();
+  await expect(page.locator("#msg")).toHaveText("A one-place event needs its place: add the name and pin it on the map.");
+});
+
+test("editing: the kind is locked once homes signed up; an untouched venue sends nothing; one change sends one field", async ({ page }) => {
+  const VENUE_ID = "77777777-7777-4777-8777-777777777777";
+  const ab = adminBackend({ scopes: ["community"], extraEvents: [{ id: VENUE_ID, slug: "picnic", title_en: "Picnic",
+    status: "draft", signups_open: true, features: {}, payload_schema: { fields: {} }, entries: 0,
+    kind: "venue", look: "gathering", venue_name_en: "Beach", venue_lat: 24.531, venue_lng: 54.431, capacity: 40, spots: false }] });
+  const { calls } = await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator('li[data-event="test-event"] [data-act="edit"]').click();      // 3 homes in
+  await expect(page.locator('input[name="kind"][value="venue"]')).toBeDisabled();
+  await expect(page.locator("#form")).toContainText("Homes have signed up, so the kind can't change.");
+  await page.locator("#cancel").click();
+  await page.locator('li[data-event="picnic"] [data-act="edit"]').click();
+  await expect(page.locator("#venueState")).toHaveText("Place pinned.");
+  await expect(page.locator("#capacity")).toHaveValue("40");
+  const n = calls.filter((c) => c.name === "jc_admin_event_save").length;
+  await page.locator("#save").click();
+  await expect(page.locator("#msg")).toHaveText("Nothing changed.");
+  expect(calls.filter((c) => c.name === "jc_admin_event_save")).toHaveLength(n);
+  await page.locator("#capacity").fill("50");
+  await page.locator("#save").click();
+  await expect(page.locator("#msg")).toHaveText("Saved.");
+  expect(lastCall(calls, "jc_admin_event_save").args.p_fields).toEqual({ capacity: 50 });
+  // switching a draft to homes sends only the kind (the server clears the place)
+  await page.locator('li[data-event="picnic"] [data-act="edit"]').click();
+  await page.locator('input[name="kind"][value="homes"]').check();
+  await expect(page.locator("#venueBox")).toBeHidden();
+  await page.locator("#save").click();
+  expect(lastCall(calls, "jc_admin_event_save").args.p_fields).toEqual({ kind: "homes" });
+});
+
+test("venue editor: Enter in the coordinates box moves the map and never saves; homes → venue sends kind + place", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["community"] });
+  const { calls } = await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator('li[data-event="national-day-2026"] [data-act="edit"]').click();   // a homes draft
+  await page.locator('input[name="kind"][value="venue"]').check();
+  await expect(page.locator("#venueBox")).toBeVisible();
+  await page.locator("#coords").fill("https://maps.google.com/?q=24.5301,54.4312");
+  await page.locator("#coords").press("Enter");
+  await expect(page.locator("#form")).toBeVisible();                                    // still editing
+  expect(calls.filter((c) => c.name === "jc_admin_event_save")).toHaveLength(0);
+  await page.locator("#setVenue").click();
+  await page.locator("#venue_name_en").fill("Seef Park");
+  await page.locator("#save").click();
+  await expect(page.locator("#msg")).toHaveText("Saved.");
+  expect(lastCall(calls, "jc_admin_event_save").args.p_fields).toEqual({
+    kind: "venue", venue_name_en: "Seef Park", venue_lat: 24.5301, venue_lng: 54.4312 });
 });

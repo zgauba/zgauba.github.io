@@ -21,7 +21,7 @@ h1{font-size:22px; font-weight:800; margin:0 0 6px}
 .panel{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius);
   padding:18px 16px; display:flex; flex-direction:column; gap:12px}
 label{display:flex; flex-direction:column; gap:5px; font-size:13px; font-weight:700; color:var(--jc-muted)}
-input[type=email], input[type=password], input[type=text]{
+input[type=email], input[type=password], input[type=text], input[type=number]{
   font:inherit; font-size:16px; /* ≥16px: iOS doesn't zoom on focus */
   color:var(--jc-ink); background:var(--jc-surface-2); border:1px solid var(--jc-line);
   border-radius:10px; padding:11px 12px; width:100%}
@@ -45,3 +45,17 @@ input:focus-visible, button:focus-visible, a:focus-visible{outline:2px solid var
 .subtabs button{flex:1; font:inherit; font-weight:700; cursor:pointer; color:var(--jc-muted); background:none;
   border:0; border-bottom:3px solid transparent; padding:10px 6px; margin-bottom:-1px}
 .subtabs button[aria-selected="true"]{color:var(--jc-ink); border-bottom-color:var(--jc-accent)}
+
+/* shared pin map (home pin, organizer venue pin): the ring is fixed at the map's center;
+   the person pans the map. Pages that use it load Leaflet + assets/map.js. */
+.pinmap{position:relative; height:44vh; min-height:280px; border-radius:var(--jc-radius); overflow:hidden;
+  border:1px solid var(--jc-line)}
+.pinmap .map{position:absolute; inset:0}
+.pinmap .ring{position:absolute; top:50%; left:50%; width:34px; height:34px; margin:-17px 0 0 -17px;
+  border:3px solid var(--jc-accent); border-radius:50%; box-shadow:0 0 0 2px rgba(0,0,0,.55); pointer-events:none; z-index:500}
+.pinmap .ring::after{content:""; position:absolute; top:50%; left:50%; width:6px; height:6px; margin:-3px 0 0 -3px;
+  background:var(--jc-accent); border-radius:50%}
+.pinmap .layers{position:absolute; top:10px; right:10px; z-index:600}   /* physical: Leaflet's zoom is always top-left, also in Arabic */
+.pinmap .locate{position:absolute; bottom:40px;  /* clear of the map credits line */
+  left:50%; transform:translateX(-50%); z-index:600;
+  background:var(--jc-accent); color:var(--jc-accent-ink); border-color:var(--jc-accent); padding:9px 18px; font-size:14px}

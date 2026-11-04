@@ -304,14 +304,6 @@ function renderForm(){
 }
 
 /* ---------- map + list (Halloween-site parity, plan audit 2026-11-03) ---------- */
-var TILES = {
-  sat: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-         opts: { maxNativeZoom: 19, maxZoom: 20, attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics" } },
-  street: { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-            /* OSM blocks tile requests with no Referer (403 "Access blocked"). The page is
-               no-referrer (tokens in URLs), so this layer alone sends the bare origin. */
-            opts: { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors", referrerPolicy: "strict-origin" } }
-};
 var layer = "sat";
 var listSort = "number";   /* number | distance */
 /* The visitor's own position — held in memory only, never sent or stored. Used for
@@ -368,11 +360,11 @@ function renderMap(entries){
   on("seeList", function(e){ e.preventDefault(); el("tab-list").click(); });
   var c = (cfg && cfg.map) || {};
   map = L.map("map", { zoomControl: true }).setView([c.lat || 24.53, c.lng || 54.43], c.zoom || 14);
-  var tiles = L.tileLayer(TILES[layer].url, TILES[layer].opts).addTo(map);
+  var tiles = L.tileLayer(jcTiles[layer].url, jcTiles[layer].opts).addTo(map);
   on("layerBtn", function(){
     layer = layer === "sat" ? "street" : "sat";
     map.removeLayer(tiles);
-    tiles = L.tileLayer(TILES[layer].url, TILES[layer].opts).addTo(map);
+    tiles = L.tileLayer(jcTiles[layer].url, jcTiles[layer].opts).addTo(map);
     el("layerBtn").textContent = jcT(layer === "sat" ? "pin_street" : "pin_sat");
   });
   var styles = getComputedStyle(document.documentElement);

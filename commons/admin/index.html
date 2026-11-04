@@ -2,8 +2,8 @@
 <html lang="en" dir="ltr">
 <head>
 <meta charset="utf-8">
-<!-- CSP: keep in sync across Commons pages (see account/index.html). No map tiles here. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://qrpxfssdeeuzmsmlbtbu.supabase.co wss://qrpxfssdeeuzmsmlbtbu.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'">
+<!-- CSP: keep in sync across Commons pages (see account/index.html). Map tiles (Esri, OSM) for the venue pin (T5.2 2c); referrer stays off except OSM's bare origin. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://server.arcgisonline.com https://tile.openstreetmap.org; connect-src 'self' https://qrpxfssdeeuzmsmlbtbu.supabase.co wss://qrpxfssdeeuzmsmlbtbu.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <!-- a rotated code is shown on this page: never leak the URL either -->
@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="../assets/tokens.css">
 <link rel="stylesheet" href="../assets/app.css">
 <link rel="stylesheet" href="../assets/tabbar.css">
+<link rel="stylesheet" href="../assets/vendor/leaflet-1.9.4/leaflet.css">
 <link rel="stylesheet" href="admin.css">
 </head>
 <body>
@@ -37,6 +38,8 @@
   <div id="view" aria-live="polite"></div>
 </main>
 <script src="../assets/vendor/supabase-2.118.0.js"></script>
+<script src="../assets/vendor/leaflet-1.9.4/leaflet.js"></script>
+<script src="../assets/map.js"></script>
 <script src="../assets/strings.js"></script>
 <script src="../assets/icons.js"></script>
 <script src="../assets/api.js"></script>

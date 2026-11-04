@@ -38,6 +38,11 @@ test("shot", async ({ page }) => {
   if (persona !== "anon") await signIn(page);
   await page.goto(process.env.SHOT_PATH || "");
   await page.waitForLoadState("networkidle");
+  // screens behind a tap: SHOT_CLICKS='#newEv;[data-tpl="market"]' (";"-separated, in order)
+  for (const sel of (process.env.SHOT_CLICKS || "").split(";").map((x) => x.trim()).filter(Boolean)) {
+    await page.locator(sel).first().click();
+    await page.waitForLoadState("networkidle");
+  }
   await page.waitForTimeout(400);   // let transitions settle
   await page.screenshot({ path: out, fullPage: process.env.SHOT_FULL === "1" });
   console.log("SHOT " + out);

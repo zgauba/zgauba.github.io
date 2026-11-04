@@ -64,3 +64,17 @@ select{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-su
 .adminlist small{display:block; color:var(--jc-muted); font-size:12.5px}
 .codebox .linkbox{font-size:13px; letter-spacing:0; overflow-wrap:anywhere; flex-basis:100%}
 .acclist{margin:0; padding-inline-start:20px; display:flex; flex-direction:column; gap:6px; font-size:14px; color:var(--jc-muted)}
+
+/* T5.2 2c — template picker, kind choice, venue pin */
+.tpls{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:6px 0 14px}
+.tpl{display:flex; flex-direction:column; align-items:flex-start; gap:4px; text-align:start; padding:14px 12px;
+  border:1px solid var(--jc-line); border-radius:var(--jc-radius); background:var(--jc-surface); color:var(--jc-ink);
+  font:inherit; cursor:pointer}
+.tpl b{font-size:15px}
+.tpl small{color:var(--jc-muted); font-size:12.5px; line-height:1.35}
+.tpl:active, .tpl:focus-visible{border-color:var(--jc-accent)}
+label.check span b{display:block}
+label.check span small{display:block; color:var(--jc-muted); font-size:12.5px; font-weight:400}
+.notice{margin:0; padding:10px 12px; border-radius:10px; border:1px solid var(--jc-accent);
+  background:var(--jc-surface); font-size:13.5px; line-height:1.4}
+.pinmap.vpin{height:240px; min-height:240px}
