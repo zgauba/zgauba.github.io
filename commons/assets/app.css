@@ -14,11 +14,12 @@ main{max-width:480px; margin:0 auto; padding:24px 18px 40px}
 .topbar a.home{color:var(--jc-ink); text-decoration:none; font-weight:800; font-size:22px; letter-spacing:-.01em;
   display:flex; align-items:center; gap:10px; line-height:1.2; margin-inline-end:auto; min-width:0}
 /* back (nav.js jcBack): left of the logo, mirrored in Arabic */
-.topbar a.back{flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:36px; height:36px;
-  margin-inline-start:-8px; border-radius:var(--jc-radius-pill); color:var(--jc-ink)}
+.topbar a.back{flex:0 0 auto; display:flex; align-items:center; justify-content:center; width:44px; height:44px;
+  margin-inline:-12px -6px; border-radius:var(--jc-radius-pill); color:var(--jc-ink)}
 .topbar a.back:active{background:var(--jc-surface)}
 [dir=rtl] .topbar a.back svg{transform:scaleX(-1)}
 .topbar a.home svg{flex:0 0 auto}
+.topbar a.home span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .lang{border:1px solid var(--jc-line); background:var(--jc-surface); color:var(--jc-ink);
   border-radius:var(--jc-radius-pill); padding:6px 14px; font-size:13px; font-weight:700; cursor:pointer}
 h1{font-size:22px; font-weight:800; margin:0 0 6px}

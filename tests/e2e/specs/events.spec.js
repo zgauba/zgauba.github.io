@@ -483,3 +483,14 @@ test("Arabic map: Streets / Satellite never sits on top of the zoom buttons", as
   const l = await page.locator("#layerBtn").boundingBox();
   expect(l.x).toBeGreaterThan(z.x + z.width);                                   // apart, not overlapping
 });
+
+test("back label follows the language, even where the view doesn't re-render (load error)", async ({ page }) => {
+  await stubBackend(page, { rpc: { jc_event_get: () => raise("NOT_FOUND") } });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await expect(page.locator("#jcBackBtn")).toHaveAttribute("aria-label", "Events");
+  await page.locator("#langBtn").click();
+  await expect(page.locator("#jcBackBtn")).toHaveAttribute("aria-label", "الفعاليات");
+  const b = await page.locator("#jcBackBtn").boundingBox();
+  expect(b.width).toBeGreaterThanOrEqual(44);                                     // Apple's tap-target minimum
+});

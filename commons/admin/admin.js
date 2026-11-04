@@ -154,7 +154,7 @@ function show(name){
   if (vmap) { vmap.remove(); vmap = null; }
   /* back, in the top bar: sign-ups → the events list; pin move → the sign-ups */
   jcBack(name === "signups" ? leaveSignups
-       : name === "pinmove" ? function(){ pm = null; show("signups"); } : null, jcT("back"));
+       : name === "pinmove" ? function(){ pm = null; show("signups"); } : null, "back");
   VIEWS[name]();
 }
 

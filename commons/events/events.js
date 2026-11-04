@@ -66,7 +66,7 @@ function whatsappUrl(){
 function show(name){
   if (map) { map.remove(); map = null; }
   current = name;
-  jcBack(name === "list" ? null : "./", jcT("ev_back"));   /* back to the events list, in the top bar */
+  jcBack(name === "list" ? null : "./", "ev_back");   /* back to the events list, in the top bar */
   document.body.classList.remove("evfit");
   VIEWS[name]();
 }
@@ -358,9 +358,14 @@ function wireDesc(){
   var d = el("desc"), b = el("descMore");
   if (!d || !b) return;
   d.classList.toggle("open", descOpen);
-  b.hidden = !descOpen && d.scrollHeight <= d.clientHeight + 1;
   b.textContent = jcT(descOpen ? "ev_less" : "ev_more");
   b.onclick = function(){ descOpen = !descOpen; wireDesc(); fitMap(); };
+  measureDesc();
+}
+/* re-measured when fonts arrive or the width changes, so cut-off text always gets More (review) */
+function measureDesc(){
+  var d = el("desc"), b = el("descMore");
+  if (d && b) b.hidden = !descOpen && d.scrollHeight <= d.clientHeight + 1;
 }
 
 /* The map fills what's left of the screen between the tabs and the tab bar, so it's all
@@ -369,7 +374,8 @@ function wireDesc(){
 function fitMap(){
   var m = el("map");
   if (!m) return;
-  var vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  /* innerHeight follows Safari's toolbar; visualViewport would also shrink on pinch-zoom (review) */
+  var vh = window.innerHeight;
   var bar = el("tabbar") ? el("tabbar").getBoundingClientRect().height : 0;
   var after = el("mapAfter") ? el("mapAfter").getBoundingClientRect().height + 8 : 0;
   var top = m.getBoundingClientRect().top + window.scrollY;
@@ -379,10 +385,9 @@ function fitMap(){
   if (map) map.invalidateSize();
 }
 var fitTimer = null;
-function fitSoon(){ clearTimeout(fitTimer); fitTimer = setTimeout(fitMap, 120); }
+function fitSoon(){ clearTimeout(fitTimer); fitTimer = setTimeout(function(){ measureDesc(); fitMap(); }, 120); }
 window.addEventListener("resize", fitSoon);
 window.addEventListener("orientationchange", fitSoon);
-if (window.visualViewport) window.visualViewport.addEventListener("resize", fitSoon);
 
 function renderMap(entries){
   var unpinned = entries.filter(function(e){ return !hasPos(e); }).length;
@@ -484,7 +489,7 @@ function loadEvent(){
     jcHit(wantStats ? "stats" : "events");
     show(wantStats ? "stats" : "detail");
   }, function(e){
-    jcBack("./", jcT("ev_back"));
+    jcBack("./", "ev_back");
     el("view").innerHTML = msgBox();
     showErr(e.code);
   });
