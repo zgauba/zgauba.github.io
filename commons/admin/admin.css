@@ -36,3 +36,23 @@ label.check input{margin-top:3px}
 .qlist small{color:var(--jc-muted)}
 .qvals{display:flex; flex-wrap:wrap; gap:5px; margin-top:4px}
 .qvals span{border:1px solid var(--jc-line); border-radius:var(--jc-radius-pill); padding:3px 10px; font-size:12.5px; color:var(--jc-muted)}
+
+/* Question builder (T5.2 PR 2b) */
+#qs{display:flex; flex-direction:column; gap:10px}
+.qcard{border:1px solid var(--jc-line); border-radius:var(--jc-radius); padding:12px; display:flex; flex-direction:column; gap:10px;
+  background:var(--jc-surface-2)}
+.qhead{display:flex; justify-content:space-between; align-items:center; gap:8px}
+.qhead span{display:flex; gap:6px}
+.qrow{display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px}
+.qrow label:first-child{flex:1; min-width:150px}
+select{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-surface); border:1px solid var(--jc-line);
+  border-radius:10px; padding:10px; width:100%}
+.mini{font:inherit; font-size:13px; font-weight:700; cursor:pointer; color:var(--jc-ink); background:var(--jc-surface);
+  border:1px solid var(--jc-line); border-radius:8px; padding:5px 10px; min-width:34px}
+.mini.danger{color:var(--jc-danger); border-color:var(--jc-danger)}
+.choices{display:flex; flex-direction:column; gap:6px}
+.clabel{font-size:13px; font-weight:700; color:var(--jc-muted)}
+.choice{display:flex; gap:6px; align-items:center}
+.choice input{min-width:0; flex:2}
+.choice input[data-c-f="en"]{flex:3}
+.choice input.glyph{flex:0 0 52px; text-align:center}
