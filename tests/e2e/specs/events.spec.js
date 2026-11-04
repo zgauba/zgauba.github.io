@@ -288,8 +288,13 @@ test("event map: satellite / streets toggle", async ({ page }) => {
   await signIn(page);
   await page.goto("events/?id=" + LIVE_ID);
   await expect(page.locator("#layerBtn")).toHaveText("Street");
+  const osm = page.waitForRequest(/^https:\/\/tile\.openstreetmap\.org\//);
   await page.locator("#layerBtn").click();
   await expect(page.locator("#layerBtn")).toHaveText("Satellite");
+  // OSM answers 403 "Access blocked" to tile requests with no Referer; the page itself is
+  // no-referrer (invite / reset tokens in URLs), so the street layer sends the origin only.
+  const referer = (await osm).headers()["referer"] || "";
+  expect(referer).toMatch(/^https?:\/\/[^/]+\/$/);
 });
 
 test("the organizers' note to my home is shown on the event", async ({ page }) => {

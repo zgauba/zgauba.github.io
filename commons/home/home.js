@@ -19,7 +19,9 @@ var TILES = {
   sat: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
          opts: { maxNativeZoom: 19, maxZoom: 20, attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics" } },
   street: { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-            opts: { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" } }
+            /* OSM blocks tile requests with no Referer (403 "Access blocked"). The page is
+               no-referrer (tokens in URLs), so this layer alone sends the bare origin. */
+            opts: { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors", referrerPolicy: "strict-origin" } }
 };
 
 /* "24.5301, 54.4312", "24.5301° N, 54.4312° E", or a Google Maps URL with @lat,lng or
