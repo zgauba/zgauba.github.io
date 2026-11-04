@@ -638,6 +638,7 @@ test("editing: the kind is locked once homes signed up; an untouched venue sends
   await page.locator('input[name="kind"][value="homes"]').check();
   await expect(page.locator("#venueBox")).toBeHidden();
   await page.locator("#save").click();
+  await expect(page.locator("#msg")).toHaveText("Saved.");                          // wait for the call (raced on CI)
   expect(lastCall(calls, "jc_admin_event_save").args.p_fields).toEqual({ kind: "homes" });
 });
 

@@ -42,6 +42,9 @@ confirms use `textContent` / `confirm()`. Clean.
 
 - Before review: 142 passed, twice.
 - After fixes: **147 passed, twice** (Playwright, stubbed; `cd tests/e2e && npx playwright test`).
+- CI (first push): 146 / 147 — `admin.spec.js` "editing: the kind is locked…" (from 2c) read the last
+  save call right after clicking Save, before the request was sent; raced on the slower runner. **Fixed**
+  — waits for "Saved." first. Scanned all specs for the same click → `lastCall` pattern: none left.
 - Screens checked with `/shot` (organizer, EN + AR): found resident English notes mirrored in RTL → `dir="auto"` on resident text, note / banner inputs and the banner.
 
 ## Open / deferred
