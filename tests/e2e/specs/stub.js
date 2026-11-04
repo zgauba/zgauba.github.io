@@ -39,7 +39,7 @@ function session(email) {
 const ok = (body) => ({ status: 200, body });
 const raise = (code) => ({ status: 400, body: { code: "P0001", message: code, details: null, hint: null } });
 
-const MEMBER_NO_HOME = { community: "jubail", account: { email: "a@example.com", display_name: null }, home: null, admin_scopes: [] };
+const MEMBER_NO_HOME = { community: "jubail", account: { email: "a@example.com", display_name: null }, home: null, admin_scopes: [], admin_events: [] };
 // The pin is required (T5.2): a normal member's home is pinned. The unpinned variant
 // exercises "no pin → pin screen → back".
 const HOME_V12 = { id: "h1", village: "ain-al-maha", type: "villa", building: null, number: "12",

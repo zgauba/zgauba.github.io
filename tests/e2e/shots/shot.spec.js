@@ -2,7 +2,7 @@
 // (see playwright.shot.config.js); /shot is the wrapper. Never part of the normal suite.
 //
 //   SHOT_PATH     path under /commons/, e.g. "events/" or "events/?id=<LIVE_ID>"  (default "")
-//   SHOT_PERSONA  anon | member | member-no-home | member-no-pin | organizer | community-admin
+//   SHOT_PERSONA  anon | member | member-no-home | member-no-pin | organizer | community-admin | event-admin
 //   SHOT_LANG     en | ar
 //   SHOT_FULL     1 = full page instead of the viewport
 //   SHOT_OUT      absolute .png path (required)
@@ -13,7 +13,7 @@ const { test, expect } = require("@playwright/test");
 const { stubBackend, ok, CONFIG, MEMBER_NO_HOME, MEMBER_NO_PIN } = require("../specs/stub");
 const { eventsBackend, adminBackend, signIn } = require("../specs/backends");
 
-const PERSONAS = ["anon", "member", "member-no-home", "member-no-pin", "organizer", "community-admin"];
+const PERSONAS = ["anon", "member", "member-no-home", "member-no-pin", "organizer", "community-admin", "event-admin"];
 const persona = process.env.SHOT_PERSONA || "member";
 const lang = process.env.SHOT_LANG || "en";
 const out = process.env.SHOT_OUT;
@@ -24,11 +24,12 @@ test("shot", async ({ page }) => {
   expect(out && out.startsWith("/") && out.endsWith(".png"), "SHOT_OUT must be an absolute .png path").toBe(true);
 
   const scopes = { organizer: ["events"], "community-admin": ["community"] }[persona] || [];
-  const rpc = Object.assign({}, eventsBackend().rpc, adminBackend({ scopes }).rpc, {
+  const adminEvents = persona === "event-admin" ? ["44444444-4444-4444-8444-444444444444"] : [];   // backends ADMIN_LIVE_ID
+  const rpc = Object.assign({}, eventsBackend().rpc, adminBackend({ scopes, adminEvents }).rpc, {
     jc_config_get: () => ok(Object.assign({}, CONFIG, {
       modules: { events: { enabled: true }, bookings: { enabled: false }, pets: { enabled: false } } })),
   });
-  if (!scopes.length) delete rpc.jc_me_get;   // fall back to stub.js's plain member
+  if (!scopes.length && !adminEvents.length) delete rpc.jc_me_get;   // fall back to stub.js's plain member
   if (persona === "member-no-home") rpc.jc_me_get = (a, c) => ok(MEMBER_NO_HOME);
   if (persona === "member-no-pin") rpc.jc_me_get = (a, c) => ok(MEMBER_NO_PIN);
 

@@ -1,0 +1,8 @@
+# Cloudflare Pages response headers for commons.ae (build output = commons/).
+# No page may be shown inside another site's frame: a hostile page could overlay a hidden
+# Accept / Remove / Delete tap (security reviews PR #31 + T5.2 PR B). A <meta> CSP can't
+# carry frame-ancestors, so it has to be a header. The github.io copy can't set headers;
+# canonical.js forwards it to commons.ae.
+/*
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Frame-Options: DENY

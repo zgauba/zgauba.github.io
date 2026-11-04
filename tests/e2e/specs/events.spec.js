@@ -398,3 +398,15 @@ test("partly translated choices: Arabic where given, English for the rest; 'cons
   await expect(page.locator('[data-field="fruit"]')).toHaveText(["تفاح", "Banana", "Builder"]);
   await expect(page.locator("#form")).not.toContainText("native code");
 });
+
+test("event admins get the Admin badge only on the events they run", async ({ page }) => {
+  const other = Object.assign({}, LIVE, { id: "99999999-9999-4999-8999-999999999999", slug: "other-live", title_en: "Other" });
+  await stubBackend(page, { rpc: {
+    jc_me_get: (a, c) => (c.signedIn ? ok(Object.assign({}, MEMBER, { admin_events: [LIVE_ID] })) : raise("NOT_SIGNED_IN")),
+    jc_events_list: () => ok([Object.assign({}, LIVE, { homes_in: 1, my_status: null }), Object.assign({}, other, { homes_in: 0, my_status: null })]),
+  } });
+  await signIn(page);
+  await page.goto("events/");
+  await expect(page.locator('[data-event="national-day-2026"] .badge')).toHaveAttribute("href", "../admin/?event=" + LIVE_ID);
+  await expect(page.locator('[data-event="other-live"] .badge')).toHaveCount(0);
+});

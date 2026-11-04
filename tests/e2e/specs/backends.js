@@ -69,6 +69,9 @@ const ADMIN_PAST_ID = "55555555-5555-4555-8555-555555555555";
 function adminBackend(opts = {}) {
   const st = {
     scopes: opts.scopes || [],
+    adminEvents: opts.adminEvents || [],      // T5.2 PR A: events this person runs (jc_me_get.admin_events)
+    admins: opts.admins || [],                // community admin's view of one event's admins
+    links: [],                                // open grant links: { id, token, event }
     events: [
       { id: ADMIN_DRAFT_ID, slug: "national-day-2026", title_en: "National Day", title_ar: null, description_en: null, description_ar: null,
         starts_at: null, ends_at: null, status: "draft", signups_open: true, features: {}, theme: {},
@@ -82,12 +85,18 @@ function adminBackend(opts = {}) {
     ],
   };
   const admin = () => st.scopes.includes("events") || st.scopes.includes("community");
+  const community = () => st.scopes.includes("community");
+  // like jc_assert_event_admin: organizers any event; event admins only theirs (open events)
+  const mine = (id) => st.adminEvents.includes(id) && (st.events.find((e) => e.id === id) || {}).status !== "archived";
   const guard = (fn) => (a) => (admin() ? fn(a) : raise("NOT_ADMIN"));
+  const guardEv = (fn) => (a) => (admin() || mine(a.p_event) ? fn(a) : raise("NOT_ADMIN"));
+  const visible = () => (admin() ? st.events : st.events.filter((e) => st.adminEvents.includes(e.id)));
+  const adminsList = () => ok({ admins: st.admins, links: st.links.map((l) => ({ id: l.id, expires_at: "2026-11-07T10:00:00Z" })) });
   const find = (id) => st.events.find((e) => e.id === id);
   return {
     st,
     rpc: Object.assign({
-      jc_me_get: (a, c) => (c.signedIn ? ok(Object.assign({}, MEMBER, { admin_scopes: st.scopes })) : raise("NOT_SIGNED_IN")),
+      jc_me_get: (a, c) => (c.signedIn ? ok(Object.assign({}, MEMBER, { admin_scopes: st.scopes, admin_events: st.adminEvents })) : raise("NOT_SIGNED_IN")),
       jc_admin_unlock: (a) => {
         const map = { "EVENTS-CODE-1": ["events"], "COMMUNITY-1": ["community"], "PETS-1": ["pets"] };
         if (!map[a.p_code]) return ok({ error: "BAD_ADMIN" });   // T3: wrong code is a 200 with an error body
@@ -95,21 +104,45 @@ function adminBackend(opts = {}) {
         return ok(st.scopes);
       },
       jc_admin_exit: () => { st.scopes = []; return ok(null); },
-      jc_admin_events_list: guard(() => ok(st.events)),
-      jc_admin_event_save: guard((a) => {
+      jc_admin_events_list: () => (admin() || st.adminEvents.length ? ok(visible()) : raise("NOT_ADMIN")),
+      // create: organizers only; edit: organizers or that event's admins (jc_assert_event_admin)
+      jc_admin_event_save: (a) => {
+        if (a.p_event === null ? !admin() : !(admin() || mine(a.p_event))) return raise("NOT_ADMIN");
         if (a.p_event === null) {
           st.events.unshift(Object.assign({ id: "66666666-6666-4666-8666-666666666666", status: "draft", signups_open: true,
             features: {}, payload_schema: { fields: {} }, entries: 0 }, a.p_fields));
         } else Object.assign(find(a.p_event), a.p_fields);
-        return ok(st.events);
-      }),
+        return ok(visible());
+      },
       jc_admin_event_publish: guard((a) => { find(a.p_event).status = "live"; return ok(st.events); }),
-      jc_admin_event_signups: guard((a) => { find(a.p_event).signups_open = a.p_open; return ok(st.events); }),
-      jc_event_close: guard((a) => {
+      jc_admin_event_signups: guardEv((a) => { find(a.p_event).signups_open = a.p_open; return ok(visible()); }),
+      jc_event_close: guardEv((a) => {
         const e = find(a.p_event);
         if (a.p_confirm !== e.slug) return raise("CONFIRM_REQUIRED");
         e.status = "archived"; return ok({ homes: e.entries });
       }),
+      // T5.2 PR A — grant links (community admin) + accept (any member)
+      jc_event_admin_link_create: (a) => {
+        if (!community()) return raise("NOT_ADMIN");
+        const token = "TOKEN_eventadmin_" + (st.links.length + 1) + "abcdef";
+        st.links.push({ id: "link-" + (st.links.length + 1), token, event: a.p_event });
+        return ok({ token, expires_at: "2026-11-07T10:00:00Z" });
+      },
+      jc_event_admins_list: () => (community() ? adminsList() : raise("NOT_ADMIN")),
+      jc_event_admin_revoke: (a) => {
+        if (!community()) return raise("NOT_ADMIN");
+        if (a.p_user) st.admins = st.admins.filter((x) => x.user_id !== a.p_user);
+        else st.links = st.links.filter((l) => l.id !== a.p_link);
+        return adminsList();
+      },
+      jc_event_admin_accept: (a) => {
+        const l = (opts.acceptable || []).includes(a.p_token) ? { event: ADMIN_LIVE_ID } : null;
+        if (!l) return raise("BAD_LINK");
+        opts.acceptable = opts.acceptable.filter((t) => t !== a.p_token);   // single use
+        if (!st.adminEvents.includes(l.event)) st.adminEvents.push(l.event);
+        const e = find(l.event);
+        return ok({ event_id: e.id, title_en: e.title_en, title_ar: e.title_ar });
+      },
       jc_admin_code_rotate: (a) => (st.scopes.includes("community")
         ? ok({ scope: a.p_scope, code: "NEWCODE" + a.p_scope.toUpperCase(), version: 2 }) : raise("NOT_ADMIN")),
     }, opts.rpc || {}),

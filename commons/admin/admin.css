@@ -56,3 +56,11 @@ select{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-su
 .choice input{min-width:0; flex:2}
 .choice input[data-c-f="en"]{flex:3}
 .choice input.glyph{flex:0 0 52px; text-align:center}
+
+/* Event admins panel (T5.2 PR B) */
+.adminsbox{display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--jc-line); padding-top:10px}
+.adminlist{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
+.adminlist li{display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:14px}
+.adminlist small{display:block; color:var(--jc-muted); font-size:12.5px}
+.codebox .linkbox{font-size:13px; letter-spacing:0; overflow-wrap:anywhere; flex-basis:100%}
+.acclist{margin:0; padding-inline-start:20px; display:flex; flex-direction:column; gap:6px; font-size:14px; color:var(--jc-muted)}
