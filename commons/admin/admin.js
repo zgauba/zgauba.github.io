@@ -5,14 +5,17 @@
    The server enforces every permission (jc_assert_admin) — this page only hides what
    a scope can't do. Editing sends ONLY the fields that changed (plan premortem #1:
    two organizers editing one event must not overwrite each other's untouched fields).
-   Writing custom questions is PR 2b; here an event can take the Halloween template. */
+   Questions (PR 2b): a builder over a plain list (ed.qs) — pick one / yes-no / short
+   answer, choices with optional Arabic + map icon, one question may drive the pin ring
+   and one the pin icon. Mirrors the server's jc_schema_check limits; locked once homes
+   have signed up (the server enforces that too). */
 
 var state = null, cfg = null, current = null;
 var scopes = [];          /* unlocked scopes: jc_me_get.admin_scopes / jc_admin_unlock */
 var events = [];          /* last jc_admin_events_list */
 var closing = null;       /* id of the event whose close form is open */
 var newCode = null;       /* {scope, code} — shown once: any later re-render drops it */
-var ed = null;            /* editor state: { ev (original or null), schema, slugTouched } */
+var ed = null;            /* editor state: { ev (original or null), qs, locked, slugTouched } */
 
 /* Halloween 2026, as residents knew it (jubail-halloween/): friendly wording and the
    pin hints PR 5 draws (ring = which gate, icon = what's handed out). Arabic: DRAFT. */
@@ -148,7 +151,7 @@ var VIEWS = {
   editor: function(){
     var ev = ed.ev || {};
     var draft = !ed.ev || ev.status === "draft";
-    var schemaLocked = !!ed.ev && ev.entries > 0;
+    var schemaLocked = ed.locked;
     el("view").innerHTML =
       '<h1>' + esc(jcT(ed.ev ? "ed_edit" : "ed_new")) + '</h1>' +
       '<form class="panel" id="form" novalidate data-no-autoreload>' +
@@ -167,9 +170,10 @@ var VIEWS = {
         }).join("") + '</fieldset>' +
         '<fieldset><legend>' + esc(jcT("ed_questions")) + '</legend><div id="qs"></div>' +
           (schemaLocked ? '<p class="help">' + esc(jcT("ed_q_locked")) + '</p>'
-            : '<div class="row"><button class="btn ghost" type="button" id="useHalloween">' + esc(jcT("ed_q_halloween")) + '</button>' +
-              '<button class="btn ghost" type="button" id="clearQs">' + esc(jcT("ed_q_clear")) + '</button></div>' +
-              '<p class="help">' + esc(jcT("ed_q_more")) + '</p>') +
+            : '<p class="help">' + esc(jcT("ed_q_privacy")) + '</p>' +
+              '<button class="btn ghost" type="button" id="addQ">' + esc(jcT("ed_q_add")) + '</button>' +
+              '<div class="row"><button class="btn ghost small" type="button" id="useHalloween">' + esc(jcT("ed_q_halloween")) + '</button>' +
+              '<button class="btn ghost small" type="button" id="clearQs">' + esc(jcT("ed_q_clear")) + '</button></div>') +
         '</fieldset>' +
         msgBox() +
         '<button class="btn" id="save" type="submit">' + esc(jcT("ed_save")) + '</button>' +
@@ -189,11 +193,23 @@ var VIEWS = {
     });
     el("slug").addEventListener("input", function(){ ed.slugTouched = true; });
     on("useHalloween", function(){
-      ed.schema = JSON.parse(JSON.stringify(HALLOWEEN));
+      if (ed.qs.length && !window.confirm(jcT("ed_q_replace_confirm"))) return;
+      ed.qs = fromSchema(HALLOWEEN);
       el("f_giant_switch").checked = true;
       drawQuestions();
     });
-    on("clearQs", function(){ ed.schema = { fields: {} }; drawQuestions(); });
+    on("clearQs", function(){
+      if (ed.qs.length && !window.confirm(jcT("ed_q_clear_confirm"))) return;
+      ed.qs = []; drawQuestions();
+    });
+    on("addQ", function(){
+      if (ed.qs.length >= 12) return showErr("Q_TOO_MANY");
+      ed.qs.push({ key: null, label_en: "", label_ar: "", type: "enum", required: false, pin: "",
+                   choices: [newChoice(), newChoice()] });
+      drawQuestions();
+      var inputs = document.querySelectorAll("#qs [data-q-label]");
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    });
     on("cancel", function(){ ed = null; show("home"); });
     el("form").addEventListener("submit", function(e2){ e2.preventDefault(); saveEvent(); });
   }
@@ -265,20 +281,180 @@ function rotate(scope, b){
 
 function openEditor(ev){
   closing = null;
-  ed = { ev: ev, schema: JSON.parse(JSON.stringify((ev && ev.payload_schema) || { fields: {} })), slugTouched: !!ev };
+  ed = { ev: ev, qs: fromSchema(ev && ev.payload_schema), locked: !!ev && ev.entries > 0, slugTouched: !!ev };
   show("editor");
 }
 
-/* the questions as residents will see them (labels from the schema) */
-function drawQuestions(){
-  var fields = (ed.schema && ed.schema.fields) || {};
+/* ---------- questions: schema <-> editable list ---------- */
+function newChoice(){ return { value: null, en: "", ar: "", glyph: "" }; }
+function fromSchema(schema){
+  var fields = (schema && schema.fields) || {};
+  return Object.keys(fields).map(function(k){
+    var f = fields[k] || {};
+    var len = f.labels_en || {}, lar = f.labels_ar || {}, gl = f.glyphs || {};
+    return {
+      key: k, label_en: f.label_en || "", label_ar: f.label_ar || "",
+      type: f.type === "bool" || f.type === "text" ? f.type : "enum",
+      required: !!f.required, pin: f.pin === "ring" || f.pin === "glyph" ? f.pin : "", max: f.max,
+      choices: (f.values || []).map(function(v){ return { value: v, en: jcOwn(len, v) || "", ar: jcOwn(lar, v) || "", glyph: jcOwn(gl, v) || "" }; })
+    };
+  });
+}
+/* "Kids should come to…" → "kids_should_come_to"; server rule: ^[a-z][a-z0-9_]{0,30}$, never "note" */
+function keyFrom(text, taken, fallback, max){
+  var k = String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^[^a-z]+/, "").replace(/_+$/, "").slice(0, max).replace(/_+$/, "");
+  if (!k || k === "note") k = fallback;
+  var base = k, n = 2;
+  while (taken.indexOf(k) >= 0) { k = base.slice(0, max - 3) + "_" + n; n++; }
+  return k;
+}
+/* The list as the server stores it. Keys are kept once given (answers point at them);
+   new questions / choices get one from their English wording. Returns {schema} or {err}. */
+function toSchema(qs){
+  if (qs.length > 12) return { err: "Q_TOO_MANY" };
+  var fields = {}, keys = qs.map(function(q){ return q.key; }).filter(Boolean);
+  for (var i = 0; i < qs.length; i++) {
+    var q = qs[i], en = q.label_en.trim();
+    if (!en) return { err: "Q_LABEL" };
+    if (!q.key) { q.key = keyFrom(en, keys, "q" + (i + 1), 31); keys.push(q.key); }
+    var f = { type: q.type };
+    if (q.required) f.required = true;
+    f.label_en = en;
+    if (q.label_ar.trim()) f.label_ar = q.label_ar.trim();
+    if (q.type === "text" && q.max) f.max = q.max;
+    if (q.type === "enum") {
+      /* blank rows are ignored; a row with anything typed must have English wording */
+      var cs = q.choices.filter(function(c){ return c.value || (c.en + c.ar + c.glyph).trim(); });
+      if (cs.length < 2) return { err: "Q_CHOICES" };
+      if (cs.length > 20) return { err: "Q_CHOICES_MAX" };
+      var vals = cs.map(function(c){ return c.value; }).filter(Boolean);
+      var len = {}, lar = {}, gl = {}, anyAr = false, anyGl = false;
+      for (var j = 0; j < cs.length; j++) {
+        var c = cs[j];
+        if (!c.en.trim()) return { err: "Q_CHOICE_LABEL" };
+        if (!c.value) { c.value = keyFrom(c.en, vals, "choice_" + (j + 1), 40); vals.push(c.value); }
+        len[c.value] = c.en.trim();
+        if (c.ar.trim()) { lar[c.value] = c.ar.trim(); anyAr = true; }
+        if (q.pin === "glyph" && c.glyph.trim()) { gl[c.value] = c.glyph.trim(); anyGl = true; }
+      }
+      f.values = cs.map(function(c){ return c.value; });
+      f.labels_en = len;
+      if (anyAr) f.labels_ar = lar;
+      if (q.pin) f.pin = q.pin;
+      if (anyGl) f.glyphs = gl;
+    }
+    fields[q.key] = f;
+  }
+  var schema = { fields: fields };
+  /* the server caps the stored questions at 8 KB of Postgres's jsonb text, which writes
+     ": " and ", " — count those spaces too, or a wordy set passes here and fails there */
+  if (pgJsonBytes(schema) > 8192) return { err: "Q_TOO_BIG" };
+  return { schema: schema };
+}
+
+function pgJsonBytes(v){
+  var t = JSON.stringify(v).replace(/"(?:[^"\\]|\\.)*"|([:,])/g, function(m, sep){ return sep ? sep + " " : m; });
+  return new TextEncoder().encode(t).length;
+}
+
+function drawQuestions(){ return ed.locked ? drawPreview() : drawBuilder(); }
+
+/* Editable cards. Typing updates ed.qs in place (no re-render, so focus stays); adding,
+   removing, moving or changing a type re-renders from ed.qs. */
+function drawBuilder(){
+  var host = el("qs");
+  if (!ed.qs.length) { host.innerHTML = '<p class="help">' + esc(jcT("ed_q_none")) + '</p>'; return; }
+  host.innerHTML = ed.qs.map(function(q, i){
+    var types = ["enum", "bool", "text"].map(function(t){
+      return '<option value="' + t + '"' + (q.type === t ? ' selected' : '') + '>' + esc(jcT("ed_q_t_" + t)) + '</option>';
+    }).join("");
+    var pins = ["", "ring", "glyph"].map(function(p){
+      return '<option value="' + p + '"' + (q.pin === p ? ' selected' : '') + '>' + esc(jcT("ed_q_pin_" + (p || "none"))) + '</option>';
+    }).join("");
+    return '<div class="qcard" data-q="' + i + '">' +
+      '<div class="qhead"><b>' + esc(jcFmt("ed_q_n", { n: i + 1 })) + '</b><span>' +
+        (i > 0 ? '<button type="button" class="mini" data-qact="up" aria-label="' + esc(jcT("ed_q_up")) + '">↑</button>' : '') +
+        (i < ed.qs.length - 1 ? '<button type="button" class="mini" data-qact="down" aria-label="' + esc(jcT("ed_q_down")) + '">↓</button>' : '') +
+        '<button type="button" class="mini danger" data-qact="del">' + esc(jcT("ed_q_remove")) + '</button></span></div>' +
+      '<label>' + esc(jcT("ed_q_label_en")) + '<input type="text" maxlength="200" data-q-label="en"></label>' +
+      '<label>' + esc(jcT("ed_q_label_ar")) + '<input type="text" maxlength="200" dir="rtl" data-q-label="ar"></label>' +
+      '<div class="qrow"><label>' + esc(jcT("ed_q_type")) + '<select data-q-type>' + types + '</select></label>' +
+        '<label class="check"><input type="checkbox" data-q-req' + (q.required ? ' checked' : '') + '> <span>' + esc(jcT("ed_q_req")) + '</span></label></div>' +
+      (q.type === "enum"
+        ? '<label>' + esc(jcT("ed_q_pin")) + '<select data-q-pin>' + pins + '</select></label>' +
+          '<div class="choices"><span class="clabel">' + esc(jcT("ed_q_choices")) + '</span>' + q.choices.map(function(c, j){
+            return '<div class="choice" data-c="' + j + '">' +
+              (q.pin === "glyph" ? '<input type="text" class="glyph" maxlength="8" data-c-f="glyph" aria-label="' + esc(jcT("ed_q_glyph_in")) + '">' : '') +
+              '<input type="text" maxlength="40" data-c-f="en" placeholder="' + esc(jcT("ed_q_choice_en")) + '" aria-label="' + esc(jcT("ed_q_choice_en")) + '">' +
+              '<input type="text" maxlength="40" dir="rtl" data-c-f="ar" placeholder="' + esc(jcT("ed_q_choice_ar")) + '" aria-label="' + esc(jcT("ed_q_choice_ar")) + '">' +
+              '<button type="button" class="mini" data-cact="del" aria-label="' + esc(jcT("ed_q_remove_choice")) + '">✕</button></div>';
+          }).join("") +
+          '<button type="button" class="btn ghost small" data-qact="addc">' + esc(jcT("ed_q_add_choice")) + '</button></div>'
+        : '') +
+    '</div>';
+  }).join("");
+  /* values via .value / defaultValue — never through HTML */
+  Array.prototype.forEach.call(host.querySelectorAll(".qcard"), function(card){
+    var q = ed.qs[+card.dataset.q];
+    var lab = card.querySelectorAll("[data-q-label]");
+    lab[0].value = lab[0].defaultValue = q.label_en;
+    lab[1].value = lab[1].defaultValue = q.label_ar;
+    lab[0].addEventListener("input", function(){ q.label_en = lab[0].value; });
+    lab[1].addEventListener("input", function(){ q.label_ar = lab[1].value; });
+    card.querySelector("[data-q-req]").addEventListener("change", function(e){ q.required = e.target.checked; });
+    card.querySelector("[data-q-type]").addEventListener("change", function(e){
+      q.type = e.target.value;
+      if (q.type !== "enum") q.pin = "";
+      if (q.type === "enum" && q.choices.length < 2) while (q.choices.length < 2) q.choices.push(newChoice());
+      drawBuilder();
+    });
+    var pin = card.querySelector("[data-q-pin]");
+    if (pin) pin.addEventListener("change", function(){
+      /* one question drives the ring, one the icon */
+      var moved = false;
+      if (pin.value) ed.qs.forEach(function(o){ if (o !== q && o.pin === pin.value) { o.pin = ""; moved = true; } });
+      q.pin = pin.value;
+      drawBuilder();
+      if (moved) showOk(jcFmt("ed_q_pin_moved", { s: jcT("ed_q_pin_" + q.pin), n: ed.qs.indexOf(q) + 1 }));
+    });
+    Array.prototype.forEach.call(card.querySelectorAll(".choice"), function(row){
+      var c = q.choices[+row.dataset.c];
+      Array.prototype.forEach.call(row.querySelectorAll("[data-c-f]"), function(inp){
+        inp.value = inp.defaultValue = c[inp.dataset.cF] || "";
+        inp.addEventListener("input", function(){ c[inp.dataset.cF] = inp.value; });
+      });
+      row.querySelector('[data-cact="del"]').addEventListener("click", function(){
+        q.choices.splice(+row.dataset.c, 1); drawBuilder();
+      });
+    });
+    Array.prototype.forEach.call(card.querySelectorAll("[data-qact]"), function(b){
+      b.addEventListener("click", function(){
+        var i = +card.dataset.q, a = b.dataset.qact;
+        if (a === "del") ed.qs.splice(i, 1);
+        if (a === "up") ed.qs.splice(i - 1, 0, ed.qs.splice(i, 1)[0]);
+        if (a === "down") ed.qs.splice(i + 1, 0, ed.qs.splice(i, 1)[0]);
+        if (a === "addc") {
+          if (q.choices.length >= 20) return showErr("Q_CHOICES_MAX");
+          q.choices.push(newChoice());
+        }
+        drawBuilder();
+      });
+    });
+  });
+}
+
+/* read-only: the questions as residents will see them (labels from the schema) */
+function drawPreview(){
+  var fields = ((ed.ev && ed.ev.payload_schema) || {}).fields || {};
   var keys = Object.keys(fields);
   el("qs").innerHTML = keys.length ? '<ol class="qlist">' + keys.map(function(k){
     var f = fields[k] || {};
     var lab = (ar() && f.label_ar) || f.label_en || k;
-    var labels = (ar() && f.labels_ar) || f.labels_en || {};
     var vals = f.type === "bool" ? [jcT("ev_yes"), jcT("ev_no")]
-      : (f.values || []).map(function(v){ return ((f.glyphs && f.glyphs[v]) ? f.glyphs[v] + " " : "") + (labels[v] || v); });
+      : (f.values || []).map(function(v){
+          var g = jcOwn(f.glyphs, v);
+          return (g ? g + " " : "") + ((ar() && jcOwn(f.labels_ar, v)) || jcOwn(f.labels_en, v) || v);
+        });
     var notes = [];
     if (f.required) notes.push(jcT("ed_q_required"));
     if (f.pin === "ring") notes.push(jcT("ed_q_ring"));
@@ -318,7 +494,13 @@ function saveEvent(){
   var feats = Object.assign({}, orig.features || {});
   FEATURES.forEach(function(k){ if (el("f_" + k).checked) feats[k] = true; else delete feats[k]; });
   if (JSON.stringify(feats) !== JSON.stringify(orig.features || {})) f.features = feats;
-  if (JSON.stringify(ed.schema) !== JSON.stringify(orig.payload_schema || { fields: {} })) f.payload_schema = ed.schema;
+  /* compare in one canonical shape, so reopening and saving an untouched event sends nothing */
+  if (!ed.locked) {
+    var built = toSchema(ed.qs);
+    if (built.err) return showErr(built.err);
+    var was = toSchema(fromSchema(orig.payload_schema)).schema || { fields: {} };
+    if (JSON.stringify(built.schema) !== JSON.stringify(was)) f.payload_schema = built.schema;
+  }
   if (ev && !Object.keys(f).length) return showOk(jcT("adm_nothing"));
   busy("save", true);
   rpc("jc_admin_event_save", { p_event: ev ? ev.id : null, p_fields: f }).then(function(list){

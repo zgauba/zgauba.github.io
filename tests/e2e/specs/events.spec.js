@@ -406,3 +406,19 @@ test("non-numeric coordinates are treated as unpinned (no marker, no crash)", as
     expect(errors).toEqual([]);
   } finally { ENTRIES.pop(); }
 });
+
+// PR #27 review M2 + L1: partial Arabic falls back per choice to English; a choice stored
+// as "constructor" never reads Object's built-ins.
+test("partly translated choices: Arabic where given, English for the rest; 'constructor' is just a word", async ({ page }) => {
+  const schema = { fields: { fruit: { type: "enum", values: ["apple", "banana", "constructor"], label_en: "Fruit",
+    labels_en: { apple: "Apple", banana: "Banana", constructor: "Builder" }, labels_ar: { apple: "تفاح" } } } };
+  const eb = eventsBackend({ rpc: { jc_event_get: () => ok({ event: Object.assign({}, LIVE, { payload_schema: schema }),
+    mine: null, stats: null, entries: [] }) } });
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
+  await page.locator("#langBtn").click();
+  await page.locator("#toSignup").click();
+  await expect(page.locator('[data-field="fruit"]')).toHaveText(["تفاح", "Banana", "Builder"]);
+  await expect(page.locator("#form")).not.toContainText("native code");
+});

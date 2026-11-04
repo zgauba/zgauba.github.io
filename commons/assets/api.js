@@ -104,6 +104,12 @@ function jcSafeNext(next){
          ? next : "../";
 }
 
+/* A string stored under key k in an admin-authored map, or null. Own keys only: a choice
+   stored as "constructor" must never read Object's built-ins (PR #27 review). */
+function jcOwn(m, k){
+  return m && typeof m === "object" && Object.prototype.hasOwnProperty.call(m, k) && typeof m[k] === "string" ? m[k] : null;
+}
+
 /* "Villa 12" / "Townhouse 7" / "Apt 304, B2" — from a jc_me_get home object. */
 function jcHomeLabel(h){
   if (!h) return "";

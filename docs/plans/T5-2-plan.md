@@ -39,6 +39,30 @@
 | 5 | **Event day + Halloween pins** — giant switch, supply, crowd reports + "we're not out", pins (fill = availability, ring = entrance, glyph = treats, ❓ = reported), legend, refresh every 60 s while visible + live, theme colours; **measure `jc_event_get` size** | No |
 | 6 | **Reports panel** — `jc_admin_report` | No |
 
+## Amendment — event kinds, templates, looks (Zee, 2026-11-04)
+
+Prompted by a neighbor's Children's Market proposal (an example only — not being held).
+
+| # | Decision |
+|---|---|
+| A1 | **Two kinds of event.** *Homes* — each signed-up home is a stop on the map (Halloween, Haq al Laila, street-wide yard sale). *One place* — a single venue with a name + pin; signing up = "my household is coming / wants a spot" (community gathering, iftar, market). |
+| A2 | One-place events carry **optional capacity** (sign-ups stop at N; "full") and **optional numbered spots** the organizer assigns (market stalls). A gathering leaves both off. |
+| A3 | **What a form asks is just its questions** — no special fields for any template. Templates pre-fill sensible questions; organizers change them. The builder carries one hint: avoid names, phone numbers, children's ages (the home is already known). |
+| A4 | **Looks = built-in presets** (colours, icon set, header art), one per template, chosen per event. No image uploads for now. |
+| A5 | **Templates:** Halloween (homes) · Haq al Laila (homes, Arabic-first, lanterns, sweets & nuts) · Community gathering (one place, RSVP + headcount) · Market (one place, spots + capacity) · Yard sale (homes) · Blank. |
+
+Plan change (PR 3 splits; two new PRs):
+
+| # | PR | Migration |
+|---|---|---|
+| 3a | Database additions as planned (pin move home / event-only, broadcast setter, `NO_PIN`, schema label caps) | Yes |
+| 3b | **Event kind + look + venue** — `jc_events.kind` (homes / venue), look preset, venue name + lat/lng, optional capacity; `jc_event_entries.spot` (organizer-assigned); signup refuses past capacity (`FULL`); resident payload unchanged | Yes |
+| 2c | **Template picker** on "New event" (A5) + kind / venue / capacity / look in the editor + the privacy hint | No (uses 3b) |
+| 4 | Organizer tab (+ assign spots for spot events) | No |
+| 5 | Event day + looks applied to resident screens | No |
+| 4b | **One-place resident screens** — venue on the map, "you're coming" / your spot number, "full" | No |
+| 6 | Reports | No |
+
 ## Premortem (§0.5)
 
 | # | Exposure | Mitigation |
