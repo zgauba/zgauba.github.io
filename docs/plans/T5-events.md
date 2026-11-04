@@ -17,11 +17,43 @@ residents until T6 (no codes set, all modules off).
 |---|---|---|
 | **T5.0a** Harness + auth | Playwright stub harness; vendored supabase-js; shared `api.js` (client, `rpc()` error contract, `jc_me` state); account page (sign in, join = code → account → `jc_join`, reset); CSP; landing regressions | A1–A3 |
 | **T5.0b** Home + shell (PR #21) | Home claim (village, type, number), pin drop (vendored Leaflet), My Home (members, invite/accept, leave, delete, display name), tab bar + hub | B1, B2, H1 |
-| **T5.1** Events — resident | List, detail (map + list), schema-driven signup, withdraw, "Our year", archived stats (Halloween 2026 baseline); CI job for the harness | C1–C3 |
+| **T5.1** Events — resident (PR #24) | List, detail (map + list), schema-driven signup, withdraw, "Our year", archived stats (Halloween 2026 baseline); CI job for the harness | C1–C3 |
 | **T5.2** Event day + admin | Giant switch, supply, crowd reports/clear, safety, theme; admin unlock/exit, Admin tab, event editor/publish/signups/moderate/close, Reports panel (`jc_admin_report`) | D1–D3, D5, A4, F1–F5 |
 
 Deferred out of T5: UC-D4 route + km counter (`route` flag stays off); admin Homes
 queue (lands with the Community map module); UC-H2 rotation banner.
+
+### Halloween-site parity audit (2026-11-03) — decisions (Zee)
+
+Every feature of `jubail-halloween/` mapped to Commons. Outcome:
+
+- **Into T5.1 (PR #24):** directions + "view pin" per home; tap-a-pin details (answers,
+  note); distance from me + sort by distance / house number (natural sort); find me
+  and satellite/streets on the event map; the organizer's note to a home shown to that
+  home; WhatsApp "message the organizers" link (config `links.whatsapp`); paste Google
+  Maps coordinates on the pin screen.
+- **Into T5.2 (with event day + admin):** meaningful pin encoding + legend (each event
+  declares which answer drives fill / ring / glyph — fill stays availability, per the
+  Halloween rule); organizer **broadcast** — an admin RPC to set it (migration) + a
+  banner polled on every page; **organizer can move a home's pin** (Zee 2026-11-03 —
+  needs an admin pin RPC, admin-logged, migration) and override an entry's live state.
+- **Separate small PR after #24:** "Save as an app" (web manifest + icons).
+- **Zee's test feedback on PR #24 (2026-11-04) — deferred to T5.2, NOT in #24** (Zee: keep
+  #24 minimal; only the "View pin" → "Google Maps" rename went in):
+  - **Tabs inside an event** (Halloween parity): Map · List · My home (sign-up form when
+    not in; status / edit / withdraw / organizer note when in) · Organizer (admins only).
+    The event page today stacks everything on one screen.
+  - **No map next to sign-up.** The event uses the home's pin — there is no per-event pin —
+    but the map beside the Sign up button makes people think they must map themselves.
+    The My home tab shows one line instead ("Your pin: Villa 206 ✓ — change on My Home").
+  - **Home pin required at community sign-up:** remove "Skip for now"; homes with no pin
+    are routed back to the pin screen. Server-side enforcement rides the T5.2 migration.
+  - **Friendly question wording** for Halloween-style events (`label_en` / `labels_en` in
+    `payload_schema`, e.g. "Kids should come to…" / "🚪 Front Gate") — set via the event editor.
+  - Small parity gaps: ⟳ refresh on the event map; remember Streets/Satellite.
+  - Open question for the admin PR: bring back **CSV export** of sign-ups (Halloween had it).
+- **Dropped on purpose:** "Other…" free-text village; delete-after-Halloween (archive
+  model); print list (KG3, parked); "this week!" banner.
 
 ## Decisions
 

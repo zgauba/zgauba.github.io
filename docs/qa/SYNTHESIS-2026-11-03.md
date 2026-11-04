@@ -128,7 +128,12 @@ Privacy policy drafted + promise rewrite across landing/CLAUDE.md/backlog
 feeds village glyphs (**kick off immediately**); set community + admin codes
 (fresh, never the Halloween code); test the password-reset email path;
 resolve free-tier auto-pause (KG8); write the Halloween-2026 baseline stats
-row from T1's recorded numbers; rotate the community code at invite time.
+row from T1's recorded numbers; rotate the community code at invite time;
+**choose the map tile provider** (added 2026-11-04, Zee): streets currently
+use OSM's volunteer-run tile server (light use only, no SLA — unsuitable for
+event-night load) and satellite uses keyless Esri (imagery date over Jubail
+unverified; island still under construction). Compare a keyed provider's free
+tier vs Google Maps imagery (check its terms allow Leaflet) before invites.
 
 ## Deliberately not fixing
 

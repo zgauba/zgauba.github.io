@@ -1,0 +1,41 @@
+# Commons browser tests (T5.1): runs the stubbed Playwright suite on every PR that
+# touches commons/ or the tests. Never touches the live backend (all RPC + Auth
+# calls are stubbed; the real-backend smoke test stays manual — it needs a code).
+name: Commons e2e
+
+on:
+  pull_request:
+    paths:
+      - "commons/**"
+      - "tests/e2e/**"
+      - ".github/workflows/commons-e2e.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: tests/e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Playwright (pinned in package-lock.json)
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run the suite
+        run: npx playwright test
+      - name: Keep the failure report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: tests/e2e/test-results
+          retention-days: 7

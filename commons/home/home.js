@@ -19,8 +19,22 @@ var TILES = {
   sat: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
          opts: { maxNativeZoom: 19, maxZoom: 20, attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics" } },
   street: { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-            opts: { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" } }
+            /* OSM blocks tile requests with no Referer (403 "Access blocked"). The page is
+               no-referrer (tokens in URLs), so this layer alone sends the bare origin. */
+            opts: { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors", referrerPolicy: "strict-origin" } }
 };
+
+/* "24.5301, 54.4312", "24.5301° N, 54.4312° E", or a Google Maps URL with @lat,lng or
+   ?q=lat,lng → [lat, lng]; null if it isn't a plausible coordinate pair. */
+function parseLatLng(raw){
+  raw = String(raw || "");
+  var m = raw.match(/[@=](-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/) ||               /* …/@lat,lng… or ?q=lat,lng */
+          raw.match(/(-?\d{1,2}(?:\.\d+)?)\s*°?\s*[NS]?\s*[, ]\s*(-?\d{1,3}(?:\.\d+)?)/i);
+  if (!m) return null;
+  var lat = parseFloat(m[1]), lng = parseFloat(m[2]);
+  if (!(lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180)) return null;
+  return [lat, lng];
+}
 
 /* ---------- small UI helpers ---------- */
 function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
@@ -69,6 +83,10 @@ var VIEWS = {
         '<div class="layers"><button type="button" class="lang" id="layerBtn">' + esc(jcT("pin_street")) + '</button></div>' +
         '<button type="button" class="lang locate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
       '<p class="help" style="margin-top:8px">' + esc(jcT("pin_privacy")) + '</p>' +
+      '<label class="field" style="margin-top:10px">' + esc(jcT("pin_paste")) +
+        '<span class="row"><input type="text" id="coords" inputmode="decimal" autocomplete="off" placeholder="24.5301, 54.4312">' +
+        '<button type="button" class="btn ghost" id="coordsGo" style="flex:0 0 auto">' + esc(jcT("pin_paste_go")) + '</button></span></label>' +
+      '<p class="help">' + esc(jcT("pin_paste_help")) + '</p>' +
       msgBox() +
       '<div class="row section"><button class="btn" id="savePin" type="button">' + esc(jcT("pin_save")) + '</button>' +
         '<button class="btn ghost" id="skipPin" type="button">' + esc(jcT("pin_skip")) + '</button></div>';
@@ -97,6 +115,13 @@ var VIEWS = {
         busy("locateBtn", false);
         showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED");
       }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    });
+    /* Paste from Google Maps (Halloween parity): moves the map only — the resident
+       still confirms with "That's my home". */
+    on("coordsGo", function(){
+      var p = parseLatLng(el("coords").value);
+      if (!p) return showErr("BAD_COORDS");
+      map.setView(p, 19);
     });
     on("skipPin", function(){ show("myhome"); });
     on("savePin", function(){
@@ -135,6 +160,8 @@ var VIEWS = {
         '<button class="btn" type="button" id="invite">' + esc(jcT("mh_invite")) + '</button>' +
       '</div></div>' +
 
+      '<div class="section" id="historySec" hidden><h2>' + esc(jcT("mh_history")) + '</h2><div class="panel" id="history"></div></div>' +
+
       '<div class="section"><h2>' + esc(jcT("mh_account")) + '</h2><div class="panel">' +
         '<p class="who"><b>' + esc(acct.email || state.email || "") + '</b></p>' +
         '<label>' + esc(jcT("mh_name")) +
@@ -153,6 +180,7 @@ var VIEWS = {
 
     /* defaultValue too: a prefilled field is not "being typed in" (update.js busy()) */
     el("dname").value = el("dname").defaultValue = acct.display_name || "";
+    loadHistory();
     on("toPin", function(){ show("pin"); });
     on("toEdit", function(){ show("edit"); });
     on("invite", doInvite);
@@ -261,6 +289,22 @@ function claimForm(editing){
       show(editing ? "myhome" : "pin");
     }, function(e){ busy("go", false); showErr(e.code); });
   });
+}
+
+/* "Our year" (UC-C3): events this home joined. Needs the Events module — while it
+   is off (MODULE_OFF) the section simply stays hidden. */
+function loadHistory(){
+  rpc("jc_my_history").then(function(rows){
+    if (current !== "myhome" || !el("history")) return;
+    el("history").innerHTML = rows.length
+      ? '<ul class="members">' + rows.map(function(r){
+          var t = jcLang() === "ar" && r.title_ar ? r.title_ar : r.title_en;
+          return '<li><a href="../events/?id=' + esc(r.event_id) + '">' + esc(t) + '</a><span class="tag">' +
+            esc(r.starts_at ? new Date(r.starts_at).getFullYear() : "") + '</span></li>';
+        }).join("") + '</ul>'
+      : '<p class="help">' + esc(jcT("mh_history_none")) + '</p>';
+    el("historySec").hidden = false;
+  }, function(){ /* module off or offline: nothing to show */ });
 }
 
 function doInvite(){
