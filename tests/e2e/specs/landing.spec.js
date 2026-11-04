@@ -36,7 +36,7 @@ test("signed out: platform entry with Sign in + Join, no hub, visit counted, no 
     expect(await page.locator(id).evaluate((n) => getComputedStyle(n).textAlign)).toBe("center");
   }
   expect(await page.locator("footer").evaluate((n) => getComputedStyle(n).textAlign)).toBe("center");
-  await expect(page.locator("#credit")).toHaveText("Made by Zeeshan, your neighbor in Ain Al Maha");
+  await expect(page.locator("#credit")).toHaveText("Made by Zeeshan, your neighbor in Jubail Island");
   await expect(page.locator("#credit a")).toHaveText("Zeeshan");
   await expect(page.locator("#credit a")).toHaveAttribute("href", "https://zgauba.github.io/");
   const card = page.locator(".community[data-community=jubail]");
@@ -157,4 +157,17 @@ test("module boxes are equal height; community cards are spaced apart", async ({
   expect(new Set(hs).size).toBe(1);
   const [a, b] = await page.locator(".community").evaluateAll((ns) => ns.map((n) => n.getBoundingClientRect()));
   expect(b.top - a.bottom).toBeGreaterThanOrEqual(10);
+});
+
+// Link previews (WhatsApp, iMessage) read the raw HTML and never run scripts: commons.ae
+// is the platform, so its static title / description name no community (Zee, 2026-11-04).
+test("static page heads are community-agnostic (what link previews show)", async ({ page }) => {
+  for (const path of ["./", "account/"]) {
+    const html = await (await page.request.get(path)).text();
+    const head = html.slice(0, html.indexOf("</head>"));
+    expect(head, path).not.toMatch(/Jubail/i);
+    expect(head, path).toMatch(/<title>Commons/);
+  }
+  const root = await (await page.request.get("./")).text();
+  expect(root).toMatch(/<meta property="og:title" content="Commons">/);
 });

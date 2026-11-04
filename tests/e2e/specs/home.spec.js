@@ -1,6 +1,6 @@
 // T5.0b — claim a home, pin it, My Home (household, invites, account), tab bar, hub.
 const { test, expect } = require("@playwright/test");
-const { stubBackend, ok, raise, CONFIG, MEMBER, MEMBER_NO_HOME, HOME_V12 } = require("./stub");
+const { stubBackend, ok, raise, CONFIG, MEMBER, MEMBER_NO_HOME, MEMBER_NO_PIN, HOME_V12 } = require("./stub");
 
 async function signIn(page, landing) {
   await page.goto("account/");
@@ -32,7 +32,7 @@ function homeBackend(start) {
   };
 }
 
-test("new member: landing sends them to claim; claim → pin → skip → My Home", async ({ page }) => {
+test("new member: landing sends them to claim; claim → pin (no skip) → My Home", async ({ page }) => {
   const hb = homeBackend(MEMBER_NO_HOME);
   const { calls } = await stubBackend(page, { rpc: hb.rpc });
   await signIn(page, /\/commons\/home\/$/);
@@ -48,10 +48,12 @@ test("new member: landing sends them to claim; claim → pin → skip → My Hom
   await expect(page.locator("h1")).toHaveText("Pin your home");
   expect(calls.find((c) => c.name === "jc_home_claim").args).toEqual(
     { p_village: "ain-al-maha", p_type: "villa", p_building: null, p_number: "12" });
-  await page.locator("#skipPin").click();
+  // the pin is required: no skip, no cancel on a first pin
+  await expect(page.locator("#skipPin, #cancelPin")).toHaveCount(0);
+  await page.locator("#savePin").click();
   await expect(page.locator(".homehead b")).toHaveText("Villa 12");
   await expect(page.locator(".homehead span")).toHaveText("Ain Al Maha");
-  await expect(page.locator(".status.warn")).toContainText("Not pinned yet");
+  await expect(page.locator(".status.ok")).toContainText("Pinned");
 });
 
 test("apartment: building field appears and is sent; label adapts", async ({ page }) => {
@@ -64,7 +66,7 @@ test("apartment: building field appears and is sent; label adapts", async ({ pag
   await page.locator("#building").fill("B2");
   await page.locator("#number").fill("304");
   await page.locator("#go").click();
-  await page.locator("#skipPin").click();
+  await page.locator("#savePin").click();
   await expect(page.locator(".homehead b")).toHaveText("Apt 304, B2");
   expect(calls.find((c) => c.name === "jc_home_claim").args.p_building).toBe("B2");
 });
@@ -353,4 +355,60 @@ test("pin: paste coordinates (plain or Google Maps link) moves the map; junk is 
   await page.locator("#savePin").click();
   a = calls.filter((c) => c.name === "jc_home_pin_set").pop().args;
   expect(Math.abs(a.p_lat - 24.5301)).toBeLessThan(0.0002);
+});
+
+// ---- T5.2 PR 1: the pin is required; the pin screen can return to an event ----
+
+const EV = "11111111-1111-4111-8111-111111111111";
+const EV_NEXT = "../events/?id=" + EV + "&tab=mine";
+
+test("a home without a pin always opens on the pin screen (no skip)", async ({ page }) => {
+  const hb = homeBackend(MEMBER_NO_PIN);
+  await stubBackend(page, { rpc: hb.rpc });
+  await signIn(page);
+  await page.goto("home/");
+  await expect(page.locator("h1")).toHaveText("Pin your home");
+  await expect(page.locator("#skipPin, #cancelPin")).toHaveCount(0);
+});
+
+test("pin from an event: saving returns to the event's My home tab", async ({ page }) => {
+  const hb = homeBackend(MEMBER_NO_PIN);
+  const { calls } = await stubBackend(page, { rpc: hb.rpc });
+  await signIn(page);
+  await page.goto("home/?view=pin&next=" + encodeURIComponent(EV_NEXT));
+  await page.locator("#savePin").click();
+  await expect(page).toHaveURL(new RegExp("/commons/events/\\?id=" + EV + "&tab=mine$"));
+  expect(calls.some((c) => c.name === "jc_home_pin_set")).toBe(true);
+});
+
+test("changing a pin from an event: Cancel goes back to the event", async ({ page }) => {
+  const hb = homeBackend(MEMBER);
+  await stubBackend(page, { rpc: hb.rpc });
+  await signIn(page);
+  await page.goto("home/?view=pin&next=" + encodeURIComponent(EV_NEXT));
+  await page.locator("#cancelPin").click();
+  await expect(page).toHaveURL(new RegExp("/commons/events/\\?id=" + EV + "&tab=mine$"));
+});
+
+test("a hostile next is ignored: saving the pin stays on My Home", async ({ page }) => {
+  const hb = homeBackend(MEMBER);
+  await stubBackend(page, { rpc: hb.rpc });
+  await signIn(page);
+  await page.goto("home/?view=pin&next=" + encodeURIComponent("https://evil.com/"));
+  await page.locator("#savePin").click();
+  await expect(page.locator(".homehead b")).toHaveText("Villa 12");
+  await expect(page).toHaveURL(/\/commons\/home\//);
+});
+
+test("jcSafeNext admits exactly an event + known tab", async ({ page }) => {
+  await stubBackend(page);
+  await page.goto("./");
+  const r = await page.evaluate((EV) => [
+    "../events/?id=" + EV + "&tab=mine", "../events/?id=" + EV + "&tab=list",
+    "../events/?id=" + EV + "&tab=evil", "../events/?id=" + EV, "../events/?id=" + EV + "&tab=mine&x=1",
+    "../events/?id=not-a-uuid&tab=mine", "../events/?id=ABCDEF01-1111-4111-8111-111111111111&tab=mine",
+    "//evil.com/events/?id=" + EV + "&tab=mine", "../home/?id=" + EV + "&tab=mine",
+  ].map(jcSafeNext), EV);
+  expect(r.slice(0, 2)).toEqual(["../events/?id=" + EV + "&tab=mine", "../events/?id=" + EV + "&tab=list"]);
+  expect(r.slice(2).every((x) => x === "../")).toBe(true);
 });

@@ -2,12 +2,16 @@
    leave / delete account. Views: claim · edit · pin · myhome · notice.
    Routing: signed out → account page (sign in / join) and back here; signed in
    but not a member → the join code step; member without a home → claim;
-   ?invite=<token> → accept the invite; ?view=pin → the pin drop. */
+   ?invite=<token> → accept the invite; ?view=pin → the pin drop.
+   The pin is REQUIRED (T5.2 plan Q4): a home without one always lands on the pin
+   screen, which has no "skip". ?view=pin&next=<event tab> returns there once saved. */
 
 var params = new URLSearchParams(location.search);
 var INVITE = params.get("invite");
 if (INVITE && !/^[A-Za-z0-9_-]{16,64}$/.test(INVITE)) INVITE = null;
 var VIEW = params.get("view");
+var NEXT = params.get("next");
+if (NEXT && jcSafeNext(NEXT) !== NEXT) NEXT = null;   /* only our own pages, never off-site */
 
 var state = null;       /* jcState() result; state.me = jc_me_get */
 var cfg = null;         /* the member's community config (villages, map) */
@@ -89,7 +93,9 @@ var VIEWS = {
       '<p class="help">' + esc(jcT("pin_paste_help")) + '</p>' +
       msgBox() +
       '<div class="row section"><button class="btn" id="savePin" type="button">' + esc(jcT("pin_save")) + '</button>' +
-        '<button class="btn ghost" id="skipPin" type="button">' + esc(jcT("pin_skip")) + '</button></div>';
+        /* changing an existing pin can be abandoned; a first pin can't be skipped */
+        (h.pin_set_at ? '<button class="btn ghost" id="cancelPin" type="button">' + esc(jcT("pin_cancel")) + '</button>' : '') +
+      '</div>';
     var c = (cfg && cfg.map) || {};
     var center = h.lat != null ? [h.lat, h.lng] : [c.lat || 24.53, c.lng || 54.43];
     var zoom = h.lat != null ? 19 : Math.max(c.zoom || 15, 16);
@@ -123,12 +129,13 @@ var VIEWS = {
       if (!p) return showErr("BAD_COORDS");
       map.setView(p, 19);
     });
-    on("skipPin", function(){ show("myhome"); });
+    on("cancelPin", function(){ if (NEXT) location.href = NEXT; else show("myhome"); });
     on("savePin", function(){
       var p = map.getCenter();
       busy("savePin", true);
       rpc("jc_home_pin_set", { p_lat: p.lat, p_lng: p.lng }).then(function(m){
         state.me = m;
+        if (NEXT) { location.href = NEXT; return; }   /* back to the event's sign-up */
         show("myhome");
         showOk(jcT("mh_pin_set"));
       }, function(e){ busy("savePin", false); showErr(e.code); });
@@ -392,7 +399,7 @@ jcState().then(function(s){
     paint();
     if (INVITE) return acceptInvite();
     if (!home()) return show("claim");
-    show(VIEW === "pin" ? "pin" : "myhome");
+    show(VIEW === "pin" || !home().pin_set_at ? "pin" : "myhome");
   });
 }, function(e){
   el("view").innerHTML = '<div class="panel">' + msgBox() + '</div>';

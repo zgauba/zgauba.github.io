@@ -40,10 +40,14 @@ const ok = (body) => ({ status: 200, body });
 const raise = (code) => ({ status: 400, body: { code: "P0001", message: code, details: null, hint: null } });
 
 const MEMBER_NO_HOME = { community: "jubail", account: { email: "a@example.com", display_name: null }, home: null, admin_scopes: [] };
+// The pin is required (T5.2): a normal member's home is pinned. The unpinned variant
+// exercises "no pin → pin screen → back".
 const HOME_V12 = { id: "h1", village: "ain-al-maha", type: "villa", building: null, number: "12",
-                   lat: null, lng: null, pin_set_at: null,
+                   lat: 24.5302, lng: 54.4322, pin_set_at: "2026-11-03T10:00:00Z",
                    members: [{ you: true, name: "a***@example.com", joined_at: "2026-11-03T00:00:00Z" }] };
+const HOME_V12_NO_PIN = Object.assign({}, HOME_V12, { lat: null, lng: null, pin_set_at: null });
 const MEMBER = Object.assign({}, MEMBER_NO_HOME, { home: HOME_V12 });
+const MEMBER_NO_PIN = Object.assign({}, MEMBER_NO_HOME, { home: HOME_V12_NO_PIN });
 
 const CONFIG = {
   id: "jubail", name_en: "Jubail Commons", name_ar: "كومنز الجبيل",
@@ -134,4 +138,4 @@ async function stubBackend(page, opts = {}) {
   return { calls, escaped };
 }
 
-module.exports = { stubBackend, ok, raise, session, fakeJwt, CONFIG, MEMBER_NO_HOME, MEMBER, HOME_V12 };
+module.exports = { stubBackend, ok, raise, session, fakeJwt, CONFIG, MEMBER_NO_HOME, MEMBER, MEMBER_NO_PIN, HOME_V12, HOME_V12_NO_PIN };

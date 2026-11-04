@@ -92,12 +92,16 @@ function jcState(){
   });
 }
 
-/* Post-sign-in destination: relative Commons paths only (never an open redirect).
-   The one query allowed is a household invite token, so an invitee who must first
-   sign in or join lands back on the invite (T5.0b). */
+/* Post-sign-in / post-pin destination: relative Commons paths only (never an open
+   redirect). Two queries are allowed: a household invite token, so an invitee who must
+   first sign in or join lands back on the invite (T5.0b); and an event + tab, so a
+   resident sent to pin their home lands back on the event's sign-up (T5.2). */
 function jcSafeNext(next){
   return (typeof next === "string" &&
-          /^\.\.?\/[a-z0-9\/_-]*(\?invite=[A-Za-z0-9_-]{16,64})?$/.test(next)) ? next : "../";
+          (/^\.\.?\/[a-z0-9\/_-]*(\?invite=[A-Za-z0-9_-]{16,64})?$/.test(next) ||
+           /* T5.2: back to an event's tab after pinning the home */
+           /^\.\.\/events\/\?id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}&tab=(map|list|mine)$/.test(next)))
+         ? next : "../";
 }
 
 /* "Villa 12" / "Townhouse 7" / "Apt 304, B2" — from a jc_me_get home object. */
