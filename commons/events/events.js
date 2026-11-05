@@ -111,9 +111,11 @@ var VIEWS = {
           : jcFmt("ev_homes_in", { n: e.homes_in || 0 })];
         if (isVenue(e) && placeName(e)) line.splice(1, 0, jcFmt("ev_at", { v: placeName(e) }));
         if (e.status === "archived") line.push(jcT("ev_see_numbers"));
+        else if (e.coming_soon) line.push(jcT("ev_soon"));                 /* T5.4 */
         else if (!e.signups_open) line.push(jcT("ev_closed"));
         if (e.my_status === "in") line.push(jcT("ev_mine"));
-        var info = '<b>' + esc(title(e)) + '</b><small>' + esc(line.filter(Boolean).join(" · ")) + '</small>';
+        var info = (e.coming_soon && e.status !== "archived" ? '<span class="soon">' + esc(jcT("coming_soon")) + '</span>' : '') +
+          '<b>' + esc(title(e)) + '</b><small>' + esc(line.filter(Boolean).join(" · ")) + '</small>';
         if (e.status === "archived") {
           return '<li data-event="' + esc(e.slug) + '"><a class="evcard" href="' + url + '"><span>' + info + '</span></a></li>';
         }
@@ -146,7 +148,8 @@ var VIEWS = {
                             : jcFmt("ev_homes_in", { n: entries.length });
     el("view").innerHTML =
       '<div class="evhead"><h1>' + esc(title(ev)) + '</h1>' +
-        '<p class="sub">' + esc([fmtDate(ev.starts_at), jcT(ev.signups_open ? "ev_open" : "ev_closed"), count].join(" · ")) + '</p>' +
+        '<p class="sub">' + esc([fmtDate(ev.starts_at), jcT(ev.coming_soon ? "ev_soon" : ev.signups_open ? "ev_open" : "ev_closed"),
+                                 ev.coming_soon ? null : count].filter(Boolean).join(" · ")) + '</p>' +
         /* two lines, then "More" — the map stays above the fold (Zee, 2026-11-04) */
         /* formatted with the editor's markers — jcRich escapes everything first (rich.js) */
         (desc(ev) ? '<div class="desc rich" id="desc" dir="auto">' + jcRich(desc(ev)) + '</div>' +
@@ -233,7 +236,7 @@ function renderMine(){
       (ev.signups_open ? '<button class="btn" type="button" id="toSignup">' + esc(jcFmt("ev_update_btn", { h: myLabel() })) + '</button>' : '') +
       '<button class="btn ghost" type="button" id="withdraw">' + esc(jcFmt("ev_withdraw", { h: myLabel() })) + '</button>';
   } else if (!ev.signups_open) {
-    html += '<p class="help">' + esc(jcT("err_SIGNUPS_CLOSED")) + '</p>';
+    html += '<p class="help">' + esc(jcT(ev.coming_soon ? "ev_soon_help" : "err_SIGNUPS_CLOSED")) + '</p>';
   } else if (isVenue(ev) && ev.places_left === 0) {
     html += '<p class="help">' + esc(jcT("err_FULL")) + '</p>';
   } else if (isVenue(ev)) {

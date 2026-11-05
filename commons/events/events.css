@@ -79,3 +79,6 @@ textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-
 .answers span{color:var(--jc-muted)}
 .mynote{margin:0; font-size:14px; white-space:pre-wrap; overflow-wrap:anywhere}
 .formtitle{font-size:18px; margin:4px 0 10px}
+/* T5.4: coming soon badge on the events list */
+.soon{display:inline-block; font-size:11px; font-weight:800; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--jc-warn); border:1px solid var(--jc-warn); border-radius:var(--jc-radius-pill); padding:2px 9px; margin-bottom:4px}

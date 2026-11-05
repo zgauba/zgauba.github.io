@@ -747,3 +747,41 @@ test("description toolbar edge cases: blank lines kept, whole-line selection, to
   await page.locator(".richbar .rich-ul").first().click();
   await expect(t).toHaveValue("tea");
 });
+
+// ── T5.4 coming soon ──
+test("coming soon: a one-place draft with no place goes on the list; opening sign-ups needs the place", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["community"], extraEvents: [{ id: "99999999-9999-4999-8999-999999999999", slug: "fair",
+    title_en: "Spring Fair", status: "draft", signups_open: true, features: {}, payload_schema: { fields: {} }, entries: 0,
+    kind: "venue", look: "market" }] });
+  const { calls } = await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  const row = page.locator('li[data-event="fair"]');
+  await expect(row.locator('[data-act="announce"]')).toHaveText("Publish as Coming Soon");
+  await expect(row.locator('[data-act="publish"]')).toHaveText("Publish and Open Sign-Ups");
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.accept(); });
+  await row.locator('[data-act="announce"]').click();
+  expect(asked).toContain("Everything saved so far");
+  await expect(page.locator("#msg")).toHaveText("On the list as coming soon. Open sign-ups when it's ready.");
+  await expect(row.locator("small")).toContainText("Coming soon — residents see it, sign-ups not open yet");
+  await row.locator('[data-act="open"]').click();
+  await expect(page.locator("#msg")).toHaveText("Before you can open sign-ups, add: Place name (English), Pin on the map. Tap Edit to finish it.");
+  expect(calls.filter((c) => c.name === "jc_admin_event_signups")).toHaveLength(0);
+  // editing a coming-soon event without its place: saves as before, with the prompt
+  await row.locator('[data-act="edit"]').click();
+  await page.locator("#description_en").fill("Stalls, food, games");
+  let asked2 = "";
+  page.once("dialog", (d) => { asked2 = d.message(); d.accept(); });
+  await page.locator("#save").click();
+  expect(asked2).toContain("It stays coming soon");
+  await expect(page.locator("#msg")).toHaveText("Saved — still coming soon. Before you can open sign-ups, add: Place name (English), Pin on the map.");
+});
+
+test("coming soon: event admins can't announce (organizers only)", async ({ page }) => {
+  const ab = adminBackend({ adminEvents: ["33333333-3333-4333-8333-333333333333"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await expect(page.locator('li[data-event="national-day-2026"] [data-act="announce"]')).toHaveCount(0);
+});
