@@ -19,6 +19,7 @@ begin
   -- the live project may already hold the real secrets: this run starts without them (rolled back)
   delete from vault.secrets where name in ('jc_resend_api_key', 'jc_feedback_to');
   delete from jc_feedback;                                               -- isolate counts (rolled back)
+  delete from jc_maintenance_log where job like 'feedback%';             -- live sends must not throttle the test
 
   execute 'set local role authenticated';
   perform set_config('request.jwt.claims', json_build_object('sub', u1, 'role', 'authenticated')::text, true);

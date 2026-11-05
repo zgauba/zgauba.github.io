@@ -683,3 +683,49 @@ test("description: heading, bold, underline, bullets, numbers render; anything e
   await expect(desc).toContainText('<img src=x onerror="window.__x=1"> & <b>not bold</b>');
   expect(await page.evaluate(() => window.__x)).toBeUndefined();
 });
+
+// ── T5.4 coming soon (residents) ──
+test("coming soon: badge on the list, no Sign Up; the event page says sign-ups open soon", async ({ page }) => {
+  const soon = Object.assign({}, LIVE, { signups_open: false, coming_soon: true });
+  await stubBackend(page, { rpc: {
+    jc_events_list: () => ok([Object.assign({}, soon, { homes_in: 0, my_status: null })]),
+    jc_event_get: () => ok({ event: soon, mine: null, stats: null, entries: [] }),
+  } });
+  await signIn(page);
+  await page.goto("events/");
+  const card = page.locator('[data-event="national-day-2026"]');
+  await expect(card.locator(".soon")).toHaveText("Coming Soon");
+  await expect(card.locator("small")).not.toContainText("coming soon");            // said once, by the badge
+  await expect(card.locator("small")).not.toContainText("homes in");               // no count before sign-ups open
+  await expect(card.locator(".evacts a")).toHaveText(["View"]);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
+  await expect(page.locator(".evhead .sub")).toContainText("coming soon");
+  await expect(page.locator(".evhead .sub")).not.toContainText("homes in");
+  await expect(page.locator("#cta")).toContainText("Sign-ups open soon — check back here.");
+  await expect(page.locator("#toSignup")).toHaveCount(0);
+});
+
+test("coming soon vs paused: a paused event has no badge and says sign-ups closed", async ({ page }) => {
+  await stubBackend(page, { rpc: { jc_events_list: () => ok([Object.assign({}, LIVE, { signups_open: false, coming_soon: false, homes_in: 4, my_status: null })]) } });
+  await signIn(page);
+  await page.goto("events/");
+  await expect(page.locator(".soon")).toHaveCount(0);
+  await expect(page.locator('[data-event="national-day-2026"] small')).toContainText("4 homes in · sign-ups closed");
+});
+
+test("coming soon one-place event without its place: the map says it'll be announced", async ({ page }) => {
+  const soon = Object.assign({}, LIVE, { kind: "venue", venue_name_en: null, venue_lat: null, venue_lng: null,
+    signups_open: false, coming_soon: true, households_in: 0, places_left: null, capacity: null });
+  await stubBackend(page, { rpc: { jc_event_get: () => ok({ event: soon, mine: null, stats: null, entries: [] }) } });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await expect(page.locator(".venueline")).toHaveText("📍 The place will be announced soon.");
+  await expect(page.locator(".venueline a")).toHaveCount(0);
+});
+
+test("coming soon: a closed event never shows the badge", async ({ page }) => {
+  await stubBackend(page, { rpc: { jc_events_list: () => ok([Object.assign({}, PAST, { coming_soon: true, homes_in: 3, my_status: null })]) } });
+  await signIn(page);
+  await page.goto("events/");
+  await expect(page.locator(".soon")).toHaveCount(0);
+});

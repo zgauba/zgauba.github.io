@@ -470,7 +470,7 @@ var VIEWS = {
 
 function eventRow(e){
   var status = e.status === "draft" ? "adm_status_draft" : e.status === "archived" ? "adm_status_archived"
-    : e.signups_open ? "adm_status_open" : "adm_status_paused";
+    : e.coming_soon ? "adm_status_soon" : e.signups_open ? "adm_status_open" : "adm_status_paused";   /* T5.4 */
   var place = e.kind === "venue"                                     /* T5.2 2c */
     ? (e.venue_name_en ? jcFmt("adm_at", { v: ar() && e.venue_name_ar ? e.venue_name_ar : e.venue_name_en }) : jcT("adm_no_venue"))
     : null;
@@ -481,11 +481,15 @@ function eventRow(e){
     return '<button class="btn' + (ghost ? ' ghost' : '') + ' small" type="button" data-act="' + a + '" data-id="' + esc(e.id) + '">' + esc(label) + '</button>';
   }
   if (e.status === "draft") acts = btn("edit", jcT("adm_edit"), true) +
-    (isOrganizer() ? btn("publish", jcT("adm_publish")) : '<span class="help">' + esc(jcT("adm_publish_note")) + '</span>');
+    /* T5.4: two ways out of a draft — on the list as "coming soon" (title only), or open for sign-ups */
+    (isOrganizer() ? btn("announce", jcT("adm_announce"), true) + btn("publish", jcT("adm_publish_open"))
+                   : '<span class="help">' + esc(jcT("adm_publish_note")) + '</span>');
   if (e.status === "live") {
     acts = btn("edit", jcT("adm_edit"), true) +
       btn(e.signups_open ? "pause" : "open", jcT(e.signups_open ? "adm_pause_signups" : "adm_open_signups"), true) +
       btn("close", jcT("adm_close"), true) +
+      /* T5.4b: back to coming soon — organizers, while nobody has signed up (the server checks too) */
+      (isOrganizer() && !e.coming_soon && !e.entries ? btn("announce", jcT("adm_back_to_soon"), true) : '') +
       '<a class="btn ghost small" href="../events/?id=' + esc(e.id) + '">' + esc(jcT("adm_view")) + '</a>';
   }
   if (e.status === "archived") acts = '<a class="btn ghost small" href="../events/?id=' + esc(e.id) + '">' + esc(jcT("adm_numbers")) + '</a>';
@@ -508,19 +512,22 @@ function act(a, id, b){
   if (a === "signups") return openSignups(e);
   if (a === "admins") return toggleAdmins(id);
   if (a === "close") { closing = closing === id ? null : id; admining = null; adminsData = null; show("home"); if (el("closeSlug")) el("closeSlug").focus(); return; }
-  if (a === "publish" && e.kind === "venue" && (!e.venue_name_en || e.venue_lat == null)) {
+  if ((a === "publish" || a === "open") && e.kind === "venue" && (!e.venue_name_en || e.venue_lat == null)) {
     /* say what's missing before asking the server (which refuses with NO_VENUE anyway) */
     var miss = [!e.venue_name_en ? jcT("ed_venue_name_en") : null, e.venue_lat == null ? jcT("ed_venue_pin_label") : null].filter(Boolean);
-    var m = el("msg"); m.className = "msg err"; m.textContent = jcFmt("adm_publish_missing", { list: miss.join(", ") });
+    var m = el("msg"); m.className = "msg err";
+    m.textContent = jcFmt(a === "open" ? "adm_open_missing" : "adm_publish_missing", { list: miss.join(", ") });
     return m.scrollIntoView({ block: "nearest" });
   }
   if (a === "publish" && !window.confirm(jcFmt("adm_publish_confirm", { t: title(e) }))) return;
+  if (a === "announce" && !window.confirm(jcFmt(e.status === "live" ? "adm_back_soon_confirm" : "adm_announce_confirm", { t: title(e) }))) return;
   var call = a === "publish" ? rpc("jc_admin_event_publish", { p_event: id })
+    : a === "announce" ? rpc("jc_admin_event_announce", { p_event: id })
     : rpc("jc_admin_event_signups", { p_event: id, p_open: a === "open" });
   b.disabled = true;
   call.then(function(list){
     events = list; show("home");
-    showOk(jcT(a === "publish" ? "adm_published" : a === "open" ? "adm_opened" : "adm_paused"));
+    showOk(jcT(a === "publish" ? "adm_published" : a === "announce" ? "adm_announced" : a === "open" ? "adm_opened" : "adm_paused"));
   }, function(err){ b.disabled = false; fail(err); });
 }
 
@@ -1169,9 +1176,9 @@ function saveEvent(){
   var missText = miss.map(function(m){ return m.label; }).join(", ");
   markMissing(miss);
   if (miss.length) {
-    if (draft) {
-      /* a draft may be saved half-done — but never silently */
-      if (!window.confirm(jcFmt("ed_missing_confirm", { list: missText }))) { el(miss[0].id).scrollIntoView({ block: "center" }); return showErr("MISSING_FOR_PUBLISH"); }
+    if (draft || orig.coming_soon) {
+      /* a draft (or a coming-soon event, T5.4) may be saved half-done — but never silently */
+      if (!window.confirm(jcFmt(orig.coming_soon ? "ed_missing_confirm_soon" : "ed_missing_confirm", { list: missText }))) { el(miss[0].id).scrollIntoView({ block: "center" }); return showErr("MISSING_FOR_PUBLISH"); }
     } else {
       el(miss[0].id).scrollIntoView({ block: "center" });
       return showErr("NO_VENUE");                     /* a live event can't lose its place (server says so too) */
@@ -1234,7 +1241,7 @@ function saveEvent(){
   busy("save", true);
   rpc("jc_admin_event_save", { p_event: ev ? ev.id : null, p_fields: f }).then(function(list){
     events = list; ed = null; show("home");
-    showOk(miss.length ? jcFmt("adm_saved_draft_missing", { list: missText }) : jcT("adm_saved"));
+    showOk(miss.length ? jcFmt(orig.coming_soon ? "adm_saved_soon_missing" : "adm_saved_draft_missing", { list: missText }) : jcT("adm_saved"));
   }, function(err){ busy("save", false); fail(err); });
 }
 

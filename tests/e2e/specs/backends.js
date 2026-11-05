@@ -181,7 +181,20 @@ function adminBackend(opts = {}) {
         if (e.kind === "venue" && !(e.venue_name_en && e.venue_lat != null)) return raise("NO_VENUE");   // as T5.2 3b
         e.status = "live"; return ok(st.events);
       }),
-      jc_admin_event_signups: guardEv((a) => { find(a.p_event).signups_open = a.p_open; return ok(visible()); }),
+      jc_admin_event_signups: guardEv((a) => {
+        const e = find(a.p_event);
+        if (a.p_open && e.kind === "venue" && !(e.venue_name_en && e.venue_lat != null)) return raise("NO_VENUE");   // as T5.4
+        e.signups_open = a.p_open; if (a.p_open) e.coming_soon = false;
+        return ok(visible());
+      }),
+      // T5.4: draft → coming soon (live, sign-ups closed) — organizers only, no place needed
+      jc_admin_event_announce: guard((a) => {
+        const e = find(a.p_event);
+        if (e.status !== "draft" && e.status !== "live") return raise("BAD_STATE");
+        if (e.status === "live" && e.entries) return raise("HAS_SIGNUPS");   // T5.4b
+        Object.assign(e, { status: "live", signups_open: false, coming_soon: true });
+        return ok(st.events);
+      }),
       jc_event_close: guardEv((a) => {
         const e = find(a.p_event);
         if (a.p_confirm !== e.slug) return raise("CONFIRM_REQUIRED");
