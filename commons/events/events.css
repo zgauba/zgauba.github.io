@@ -85,7 +85,7 @@ textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-
 /* T5.2 PR 5a — pins (Halloween parity): fill = availability, ring = the "ring" question,
    icon = the "glyph" question; teal icon = allergy-friendly (the Halloween teal pumpkin) */
 .pin{width:100%; height:100%; box-sizing:border-box; border-radius:50%; display:flex; align-items:center; justify-content:center;
-  font-size:15px; line-height:1; background:var(--jc-accent); color:var(--jc-accent-ink); border:2.5px solid var(--jc-ink);
+  font-size:15px; line-height:1; background:var(--jc-accent); color:var(--jc-accent-ink); border:4px solid var(--jc-ink);
   box-shadow:0 2px 8px rgba(0,0,0,.5); white-space:nowrap}
 .pin.mine{font-size:18px; box-shadow:0 0 0 3px var(--jc-bg), 0 0 0 5px var(--jc-ink), 0 2px 8px rgba(0,0,0,.5)}
 .pin.reported{background:var(--jc-bg); color:var(--jc-danger); font-size:19px; font-weight:900}   /* dark + red ?: far from every look's colour (amber ≈ gold / orange) */
@@ -97,13 +97,13 @@ textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-
 .pin.mine .gl.multi{font-size:13px}
 .gl.teal{filter:hue-rotate(145deg) saturate(1.5)}
 #mapAfter > :first-child{margin-top:8px}
-/* the map key: one scrollable row, so the map keeps its height */
-.legend{display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px}
-.legend::-webkit-scrollbar{display:none}
+/* the map key: icons · gates · states, one wrapping row each (5a.1) */
+.legend{display:flex; flex-direction:column; gap:5px}
+.legend .row{display:flex; flex-wrap:wrap; gap:5px}
 .legend .chip{flex:0 0 auto; display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--jc-muted);
   background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius-pill); padding:4px 10px; white-space:nowrap}
 .ringdot{display:inline-flex; align-items:center; justify-content:center; width:13px; height:13px; border-radius:50%;
-  background:var(--jc-accent); border-width:2.5px; border-style:solid; font-style:normal; font-size:8px; font-weight:800}
+  background:var(--jc-accent); border-width:3.5px; border-style:solid; font-style:normal; font-size:8px; font-weight:800}
 .ringdot.st{border-color:var(--jc-ink)}
 .ringdot.done{background:var(--jc-faint); color:var(--jc-bg)}
 .ringdot.reported{background:var(--jc-bg); color:var(--jc-danger)}

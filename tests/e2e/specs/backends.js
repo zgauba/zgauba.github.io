@@ -34,7 +34,7 @@ const PIN_SCHEMA = { fields: {
     labels_en: { candy: "Candy only", non_food: "Non-food", both: "Both" },
     glyphs: { candy: "🍬", non_food: "🎃", both: "🍬🎃" }, allergy_friendly: ["non_food"] },
   entrance: { type: "enum", values: ["front", "garden", "both"], required: true, pin: "ring",
-    labels_en: { front: "Front gate", garden: "Garden gate", both: "Both gates" } },
+    labels_en: { front: "Front gate", garden: "Garden gate", both: "Both gates" }, ring_split: ["both"] },
 } };
 const home = (id, n, lat, payload, extra) => Object.assign({ id, mine: false, village: "seef-al-jubail", type: "villa",
   building: null, number: n, lat, lng: 54.431, payload, note: null, live_state: "active", supply_level: null, reported_out: false }, extra || {});
@@ -44,6 +44,7 @@ const PIN_ENTRIES = [
   home("c", "3", 24.531, { treats: "both", entrance: "both" }, { live_state: "done" }),
   home("d", "4", 24.536, { treats: "candy", entrance: "front" }, { reported_out: true }),
   home("m", "12", 24.541, { treats: "candy", entrance: "garden" }, { mine: true }),
+  home("e", "5", 24.546, { treats: "both", entrance: "both" }),
 ];
 function pinEvent(extra, entries) {
   return { event: Object.assign({}, LIVE, { kind: "homes", look: "halloween", payload_schema: PIN_SCHEMA,
@@ -57,7 +58,7 @@ const HAQ_SCHEMA = { fields: {
   entrance: PIN_SCHEMA.fields.entrance,
 } };
 const HAQ_ENTRIES = PIN_ENTRIES.map((e, i) => Object.assign({}, e,
-  { payload: Object.assign({}, e.payload, { treats: ["mix", "nut_free", "both", "nut_free", "mix"][i] }) }));
+  { payload: Object.assign({}, e.payload, { treats: ["mix", "nut_free", "both", "nut_free", "mix", "both"][i] }) }));
 const PINS_ID = "88888888-8888-4888-8888-888888888888";
 const HAQ_ID = "99999999-9999-4999-8999-999999999999";
 const PINS_EVENT = pinEvent({ id: PINS_ID, slug: "halloween-2027", title_en: "Halloween 2027" });

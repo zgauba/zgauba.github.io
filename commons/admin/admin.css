@@ -113,3 +113,4 @@ label.check span small{display:block; color:var(--jc-muted); font-size:12.5px; f
 .choice .allergy{flex:0 0 auto; display:inline-flex; align-items:center; gap:4px; cursor:pointer}
 .choice .allergy input{flex:0 0 auto; min-width:auto}
 .tealdot{display:inline-block; width:12px; height:12px; border-radius:50%; background:var(--jc-info)}
+.splitdot{display:inline-block; width:12px; height:12px; border-radius:50%; border:3px solid; border-color:var(--jc-ring-0) var(--jc-ring-1) var(--jc-ring-1) var(--jc-ring-0)}
