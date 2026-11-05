@@ -65,9 +65,61 @@ const PINS_EVENT = pinEvent({ id: PINS_ID, slug: "halloween-2027", title_en: "Ha
 const HAQ_EVENT = pinEvent({ id: HAQ_ID, slug: "haq-al-laila-2027", title_en: "Haq al Laila", title_ar: "حق الليلة",
   look: "haq_al_laila", payload_schema: HAQ_SCHEMA }, HAQ_ENTRIES);
 
+// ── T5.2 PR 5b: event day ──
+// A treat night happening NOW (started 1 h ago, ends in 3 h), this home signed up, every feature on.
+// Keeps state like the real RPCs: the switch + supply on this home's entry, reports (going "done"
+// clears them), and the household's "we're not out". opts.startsIn moves the start (ms from now).
+const DAY_ID = "66666666-6666-4666-8666-666666666666";
+function dayBackend(opts = {}) {
+  const now = Date.now(), startsIn = opts.startsIn != null ? opts.startsIn : -3600e3;
+  const st = { live: "active", supply: null, reportsOpen: opts.reportsOpen || 0, gets: 0,
+    others: PIN_ENTRIES.filter((e) => !e.mine).map((e) => Object.assign({}, e)) };
+  const event = pinEvent(Object.assign({ id: DAY_ID, slug: "halloween-tonight", title_en: "Halloween Tonight",
+    starts_at: new Date(now + startsIn).toISOString(), ends_at: new Date(now + startsIn + 4 * 3600e3).toISOString(),
+    features: { giant_switch: true, supply: true, crowd_reports: true } }, opts.event || {})).event;
+  const mineEntry = PIN_ENTRIES.find((e) => e.mine);
+  const get = () => ({
+    event, stats: null,
+    mine: { id: "m", status: "in", payload: mineEntry.payload, note: null, live_state: st.live, supply_level: st.supply,
+            org_note: null, hidden: false, reports_locked_until: null, spot: null, reports_open: st.reportsOpen },
+    entries: st.others.concat([Object.assign({}, mineEntry, { live_state: st.live, supply_level: st.supply })]),
+  });
+  const feat = (k) => event.features[k] === true;
+  return {
+    st, event,
+    rpc: Object.assign({
+      // the reply is what the server held when the request ARRIVED; st.hold (a Promise) answers it late
+      jc_event_get: async () => {
+        st.gets++;
+        const reply = st.getFails ? raise("UNKNOWN") : ok(get()), hold = st.hold;
+        if (hold) await hold;
+        return reply;
+      },
+      jc_entry_live_set: (a) => {
+        if (a.p_state != null && !feat("giant_switch")) return raise("FEATURE_OFF");
+        if (a.p_supply != null && !feat("supply")) return raise("FEATURE_OFF");
+        if (a.p_state != null) st.live = a.p_state;
+        if (a.p_supply != null) st.supply = a.p_supply;
+        if (a.p_state === "done") st.reportsOpen = 0;
+        return ok(get());
+      },
+      jc_entry_reports_clear: () => { st.reportsOpen = 0; return ok(get()); },
+      jc_entry_report: (a) => {
+        if (a.p_entry === "m") return raise("OWN_ENTRY");
+        const e = st.others.find((x) => x.id === a.p_entry);
+        if (!e) return raise("NOT_FOUND");
+        if (e.live_state === "done") return raise("ALREADY_DONE");
+        if (opts.reportError) return raise(opts.reportError);
+        return ok({ reported: true });
+      },
+    }, opts.rpc || {}),
+  };
+}
+
 // A server that keeps the home's entry like jc_event_signup does: payload + note REPLACED wholesale.
 function eventsBackend(opts = {}) {
   const st = { mine: opts.mine || null, signupsOpen: opts.signupsOpen !== false };
+  const day = dayBackend({ reportsOpen: 1 });
   const get = () => {
     const entries = ENTRIES.slice();
     if (st.mine && st.mine.status === "in") {
@@ -86,7 +138,12 @@ function eventsBackend(opts = {}) {
       jc_event_get: (a) => a.p_event === PAST_ID
         ? ok({ event: PAST, mine: null, stats: STATS, entries: null })
         : a.p_event === LIVE_ID ? ok(get())
-        : a.p_event === PINS_ID ? ok(PINS_EVENT) : a.p_event === HAQ_ID ? ok(HAQ_EVENT) : raise("NOT_FOUND"),
+        : a.p_event === PINS_ID ? ok(PINS_EVENT) : a.p_event === HAQ_ID ? ok(HAQ_EVENT)
+        : a.p_event === DAY_ID ? day.rpc.jc_event_get() : raise("NOT_FOUND"),
+      // event day (5b) — /shot can open events/?id=6666… and tap the switch
+      jc_entry_live_set: (a) => day.rpc.jc_entry_live_set(a),
+      jc_entry_reports_clear: (a) => day.rpc.jc_entry_reports_clear(a),
+      jc_entry_report: (a) => day.rpc.jc_entry_report(a),
       jc_event_signup: (a) => {
         if (!st.signupsOpen) return raise("SIGNUPS_CLOSED");
         const p = Object.assign({}, a.p_payload); const note = p.note || null; delete p.note;
@@ -303,5 +360,5 @@ async function signIn(page) {
 }
 
 module.exports = { eventsBackend, adminBackend, signIn, LIVE_ID, PAST_ID, SCHEMA, LIVE, PAST, ENTRIES, STATS,
-  PIN_SCHEMA, home, pinEvent, PINS_ID, HAQ_ID,
+  PIN_SCHEMA, home, pinEvent, PINS_ID, HAQ_ID, DAY_ID, dayBackend,
   ADMIN_DRAFT_ID, ADMIN_LIVE_ID, ADMIN_PAST_ID, ADMIN_MARKET_ID, ADMIN_MARKET };

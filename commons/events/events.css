@@ -114,3 +114,26 @@ textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-
 .mark{font-size:.9em}
 .evhead .tagline{margin:0; color:var(--jc-accent); font-size:15px; font-weight:700}
 .evcard[data-look]{border-inline-start:3px solid var(--jc-accent)}
+
+/* event day (T5.2 PR 5b): both choices always visible, the current one filled — never a cycling button */
+.live{display:flex; flex-direction:column; gap:6px; margin-bottom:6px}
+.liveq{margin:0; font-size:13px; color:var(--jc-muted)}
+.tog{display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:4px; border:1px solid var(--jc-line); border-radius:14px}
+.tog button{font:inherit; font-size:15px; font-weight:800; padding:13px 4px; min-height:48px; border:0; border-radius:10px;
+  cursor:pointer; color:var(--jc-muted); background:transparent}
+.tog button[aria-pressed="true"]{background:var(--jc-accent); color:var(--jc-accent-ink)}
+.tog button[data-live="done"][aria-pressed="true"]{background:var(--jc-faint); color:var(--jc-ink)}
+.seg4{display:grid; grid-template-columns:repeat(4,1fr); gap:4px}
+.seg4 button{font:inherit; font-size:12.5px; font-weight:700; padding:10px 2px; min-height:44px; cursor:pointer; color:var(--jc-muted);
+  background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:10px}
+.seg4 button[aria-pressed="true"]{color:var(--jc-ink); border-color:var(--jc-accent); box-shadow:inset 0 0 0 1px var(--jc-accent)}
+.tog button:disabled, .seg4 button:disabled{opacity:.6; cursor:progress}
+.alert{border:1px solid var(--jc-danger); border-radius:12px; padding:10px 12px; margin:8px 0; background:var(--jc-surface); font-size:14px}
+.alert b{color:var(--jc-danger)}
+.alertacts{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
+.alertacts .btn{flex:1; margin:0; padding:9px 10px; font-size:14px}
+.upd{margin:6px 0 0; font-size:12px; color:var(--jc-muted)}
+.upd.stale{color:var(--jc-warn)}
+.supply{font-size:12.5px; color:var(--jc-muted); margin-top:2px}
+.pop .rep{display:block; width:100%; margin-top:8px; font:inherit; font-weight:700; padding:8px; min-height:40px; cursor:pointer;
+  color:var(--jc-danger); background:transparent; border:1px solid var(--jc-danger); border-radius:999px}

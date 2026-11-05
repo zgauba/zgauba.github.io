@@ -162,12 +162,23 @@ function legendHtml(ev){
 }
 
 function show(name){
-  if (map) { map.remove(); map = null; }
+  /* state first: map.remove() fires popupclose, which must not draw onto a dying map (review R1) */
+  var old = map;
+  map = null; homeLayer = null; popupOpen = false; pendingRepaint = false; mineShown = null;
+  if (old) old.remove();
   current = name;
   setLook(name === "list" ? null : lookOf(data && data.event));
   jcBack(name === "list" ? null : "./", "ev_back");   /* back to the events list, in the top bar */
   document.body.classList.remove("evfit");
   VIEWS[name]();
+}
+
+/* "2 Dec · Sign-ups open · 37 homes in" — redrawn on each event-day refresh */
+function headSub(ev, entries){
+  var count = isVenue(ev) ? comingLine(ev.households_in || 0, ev, ev.places_left === 0)
+                          : jcFmt("ev_homes_in", { n: entries.length });
+  return [fmtDate(ev.starts_at), jcT(ev.coming_soon ? "ev_soon" : ev.signups_open ? "ev_open" : "ev_closed"),
+          ev.coming_soon ? null : count].filter(Boolean).join(" · ");
 }
 
 /* ---------- views ---------- */
@@ -233,16 +244,13 @@ var VIEWS = {
     var ev = data.event, entries = data.entries || [];
     var tabs = tabsFor(ev);
     if (tabs.indexOf(tab) < 0) tab = "map";   /* ?tab=list on a one-place event */
-    var count = isVenue(ev) ? comingLine(ev.households_in || 0, ev, ev.places_left === 0)
-                            : jcFmt("ev_homes_in", { n: entries.length });
     var look = lookOf(ev);
     el("view").innerHTML =
       '<div class="evhead">' +
         /* the look's mark; Haq al Laila leads with its Arabic tagline in both languages */
         (look === "haq_al_laila" ? '<p class="tagline" lang="ar" dir="rtl">' + esc(jcT("look_tagline_haq_al_laila")) + '</p>' : '') +
         '<h1>' + (look ? '<span class="mark" aria-hidden="true">' + LOOK_MARKS[look] + '</span> ' : '') + esc(title(ev)) + '</h1>' +
-        '<p class="sub">' + esc([fmtDate(ev.starts_at), jcT(ev.coming_soon ? "ev_soon" : ev.signups_open ? "ev_open" : "ev_closed"),
-                                 ev.coming_soon ? null : count].filter(Boolean).join(" · ")) + '</p>' +
+        '<p class="sub" id="evsub">' + esc(headSub(ev, entries)) + '</p>' +
         /* two lines, then "More" — the map stays above the fold (Zee, 2026-11-04) */
         /* formatted with the editor's markers — jcRich escapes everything first (rich.js) */
         (desc(ev) ? '<div class="desc rich" id="desc" dir="auto">' + jcRich(desc(ev)) + '</div>' +
@@ -253,8 +261,11 @@ var VIEWS = {
         return '<button type="button" role="tab" id="tab-' + t + '" aria-selected="' + (tab === t) + '">' +
           esc(jcT(key)) + '</button>';
       }).join("") + '</div>' +
+      '<div id="banner"></div>' +                                   /* event day (5b) */
+      '<p class="upd" id="upd" aria-live="polite" hidden></p>' +
       msgBox() +
       '<div id="body"></div>';
+    paintDay();
     tabs.forEach(function(t){
       on("tab-" + t, function(){
         tab = t; editing = false;
@@ -314,6 +325,7 @@ function renderMine(){
   if (!h) {
     html += '<p class="help">' + esc(jcT("ev_no_home")) + '</p><a class="btn" href="../home/">' + esc(jcT("ev_claim")) + '</a>';
   } else if (isIn) {
+    html += liveHtml();                          /* event day: the switch + supply, first */
     var fields = (ev.payload_schema && ev.payload_schema.fields) || {};
     var rows = Object.keys(fields).filter(function(k){ return mine.payload && mine.payload[k] !== undefined; }).map(function(k){
       var v = mine.payload[k];
@@ -346,6 +358,8 @@ function renderMine(){
   var wa = whatsappUrl();
   if (wa) html += '<a class="btn ghost" target="_blank" rel="noopener" href="' + esc(wa) + '">' + esc(jcT("ev_whatsapp")) + '</a>';
   el("body").innerHTML = '<div class="cta" id="cta">' + html + '</div>';
+  mineShown = mineKey();
+  wireLive();
   on("toSignup", function(){
     if (!isVenue(ev) && !hasPos(myHome())) return goPin();
     editing = true; show("detail");
@@ -353,6 +367,7 @@ function renderMine(){
   on("withdraw", function(){
     if (!window.confirm(jcFmt("ev_withdraw_confirm", { h: myLabel() }))) return;
     busy("withdraw", true);
+    gen++;                                   /* a refresh already on its way is now stale (review R4) */
     rpc("jc_entry_withdraw", { p_event: ev.id }).then(function(d){
       data = d; show("detail"); showOk(jcFmt("ev_withdrawn", { h: myLabel() }));
     }, function(e){ busy("withdraw", false); showErr(e.code); });
@@ -428,6 +443,7 @@ function renderForm(){
     var note = el("note").value.trim();
     if (note) payload.note = note;
     busy("go", true);
+    gen++;
     rpc("jc_event_signup", { p_event: ev.id, p_payload: payload }).then(function(d){
       data = d; editing = false; show("detail"); showOk(jcFmt(isVenue(d.event) ? "ev_venue_in" : "ev_signed_up", { h: myLabel() }));
     }, function(e){
@@ -441,6 +457,224 @@ function renderForm(){
     });
   });
 }
+
+/* ---------- event day (T5.2 PR 5b) ----------
+   From 2 h before the start until the end: the household's two-sided switch + supply levels,
+   neighbors' "they're out" reports, and a refresh every 2 minutes while the page is in view.
+   Undated events never get an event day; a start with no end runs 6 h. */
+var LEAD_MS = 2 * 3600e3, NO_END_MS = 6 * 3600e3;
+var REFRESH_MS = window.JC_REFRESH_MS || 120000;   /* JC_REFRESH_MS: tests only */
+var lastAt = null, stale = false;   /* when `data` last came from the server; the last refresh failed */
+var acting = false, gen = 0;        /* an event-day action in flight; bumps so an older refresh is dropped */
+var reported = {};
+var staleAfterReport = false;                  /* entries this device reported — memory only (the server dedups too) */
+
+function eventDay(ev){
+  if (!ev || ev.status !== "live" || isVenue(ev) || !ev.starts_at) return false;
+  var s = Date.parse(ev.starts_at), e = ev.ends_at ? Date.parse(ev.ends_at) : s + NO_END_MS, now = Date.now();
+  return now >= s - LEAD_MS && now <= e;
+}
+function feat(ev, k){ return !!(ev && ev.features && ev.features[k] === true); }
+/* treat nights say "Handing Out / Out of Treats"; other events "Open / Done" (key + "_treats") */
+function treatKey(ev, k){ return TREAT_LOOKS[lookOf(ev)] === true ? k + "_treats" : k; }
+var SUPPLY = [3, 2, 1, 0];          /* Plenty · Some left · Running low · Almost out (server: 0–3) */
+function supplyLine(e){
+  if (!feat(data.event, "supply") || pinState(e) || SUPPLY.indexOf(e.supply_level) < 0) return "";
+  return '<div class="supply">' + esc(jcFmt("ev_supply_line", { s: jcT("ev_supply_" + e.supply_level) })) + '</div>';
+}
+function fmtTime(d){
+  return d.toLocaleTimeString(ar() ? "ar-AE-u-nu-latn" : "en-US",
+    { hour: "numeric", minute: "2-digit", timeZone: (cfg && cfg.tz) || "Asia/Dubai" });
+}
+
+/* My Sign-Up: "Right now, Villa 12 is… [Handing Out | ✕ Out of Treats]" and the four supply
+   levels — every choice visible, the current one filled; never a button that cycles (Zee). */
+function liveHtml(){
+  var ev = data.event, mine = data.mine;
+  var sw = feat(ev, "giant_switch"), sup = feat(ev, "supply");
+  if (!eventDay(ev) || !mine || mine.status !== "in" || (!sw && !sup)) return "";
+  var done = mine.live_state === "done", look = lookOf(ev);
+  var html = '<div class="live" id="live">';
+  if (sw) {
+    html += '<p class="liveq">' + esc(jcFmt("ev_live_q", { h: myLabel() })) + '</p>' +
+      '<div class="tog" role="group" aria-label="' + esc(jcFmt("ev_live_q", { h: myLabel() })) + '">' +
+        '<button type="button" data-live="active" aria-pressed="' + !done + '">' +
+          (look ? '<span aria-hidden="true">' + LOOK_MARKS[look] + '</span> ' : '') + esc(jcT(treatKey(ev, "ev_live_on"))) + '</button>' +
+        '<button type="button" data-live="done" aria-pressed="' + done + '"><span aria-hidden="true">✕</span> ' +
+          esc(jcT(treatKey(ev, "ev_live_off"))) + '</button></div>';
+  }
+  if (sup && !done) {
+    html += '<p class="liveq">' + esc(jcT("ev_supply_q")) + '</p>' +
+      '<div class="seg4" role="group" aria-label="' + esc(jcT("ev_supply_q")) + '">' + SUPPLY.map(function(n){
+        return '<button type="button" data-supply="' + n + '" aria-pressed="' + (mine.supply_level === n) + '">' +
+          esc(jcT("ev_supply_" + n)) + '</button>';
+      }).join("") + '</div>';
+  }
+  return html + '</div>';
+}
+function wireLive(){
+  Array.prototype.forEach.call(document.querySelectorAll("#live [data-live]"), function(b){
+    b.addEventListener("click", function(){
+      if (b.getAttribute("aria-pressed") === "true") return;
+      act("jc_entry_live_set", { p_event: data.event.id, p_state: b.dataset.live, p_supply: null });
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("#live [data-supply]"), function(b){
+    b.addEventListener("click", function(){
+      if (b.getAttribute("aria-pressed") === "true") return;
+      act("jc_entry_live_set", { p_event: data.event.id, p_state: null, p_supply: Number(b.dataset.supply) });
+    });
+  });
+}
+
+/* The household's private banner after the first neighbor report (3+ put ? on the map).
+   On every tab — the household is probably looking at the map. Not limited to the event-day
+   window: a report can only exist while the event is live with reports on. */
+function bannerHtml(){
+  var ev = data.event, mine = data.mine;
+  if (!mine || mine.status !== "in" || ev.status !== "live" || !feat(ev, "crowd_reports") ||
+      mine.live_state === "done" || !(mine.reports_open > 0)) return "";
+  return '<div class="alert" role="alert"><b>' + esc(jcFmt(treatKey(ev, "ev_banner"), { h: myLabel() })) + '</b>' +
+    '<div class="alertacts"><button type="button" class="btn" id="notOut">' + esc(jcT(treatKey(ev, "ev_not_out"))) + '</button>' +
+    (feat(ev, "giant_switch") ? '<button type="button" class="btn ghost" id="yesOut">' + esc(jcT(treatKey(ev, "ev_yes_out"))) + '</button>' : '') +
+    '</div></div>';
+}
+/* banner + "Updated 7:42 PM"; returns true when either changed (the map needs refitting) */
+var dayShown = false;               /* was the event-day window open at the last paint */
+function paintDay(){
+  var b = el("banner"), u = el("upd"), changed = false;
+  if (b) {
+    var html = bannerHtml();
+    if (b.innerHTML !== html) {             /* untouched otherwise: role=alert re-announces on change */
+      b.innerHTML = html; changed = true;
+      on("notOut", function(){
+        act("jc_entry_reports_clear", { p_event: data.event.id }, jcT("ev_not_out_ok"));
+      });
+      on("yesOut", function(){
+        act("jc_entry_live_set", { p_event: data.event.id, p_state: "done", p_supply: null });
+      });
+    }
+  }
+  dayShown = eventDay(data.event);
+  if (u) {
+    var show = dayShown && !!lastAt;
+    var text = show ? jcFmt(stale ? "ev_updated_stale" : "ev_updated", { t: fmtTime(lastAt) }) : "";
+    if (u.hidden !== !show || u.textContent !== text) changed = true;   /* the line can wrap: refit the map (R6) */
+    u.hidden = !show;
+    u.classList.toggle("stale", stale);
+    u.textContent = text;
+  }
+  return changed;
+}
+
+/* One event-day write at a time; the reply is the whole event (jc_event_get), drawn in place. */
+function act(name, args, okText){
+  if (acting) return;
+  acting = true; gen++;
+  refocus = focusSel();
+  Array.prototype.forEach.call(document.querySelectorAll("#live button, #banner button"), function(x){ x.disabled = true; });
+  rpc(name, args).then(function(d){
+    data = d; lastAt = new Date(); stale = false;
+    repaint();
+    if (okText) showOk(okText);
+  }, function(e){
+    Array.prototype.forEach.call(document.querySelectorAll("#live button, #banner button"), function(x){ x.disabled = false; });
+    showErr(e.code);
+  }).finally(function(){ acting = false; });   /* finally: a throw while drawing never leaves it stuck (review R2) */
+}
+
+/* A neighbor's popup: "They're Out of Treats" → one report (asks first). */
+function reportHtml(e){
+  var ev = data.event;
+  if (e.mine || !eventDay(ev) || !feat(ev, "crowd_reports") || e.live_state === "done") return "";
+  if (reported[e.id]) return '<div class="pinstate">' + esc(jcT("ev_reported_thanks")) + '</div>';
+  return '<button type="button" class="rep" data-report="' + esc(e.id) + '">' + esc(jcT(treatKey(ev, "ev_report"))) + '</button>';
+}
+function report(e, popup, btn){
+  if (acting || !window.confirm(jcFmt(treatKey(data.event, "ev_report_confirm"), { h: jcHomeLabel(e) }))) return;
+  acting = true; btn.disabled = true;
+  rpc("jc_entry_report", { p_entry: e.id }).then(function(){
+    reported[e.id] = true;
+    popup.setContent(popupHtml(e));
+    showOk(jcFmt("ev_reported_ok", { h: jcHomeLabel(e) }));
+  }, function(err){
+    btn.disabled = false;
+    showErr(err.code);
+    if (err.code === "ALREADY_DONE" || err.code === "NOT_FOUND") staleAfterReport = true;   /* the pin was out of date (R5) */
+  }).finally(function(){
+    acting = false;
+    if (staleAfterReport) { staleAfterReport = false; refresh(); }
+  });
+}
+
+/* Redraw what the server changed without rebuilding the page: the map keeps its zoom and an open
+   popup (redrawn when it closes), the list keeps its search, a half-filled form is never touched. */
+var homeLayer = null, popupOpen = false, pendingRepaint = false;
+function repaint(){
+  if (current !== "detail" || !data) return;
+  if (data.event.status !== "live") return show(data.event.status === "archived" ? "stats" : "detail");
+  var s = el("evsub");
+  if (s) s.textContent = headSub(data.event, data.entries || []);
+  var moved = paintDay();
+  if (tab === "map") {
+    if (popupOpen) pendingRepaint = true; else drawHomes(data.entries || []);
+    if (moved) fitSoon();
+  } else if (tab === "list") {
+    var q = el("q");
+    if (q && document.activeElement === q) return;   /* typing a search: next round */
+    var y = window.scrollY;
+    renderList(data.entries || [], q ? q.value : "");
+    window.scrollTo(0, y);
+  } else if (!editing && mineKey() !== mineShown) {
+    /* only when something on this tab changed; keep focus on the switch / level just tapped (R3) */
+    var sel = refocus || focusSel();
+    renderMine();
+    var nf = sel && (document.querySelector("#live " + sel) || document.querySelector("#live [data-live]"));
+    if (nf) nf.focus();
+  }
+  refocus = null;
+}
+/* the switch side / level that has focus — noted before act() disables it (disabling drops focus) */
+var refocus = null;
+function focusSel(){
+  var f = document.activeElement;
+  return f && f.dataset && (f.dataset.live ? '[data-live="' + f.dataset.live + '"]'
+    : f.dataset.supply ? '[data-supply="' + f.dataset.supply + '"]' : null);
+}
+var mineShown = null;
+function mineKey(){
+  return JSON.stringify([data.mine, data.event.features, data.event.signups_open, eventDay(data.event)]);
+}
+
+function refreshDue(){
+  return !!EVENT_ID && current === "detail" && !editing && !document.hidden && eventDay(data && data.event);
+}
+var refreshing = false;
+function refresh(){
+  if (refreshing || acting || !refreshDue()) return;
+  refreshing = true;
+  var g = gen;
+  rpc("jc_event_get", { p_event: EVENT_ID }).then(function(d){
+    if (g !== gen || !refreshDue()) return;   /* an action answered meanwhile, or the form opened */
+    data = d; lastAt = new Date(); stale = false;
+    repaint();
+  }, function(){
+    stale = true;                             /* keep what's on screen; say how old it is */
+    if (paintDay()) fitSoon();
+  }).finally(function(){ refreshing = false; });
+}
+/* every ~2 minutes, ±10 % so a street of phones doesn't hit the database in the same second; the
+   window opening or closing while the page sits open redraws once (controls appear / go — R7) */
+function tick(){
+  if (current === "detail" && data && !editing && eventDay(data.event) !== dayShown) repaint();
+  refresh();
+  setTimeout(tick, REFRESH_MS * (0.9 + 0.2 * Math.random()));
+}
+setTimeout(tick, REFRESH_MS * (0.9 + 0.2 * Math.random()));
+document.addEventListener("visibilitychange", function(){
+  /* back in view: at most once every 15 s (switching apps quickly) */
+  if (!document.hidden && (!lastAt || Date.now() - lastAt.getTime() > 15000)) refresh();
+});
 
 /* ---------- map + list (Halloween-site parity, plan audit 2026-11-03) ---------- */
 var layer = "sat";
@@ -480,7 +714,8 @@ function answers(e){
 /* "Done for the night" / "Neighbors say they're out" — or nothing */
 function stateLine(e){
   var st = pinState(e);
-  return st ? '<div class="pinstate ' + st + '">' + esc(jcT(st === "done" ? outKey(data.event, "ev_pin_done") : "ev_pin_reported")) + '</div>' : '';
+  return st ? '<div class="pinstate ' + st + '">' + esc(jcT(st === "done" ? outKey(data.event, "ev_pin_done") : "ev_pin_reported")) + '</div>'
+            : supplyLine(e);
 }
 /* Popup = HTML, so EVERYTHING resident-typed is escaped (numbers, buildings, notes). */
 function popupHtml(e){
@@ -491,7 +726,8 @@ function popupHtml(e){
     (e.note ? '<div class="note">' + esc(e.note) + '</div>' : '') +
     (d !== null ? '<div class="meta">' + esc(jcFmt("ev_dist_from_you", { d: fmtDist(d) })) + '</div>' : '') +
     '<div class="popacts"><a target="_blank" rel="noopener" href="' + esc(directionsUrl(e)) + '">' + esc(jcT("ev_directions")) + '</a>' +
-    '<a target="_blank" rel="noopener" href="' + esc(pinUrl(e)) + '">' + esc(jcT("ev_view_pin")) + '</a></div></div>';
+    '<a target="_blank" rel="noopener" href="' + esc(pinUrl(e)) + '">' + esc(jcT("ev_view_pin")) + '</a></div>' +
+    reportHtml(e) + '</div>';
 }
 
 /* "More" only when the description is actually cut off; it stays open across tab switches */
@@ -573,21 +809,26 @@ function renderMap(entries){
   var styles = getComputedStyle(document.documentElement);
   var accent = styles.getPropertyValue("--jc-accent").trim() || "#3e9b76";
   var ink = styles.getPropertyValue("--jc-ink").trim() || "#f6f2e9";
-  var markers = [], pts = [], me = null;
-  entries.forEach(function(e){
-    if (!hasPos(e)) return;
-    pts.push([e.lat, e.lng]);
-    if (e.venue) {
-      markers.push(L.circleMarker([e.lat, e.lng], { radius: 12, weight: 3, color: ink, fillColor: accent, fillOpacity: .9 })
-        /* Leaflet sets string tooltip content as HTML: the organizer-typed name is escaped (review: XSS) */
-        .addTo(map).bindTooltip('<span dir="auto">' + esc(placeName(ev) || jcT("ev_the_place")) + '</span>',
-                                { permanent: true, direction: "top", offset: [0, -12] }));
-      return;
-    }
-    /* your own home on top of its neighbours */
-    var m = L.marker([e.lat, e.lng], { icon: pinIcon(e), zIndexOffset: e.mine ? 1000 : 0, keyboard: true, title: jcHomeLabel(e) })
-      .addTo(map).bindPopup(function(){ return popupHtml(e); });   /* rebuilt on open: distance stays current */
-    markers.push(m);
+  var pts = [], me = null;
+  entries.forEach(function(e){ if (hasPos(e)) pts.push([e.lat, e.lng]); });
+  if (venue && pts.length) {
+    L.circleMarker(pts[0], { radius: 12, weight: 3, color: ink, fillColor: accent, fillOpacity: .9 })
+      /* Leaflet sets string tooltip content as HTML: the organizer-typed name is escaped (review: XSS) */
+      .addTo(map).bindTooltip('<span dir="auto">' + esc(placeName(ev) || jcT("ev_the_place")) + '</span>',
+                              { permanent: true, direction: "top", offset: [0, -12] });
+  } else if (!venue) {
+    drawHomes(entries);
+  }
+  /* a neighbor's "They're Out" button lives in the popup; a refresh waits for the popup to close */
+  map.on("popupopen", function(pe){
+    popupOpen = true;
+    var node = pe.popup.getElement(), b = node && node.querySelector("[data-report]");
+    var e = b && (data.entries || []).filter(function(x){ return x.id === b.dataset.report; })[0];
+    if (e) b.addEventListener("click", function(){ report(e, pe.popup, b); });
+  });
+  map.on("popupclose", function(){
+    popupOpen = false;
+    if (pendingRepaint) { pendingRepaint = false; drawHomes(data.entries || []); }
   });
   on("locateBtn", function(){
     locate(function(){
@@ -599,6 +840,18 @@ function renderMap(entries){
   });
   if (pts.length > 1) map.fitBounds(pts, { padding: [30, 30], maxZoom: 18 });
   else if (pts.length === 1) map.setView(pts[0], 18);
+}
+
+/* the homes' pins, in their own layer so a refresh redraws them without moving the map */
+function drawHomes(entries){
+  if (!map) return;
+  if (homeLayer) homeLayer.clearLayers(); else homeLayer = L.layerGroup().addTo(map);
+  entries.forEach(function(e){
+    if (!hasPos(e)) return;
+    /* your own home on top of its neighbours */
+    L.marker([e.lat, e.lng], { icon: pinIcon(e), zIndexOffset: e.mine ? 1000 : 0, keyboard: true, title: jcHomeLabel(e) })
+      .addTo(homeLayer).bindPopup(function(){ return popupHtml(e); });   /* rebuilt on open: distance stays current */
+  });
 }
 
 function renderList(entries, q){
@@ -651,7 +904,7 @@ function renderList(entries, q){
 function loadEvent(){
   el("view").innerHTML = '<p class="sub">' + esc(jcT("working")) + '</p>' + msgBox();
   return rpc("jc_event_get", { p_event: EVENT_ID }).then(function(d){
-    data = d;
+    data = d; lastAt = new Date();
     var wantStats = params.get("view") === "stats" || d.event.status === "archived";
     jcHit(wantStats ? "stats" : "events");
     show(wantStats ? "stats" : "detail");
