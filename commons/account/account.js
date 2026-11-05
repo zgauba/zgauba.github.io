@@ -237,13 +237,11 @@ function doSignOut(){
 }
 
 /* ---------- boot ---------- */
-/* Header = the chosen community's name from its config (falls back to the
-   strings brand); the link goes back to the platform entry. */
+/* Header = the chosen community's name from its config (jcCommunityName: last seen, else "Commons"
+   until it loads); the link goes back to the platform entry. */
 var communityCfg = null;
 function paint(){
-  var name = communityCfg
-    ? (jcLang() === "ar" ? (communityCfg.name_ar || communityCfg.name_en) : communityCfg.name_en)
-    : jcT("brand");
+  var name = jcCommunityName(communityCfg, jcCommunity());
   el("homeLink").textContent = name;
   el("langBtn").textContent = jcT("toggle_label");
   document.title = name;

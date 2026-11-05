@@ -23,6 +23,22 @@ function jcCommunity(){
   } catch(e){ return (q && /^[a-z][a-z0-9-]{1,30}$/.test(q)) ? q : "jubail"; }
 }
 
+/* Header name. The real one comes from the community's config; until it loads, the last name this
+   browser saw (pages used to flash "Jubail Commons" before e.g. "E2E Test Commons" — Zee 2026-11-05),
+   else the neutral platform name. `id`, when known, keeps another community's saved name out. */
+function jcCommunityName(cfg, id){
+  var n = cfg && cfg.name_en ? { id: id || null, en: cfg.name_en, ar: cfg.name_ar || "" } : null;
+  try {
+    if (n) localStorage.setItem("jc_name", JSON.stringify(n));
+    else {
+      n = JSON.parse(localStorage.getItem("jc_name") || "null");
+      if (n && (typeof n.en !== "string" || (id && n.id && n.id !== id))) n = null;
+    }
+  } catch(e){}
+  if (!n || !n.en) return jcT("platform_brand");
+  return jcLang() === "ar" && n.ar ? n.ar : n.en;
+}
+
 /* Captured BEFORE createClient: the client consumes and clears auth parameters
    (?code=…, #error_code=…) as soon as it is created, so a page reading the URL
    afterwards would never know it was opened from a reset link. */

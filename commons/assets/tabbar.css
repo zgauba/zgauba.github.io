@@ -1,12 +1,13 @@
 /* Bottom tab bar (assets/nav.js). Tokens only; logical properties only. */
-body.has-tabbar{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+body.has-tabbar{padding-bottom:calc(60px + env(safe-area-inset-bottom))}
 .tabbar{position:fixed; inset-inline:0; bottom:0; z-index:1000;
   display:flex; justify-content:space-around; gap:4px;
   background:var(--jc-surface); border-top:1px solid var(--jc-line);
-  padding:6px 8px calc(6px + env(safe-area-inset-bottom))}
-.tabbar a{flex:1; max-width:120px; display:flex; flex-direction:column; align-items:center; gap:3px;
-  padding:6px 4px; border-radius:10px; text-decoration:none; color:var(--jc-muted);
-  font-size:11.5px; font-weight:700}
+  padding:3px 8px calc(3px + env(safe-area-inset-bottom))}
+/* slimmer bar (Zee 2026-11-05): ~51px instead of ~68px, each tab still ≥ 44px to tap */
+.tabbar a{flex:1; max-width:120px; display:flex; flex-direction:column; align-items:center; gap:2px;
+  min-height:44px; padding:5px 4px 4px; border-radius:10px; text-decoration:none; color:var(--jc-muted);
+  font-size:11px; font-weight:700; line-height:1.2}
 .tabbar a .ico{color:var(--jc-muted)}
 .tabbar a[aria-current="page"]{color:var(--jc-ink); background:var(--jc-surface-2)}
 .tabbar a[aria-current="page"] .ico{color:var(--jc-accent)}

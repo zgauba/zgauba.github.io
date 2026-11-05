@@ -23,7 +23,7 @@ function jcTabBar(root, active, cfg){
   nav.innerHTML = items.map(function(it){
     return '<a href="' + esc(it.href) + '" data-tab="' + esc(it.key) + '"' +
       (it.key === active ? ' aria-current="page"' : '') + '>' +
-      jcIcon(it.icon, 22) + '<span>' + esc(it.label) + '</span></a>';
+      jcIcon(it.icon, 20) + '<span>' + esc(it.label) + '</span></a>';
   }).join("");
   jcBanner(cfg);
   var back = el("jcBackBtn");                 /* language switch: the back label follows (review) */

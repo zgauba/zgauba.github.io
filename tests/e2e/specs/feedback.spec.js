@@ -122,6 +122,7 @@ test("hub feedback link isn't duplicated by a language switch", async ({ page })
   await stubBackend(page, {});
   await signIn(page);
   await page.locator("#langBtn").click();
+  await expect(page.locator("#fbLink")).toHaveText("أفكار وملاحظات");          // redraw done before switching back (CI race)
   await page.locator("#langBtn").click();
   await expect(page.locator("#fbLink")).toHaveCount(1);
   await expect(page.locator("#fbLink")).toHaveText("Ideas & Feedback");

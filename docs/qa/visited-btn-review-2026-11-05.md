@@ -20,3 +20,22 @@ No markup / JS change.
 | R1 | Info | `:visited` can't be read via getComputedStyle (browser privacy), so a render test can't see the bug | Test asserts the loaded rules instead; **fails on the old CSS** (verified by reverting) |
 
 **Tests:** Playwright 189 passed ×2 (188 + 1 new).
+
+## Same PR — two more of Zee's reports (2026-11-05)
+
+**Name flash:** every page painted `jcT("brand")` = "Jubail Commons" until `jc_config_get` answered, then the
+member's community name ("E2E Test Commons"). Fix: `jcCommunityName(cfg, id)` in `assets/api.js` — saves the
+loaded name (`localStorage.jc_name` = {id, en, ar}; names only, already public via the anon config RPC); before
+the config loads it shows that saved name, else the neutral "Commons". Used by events, home, admin, account, hub.
+
+**Tab bar too tall:** ~68px → ~51px (bar padding 6→3px, tab padding 6→5/4px, icon 22→20, label 11px/1.2);
+each tab keeps `min-height:44px` (tap target). Page bottom padding 72→60px. The event map measures the bar,
+so it grows into the freed space (fit test unchanged and green). Screenshot checked.
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| R2 | Low | A member who switches to another community sees the previous community's name for a moment on member pages (their community isn't known until sign-in state loads) | **Accepted** — rare (one community per resident today); account page + hub pass the community id, so a saved name for a different community is ignored there |
+| R3 | Info | Saved name is rendered via `textContent` / `document.title` only — no HTML path | Checked |
+| R4 | Info | CI flake: feedback "language switch" test clicked the toggle twice without waiting for the redraw | **Fixed** — waits for the Arabic label between clicks |
+
+**Tests:** Playwright **191 passed ×2** (+ name-flash test — fails on the old code, verified by reverting; + tab bar ≤ 56px / tabs ≥ 44px).
