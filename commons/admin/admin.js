@@ -285,7 +285,7 @@ var VIEWS = {
       '<h1>' + esc(jcT(ed.ev ? "ed_edit" : "ed_new")) + '</h1>' +
       '<form class="panel" id="form" novalidate data-no-autoreload>' +
         '<p class="help">' + REQ + ' ' + esc(jcT("ed_req_note")) + '</p>' +
-        '<label>' + esc(jcT("ed_title_en")) + REQ + '<input id="title_en" type="text" maxlength="120" required aria-required="true" dir="ltr"></label>' +
+        '<label><span>' + esc(jcT("ed_title_en")) + REQ + '</span><input id="title_en" type="text" maxlength="120" required aria-required="true" dir="ltr"></label>' +
         '<label>' + esc(jcT("ed_title_ar")) + '<input id="title_ar" type="text" maxlength="120" dir="rtl"></label>' +
         '<label>' + esc(jcT("ed_slug")) + '<input id="slug" type="text" maxlength="41" autocapitalize="none" spellcheck="false"' +
           (draft ? '' : ' disabled') + '></label>' +
@@ -314,7 +314,7 @@ var VIEWS = {
         '</fieldset>' +
         '<fieldset id="venueBox" hidden><legend>' + esc(jcT("ed_venue")) + '</legend>' +
           '<p class="notice">' + esc(jcT("ed_jicm")) + '</p>' +
-          '<label>' + esc(jcT("ed_venue_name_en")) + REQ + '<input id="venue_name_en" type="text" maxlength="120" aria-required="true" dir="ltr"></label>' +
+          '<label><span>' + esc(jcT("ed_venue_name_en")) + REQ + '</span><input id="venue_name_en" type="text" maxlength="120" aria-required="true" dir="ltr"></label>' +
           '<label>' + esc(jcT("ed_venue_name_ar")) + '<input id="venue_name_ar" type="text" maxlength="120" dir="rtl"></label>' +
           '<p class="help" id="venuePinHelp">' + esc(jcT("ed_venue_pin_label")) + REQ + ' ' + esc(jcT("ed_venue_pin_help")) + '</p>' +
           pinMapHtml() +
