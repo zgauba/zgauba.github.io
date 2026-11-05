@@ -188,3 +188,25 @@ test("icons: every glyph fills its square box on the long side", async ({ page }
   }));
   for (const [k, pct] of gaps) expect(pct, k).toBeGreaterThanOrEqual(99);
 });
+
+// Zee 2026-11-05: …and the dots themselves are one size across icons (small dot = 8% of the side)
+test("icons: every glyph's small dot is the same share of the icon", async ({ page }) => {
+  await page.goto("./");
+  const dots = await page.evaluate(() => Object.keys(JC_ICONS).map((k) => {
+    const host = document.createElement("div");
+    host.innerHTML = jcIcon(k, 200);
+    document.body.appendChild(host);
+    const w = host.firstChild.getBoundingClientRect().width;
+    const d = Math.min(...[...host.querySelectorAll("circle")].map((c) => c.getBoundingClientRect().width));
+    host.remove();
+    return [k, d / w];
+  }));
+  for (const [k, share] of dots) expect(share, k).toBeCloseTo(0.16, 2);       // diameter = 2 × 8%
+});
+
+test("the footer credit opens in its own tab", async ({ page }) => {
+  await page.goto("./");
+  const a = page.locator("#credit a");
+  await expect(a).toHaveAttribute("target", "_blank");
+  await expect(a).toHaveAttribute("rel", "noopener");
+});

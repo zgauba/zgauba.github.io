@@ -117,7 +117,7 @@ function renderHub(){
 function render(){
   el("langBtn").textContent = jcT("toggle_label");
   el("credit").innerHTML = esc(jcT("credit_before")) +
-    '<a href="https://zgauba.github.io/">' + esc(jcT("credit_name")) + '</a>' + esc(jcT("credit_after"));
+    '<a href="https://zgauba.github.io/" target="_blank" rel="noopener">' + esc(jcT("credit_name")) + '</a>' + esc(jcT("credit_after"));   /* own tab: Commons stays open (Zee) */
   /* T5.3: members can send ideas / feedback (My Home → Account) */
   if (!el("fbLink") && mode === "hub") {
     var fb = document.createElement("div");
