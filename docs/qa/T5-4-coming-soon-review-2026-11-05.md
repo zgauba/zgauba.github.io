@@ -12,3 +12,8 @@
 | — | Checked | Open pre-check right for paused events too; event admins get Open / Pause, no announce; empty-map tab doesn't crash | No change |
 
 - Playwright after fixes: **186 passed ×2**.
+
+## After apply (2026-11-05)
+
+- Applied in one transaction with its history row; live suite **626 checks** green; advisors: no new categories
+  (the new function appears only in the expected "signed-in users can execute SECURITY DEFINER" list).
