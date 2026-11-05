@@ -5,6 +5,9 @@
 <!-- CSP: keep in sync across Commons pages (see account/index.html). This page also
      loads map tiles: Esri World Imagery + OpenStreetMap (keyless). -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://server.arcgisonline.com https://tile.openstreetmap.org; connect-src 'self' https://qrpxfssdeeuzmsmlbtbu.supabase.co wss://qrpxfssdeeuzmsmlbtbu.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'">
+<!-- already dark: browsers' auto-dark modes and Dark Reader must not repaint it (blank-button report, 2026-11-05) -->
+<meta name="color-scheme" content="dark">
+<meta name="darkreader-lock">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <!-- invite links carry a token in the URL: never leak it to another site -->
