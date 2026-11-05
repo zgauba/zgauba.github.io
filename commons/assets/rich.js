@@ -6,7 +6,9 @@
    Load after api.js (esc, jcT). */
 
 function jcRich(src){
-  var lines = esc(String(src == null ? "" : src)).split(/\r?\n/);
+  /* direction overrides (U+202A–E, U+2066–9) could visually reorder text: the server stores
+     descriptions as typed, so they're dropped here (security review) */
+  var lines = esc(String(src == null ? "" : src).replace(/[\u202A-\u202E\u2066-\u2069]/g, "")).split(/\r?\n/);
   var out = [], para = [], list = null;
   function inline(t){
     return t.replace(/\*\*(?=\S)(.+?)\*\*/g, "<strong>$1</strong>")
@@ -50,7 +52,9 @@ function jcRichToolbar(textarea, preview){
     btn.addEventListener("click", function(){ apply(b[0]); });
     bar.appendChild(btn);
   });
-  textarea.parentNode.insertBefore(bar, textarea);
+  /* outside the field's <label>: the buttons must not become part of the box's spoken name (review) */
+  var host = textarea.closest("label") || textarea;
+  host.parentNode.insertBefore(bar, host);
 
   function draw(){
     var html = jcRich(textarea.value);
@@ -63,30 +67,39 @@ function jcRichToolbar(textarea, preview){
     textarea.dispatchEvent(new Event("input", { bubbles: true }));
   }
   function wrap(mark){
-    var v = textarea.value, s = textarea.selectionStart, e = textarea.selectionEnd;
+    var v = textarea.value, s = textarea.selectionStart, e = textarea.selectionEnd, k = mark.length;
     var sel = v.slice(s, e);
-    if (sel.length > 2 * mark.length && sel.indexOf(mark) === 0 && sel.slice(-mark.length) === mark) {
-      textarea.value = v.slice(0, s) + sel.slice(mark.length, -mark.length) + v.slice(e);   /* toggle off */
-      return changed(s, e - 2 * mark.length);
+    if (sel.length > 2 * k && sel.indexOf(mark) === 0 && sel.slice(-k) === mark) {          /* markers selected: off */
+      textarea.value = v.slice(0, s) + sel.slice(k, -k) + v.slice(e);
+      return changed(s, e - 2 * k);
+    }
+    if (v.slice(s - k, s) === mark && v.slice(e, e + k) === mark) {                         /* just the word inside: off */
+      textarea.value = v.slice(0, s - k) + sel + v.slice(e + k);
+      return changed(s - k, e - k);
     }
     textarea.value = v.slice(0, s) + mark + sel + mark + v.slice(e);
-    changed(s + mark.length, e + mark.length);
+    changed(s + k, e + k);
   }
+  /* the lines the selection covers — a selection ending right after a line break doesn't take the next line;
+     blank lines are left alone (they separate paragraphs / lists) */
   function lines(fn){
     var v = textarea.value, s = textarea.selectionStart, e = textarea.selectionEnd;
-    var from = v.lastIndexOf("\n", s - 1) + 1;
+    if (e > s && v.charAt(e - 1) === "\n") e -= 1;
+    var from = s ? v.lastIndexOf("\n", s - 1) + 1 : 0;
     var to = v.indexOf("\n", e); if (to < 0) to = v.length;
-    var block = v.slice(from, to).split("\n").map(fn).join("\n");
+    var block = v.slice(from, to).split("\n").map(function(l){ return l.trim() ? fn(l) : l; }).join("\n");
     textarea.value = v.slice(0, from) + block + v.slice(to);
     changed(from, from + block.length);
   }
+  /* the same list markers the renderer reads: - * • and 1. 1) ١. */
+  var UL = /^\s*[-•*]\s+/, OL = /^\s*[0-9٠-٩]+[.)]\s+/;
   function apply(kind){
+    var n = 0;
     if (kind === "b") return wrap("**");
     if (kind === "u") return wrap("__");
-    if (kind === "h") return lines(function(l){ return /^##\s/.test(l) ? l.replace(/^##\s+/, "") : "## " + l; });
-    if (kind === "ul") return lines(function(l){ return /^-\s/.test(l) ? l.replace(/^-\s+/, "") : "- " + l.replace(/^\d+[.)]\s+/, ""); });
-    var n = 0;
-    if (kind === "ol") return lines(function(l){ return /^\d+[.)]\s/.test(l) ? l.replace(/^\d+[.)]\s+/, "") : (++n) + ". " + l.replace(/^-\s+/, ""); });
+    if (kind === "h") return lines(function(l){ return /^\s*##\s/.test(l) ? l.replace(/^\s*##\s+/, "") : "## " + l; });
+    if (kind === "ul") return lines(function(l){ return UL.test(l) ? l.replace(UL, "") : "- " + l.replace(OL, ""); });
+    if (kind === "ol") return lines(function(l){ return OL.test(l) ? l.replace(OL, "") : (++n) + ". " + l.replace(UL, ""); });
   }
   textarea.addEventListener("input", draw);
   draw();

@@ -716,3 +716,34 @@ test("description toolbar: buttons add the markers; the preview shows the format
   await expect(page.locator("#msg")).toHaveText("Saved.");
   expect(calls.filter((c) => c.name === "jc_admin_event_save").pop().args.p_fields.description_en).toBe("**Join us**\nbring gloves");
 });
+
+test("description toolbar edge cases: blank lines kept, whole-line selection, toggle off from inside, outside the label", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["community"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator("#newEv").click();
+  await page.locator('[data-tpl="blank"]').click();
+  await expect(page.locator("label .richbar")).toHaveCount(0);                  // not part of the box's name
+  const t = page.locator("#description_en");
+  const ol = page.locator(".richbar .rich-ol").first();
+  // two paragraphs selected → numbered 1, 2; the blank line between stays blank
+  await t.fill("first\n\nsecond");
+  await t.evaluate((n) => n.setSelectionRange(0, n.value.length));
+  await ol.click();
+  await expect(t).toHaveValue("1. first\n\n2. second");
+  // a whole line selected with its line break doesn't take the next line
+  await t.fill("one\ntwo");
+  await t.evaluate((n) => n.setSelectionRange(0, 4));                           // "one\n"
+  await page.locator(".richbar .rich-h").first().click();
+  await expect(t).toHaveValue("## one\ntwo");
+  // bold switched off by selecting just the word inside the markers
+  await t.fill("a **word** b");
+  await t.evaluate((n) => n.setSelectionRange(4, 8));                           // "word"
+  await page.locator(".richbar .rich-b").first().click();
+  await expect(t).toHaveValue("a word b");
+  // a • line is recognised as a bullet and switched off
+  await t.fill("• tea");
+  await page.locator(".richbar .rich-ul").first().click();
+  await expect(t).toHaveValue("tea");
+});
