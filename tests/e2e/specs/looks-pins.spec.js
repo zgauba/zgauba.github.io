@@ -25,9 +25,13 @@ test("pins: icon from the glyph question, ring from the ring question, ✕ done,
   await expect(pin(page, 2)).toHaveClass(/\bdone\b/);
   await expect(pin(page, 3)).toHaveText("?");                            // 3+ neighbor reports
   await expect(pin(page, 3)).toHaveClass(/\breported\b/);
-  await expect(pin(page, 4)).toHaveClass(/\bmine\b/);
+  // your own pin looks exactly like the others (Zee, 2026-11-05) — same size, no extra ring — and sits on top
   const box = async (i) => (await pin(page, i).boundingBox()).width;
-  expect(await box(4)).toBeGreaterThan(await box(0));
+  expect(await box(4)).toBe(await box(0));
+  const shadow = async (i) => pin(page, i).evaluate((n) => getComputedStyle(n).boxShadow);
+  expect(await shadow(4)).toBe(await shadow(0));
+  const z = async (i) => page.locator("#map .leaflet-marker-icon").nth(i).evaluate((n) => Number(n.style.zIndex));
+  expect(await z(4)).toBeGreaterThan(await z(0));
   // fill = availability: the three states really differ in colour
   const bg = async (i) => pin(page, i).evaluate((n) => getComputedStyle(n).backgroundColor);
   expect(new Set([await bg(0), await bg(2), await bg(3)]).size).toBe(3);
@@ -236,6 +240,22 @@ test("'both gates' draws a split ring: half front colour, half garden colour (pi
   expect((await sides(pin(page, 1)))[0]).toBe(r);                         // garden gate = the other half
   const dot = page.locator(".legend .chip").filter({ hasText: "Both gates" }).locator(".ringdot");
   expect(await sides(dot)).toEqual([t, r, b, l]);
+});
+
+test("map key is readable: 14px+ text in the main ink colour, gate / state dots 20px", async ({ page }) => {
+  await openEvent(page, pinEvent());
+  const chips = page.locator("#mapAfter .legend .chip");
+  const st = await chips.evaluateAll((ns) => ns.map((n) => {
+    const c = getComputedStyle(n), d = n.querySelector(".ringdot");
+    return { fs: parseFloat(c.fontSize), color: c.color, dot: d ? d.getBoundingClientRect().width : null };
+  }));
+  const ink = await page.evaluate(() => getComputedStyle(document.body).color);
+  for (const c of st) {
+    expect(c.fs).toBeGreaterThanOrEqual(14);
+    expect(c.color).toBe(ink);
+    if (c.dot !== null) expect(c.dot).toBeGreaterThanOrEqual(20);
+  }
+  expect(st.filter((c) => c.dot !== null)).toHaveLength(5);    // 3 gates + done + reported
 });
 
 test("map key: icons, gates and states each get a row; nothing hidden off the side", async ({ page }) => {

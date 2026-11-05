@@ -138,9 +138,9 @@ function ringClass(f, e){ return f ? ringOf(f.spec, e.payload && e.payload[f.key
 function pinIcon(e){
   var ev = data.event, st = pinState(e), gf = pinField(ev, "glyph");
   var inner = st === "done" ? "✕" : st === "reported" ? "?" : gf ? glyphHtml(gf.spec, e.payload && e.payload[gf.key]) : "";
-  var size = e.mine ? 40 : 32, ring = ringClass(pinField(ev, "ring"), e);
+  var size = 32, ring = ringClass(pinField(ev, "ring"), e);
   return L.divIcon({ className: "", iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2],
-    html: '<div class="pin' + (e.mine ? " mine" : "") + (st ? " " + st : "") + ring.cls + '"' + ring.style + '>' + inner + '</div>' });
+    html: '<div class="pin' + (st ? " " + st : "") + ring.cls + '"' + ring.style + '>' + inner + '</div>' });
 }
 /* the map key, one row each: icons · gates (rings) · tonight's states — wraps, never scrolls
    sideways (5a.1: the gate chips sat off-screen) */
@@ -583,12 +583,18 @@ function act(name, args, okText){
   }).finally(function(){ acting = false; });   /* finally: a throw while drawing never leaves it stuck (review R2) */
 }
 
-/* A neighbor's popup: "They're Out of Treats" → one report (asks first). */
-function reportHtml(e){
+/* A neighbor's popup: "They're Out of Treats" → one report (asks first). A text link in the same row
+   as Directions / Google Maps, same weight — a big button there got hit by mistake (Zee, 2026-11-05). */
+function canReport(e){
   var ev = data.event;
-  if (e.mine || !eventDay(ev) || !feat(ev, "crowd_reports") || e.live_state === "done") return "";
-  if (reported[e.id]) return '<div class="pinstate">' + esc(jcT("ev_reported_thanks")) + '</div>';
-  return '<button type="button" class="rep" data-report="' + esc(e.id) + '">' + esc(jcT(treatKey(ev, "ev_report"))) + '</button>';
+  return !e.mine && eventDay(ev) && feat(ev, "crowd_reports") && e.live_state !== "done";
+}
+function reportLink(e){
+  if (!canReport(e) || reported[e.id]) return "";
+  return '<button type="button" class="rep" data-report="' + esc(e.id) + '">' + esc(jcT(treatKey(data.event, "ev_report"))) + '</button>';
+}
+function reportedLine(e){
+  return canReport(e) && reported[e.id] ? '<div class="pinstate">' + esc(jcT("ev_reported_thanks")) + '</div>' : '';
 }
 function report(e, popup, btn){
   if (acting || !window.confirm(jcFmt(treatKey(data.event, "ev_report_confirm"), { h: jcHomeLabel(e) }))) return;
@@ -726,8 +732,8 @@ function popupHtml(e){
     (e.note ? '<div class="note">' + esc(e.note) + '</div>' : '') +
     (d !== null ? '<div class="meta">' + esc(jcFmt("ev_dist_from_you", { d: fmtDist(d) })) + '</div>' : '') +
     '<div class="popacts"><a target="_blank" rel="noopener" href="' + esc(directionsUrl(e)) + '">' + esc(jcT("ev_directions")) + '</a>' +
-    '<a target="_blank" rel="noopener" href="' + esc(pinUrl(e)) + '">' + esc(jcT("ev_view_pin")) + '</a></div>' +
-    reportHtml(e) + '</div>';
+    '<a target="_blank" rel="noopener" href="' + esc(pinUrl(e)) + '">' + esc(jcT("ev_view_pin")) + '</a>' +
+    reportLink(e) + '</div>' + reportedLine(e) + '</div>';
 }
 
 /* "More" only when the description is actually cut off; it stays open across tab switches */
