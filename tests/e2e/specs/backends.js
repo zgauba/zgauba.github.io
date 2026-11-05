@@ -27,6 +27,43 @@ const STATS = { homes: 124, done: 33, by_village: { "souk-al-jubail": 44, "ain-a
   by_type: { villa: 96, townhouse: 28 }, payload: { treats: { candy: 102, both: 19, non_food: 3 } },
   legacy: { source: "hand-recorded" } };
 
+// ── T5.2 PR 5a: pins + looks ──
+// Halloween-parity pins: icon question (teal = allergy-friendly), ring question, done / reported homes.
+const PIN_SCHEMA = { fields: {
+  treats: { type: "enum", values: ["candy", "non_food", "both"], required: true, pin: "glyph",
+    labels_en: { candy: "Candy only", non_food: "Non-food", both: "Both" },
+    glyphs: { candy: "🍬", non_food: "🎃", both: "🍬🎃" }, allergy_friendly: ["non_food"] },
+  entrance: { type: "enum", values: ["front", "garden", "both"], required: true, pin: "ring",
+    labels_en: { front: "Front gate", garden: "Garden gate", both: "Both gates" } },
+} };
+const home = (id, n, lat, payload, extra) => Object.assign({ id, mine: false, village: "seef-al-jubail", type: "villa",
+  building: null, number: n, lat, lng: 54.431, payload, note: null, live_state: "active", supply_level: null, reported_out: false }, extra || {});
+const PIN_ENTRIES = [
+  home("a", "1", 24.521, { treats: "candy", entrance: "front" }),
+  home("b", "2", 24.526, { treats: "non_food", entrance: "garden" }),
+  home("c", "3", 24.531, { treats: "both", entrance: "both" }, { live_state: "done" }),
+  home("d", "4", 24.536, { treats: "candy", entrance: "front" }, { reported_out: true }),
+  home("m", "12", 24.541, { treats: "candy", entrance: "garden" }, { mine: true }),
+];
+function pinEvent(extra, entries) {
+  return { event: Object.assign({}, LIVE, { kind: "homes", look: "halloween", payload_schema: PIN_SCHEMA,
+    features: { giant_switch: true, crowd_reports: true } }, extra || {}), mine: null, stats: null, entries: entries || PIN_ENTRIES };
+}
+// Haq al Laila: nut-free is the allergy-friendly choice, so 🧡 shows teal
+const HAQ_SCHEMA = { fields: {
+  treats: { type: "enum", values: ["mix", "nut_free", "both"], required: true, pin: "glyph",
+    labels_en: { mix: "Sweets & nuts", nut_free: "Nut-free", both: "Both" },
+    glyphs: { mix: "🥜", nut_free: "🧡", both: "🥜🧡" }, allergy_friendly: ["nut_free"] },
+  entrance: PIN_SCHEMA.fields.entrance,
+} };
+const HAQ_ENTRIES = PIN_ENTRIES.map((e, i) => Object.assign({}, e,
+  { payload: Object.assign({}, e.payload, { treats: ["mix", "nut_free", "both", "nut_free", "mix"][i] }) }));
+const PINS_ID = "88888888-8888-4888-8888-888888888888";
+const HAQ_ID = "99999999-9999-4999-8999-999999999999";
+const PINS_EVENT = pinEvent({ id: PINS_ID, slug: "halloween-2027", title_en: "Halloween 2027" });
+const HAQ_EVENT = pinEvent({ id: HAQ_ID, slug: "haq-al-laila-2027", title_en: "Haq al Laila", title_ar: "حق الليلة",
+  look: "haq_al_laila", payload_schema: HAQ_SCHEMA }, HAQ_ENTRIES);
+
 // A server that keeps the home's entry like jc_event_signup does: payload + note REPLACED wholesale.
 function eventsBackend(opts = {}) {
   const st = { mine: opts.mine || null, signupsOpen: opts.signupsOpen !== false };
@@ -47,7 +84,8 @@ function eventsBackend(opts = {}) {
       ]),
       jc_event_get: (a) => a.p_event === PAST_ID
         ? ok({ event: PAST, mine: null, stats: STATS, entries: null })
-        : a.p_event === LIVE_ID ? ok(get()) : raise("NOT_FOUND"),
+        : a.p_event === LIVE_ID ? ok(get())
+        : a.p_event === PINS_ID ? ok(PINS_EVENT) : a.p_event === HAQ_ID ? ok(HAQ_EVENT) : raise("NOT_FOUND"),
       jc_event_signup: (a) => {
         if (!st.signupsOpen) return raise("SIGNUPS_CLOSED");
         const p = Object.assign({}, a.p_payload); const note = p.note || null; delete p.note;
@@ -264,4 +302,5 @@ async function signIn(page) {
 }
 
 module.exports = { eventsBackend, adminBackend, signIn, LIVE_ID, PAST_ID, SCHEMA, LIVE, PAST, ENTRIES, STATS,
+  PIN_SCHEMA, home, pinEvent, PINS_ID, HAQ_ID,
   ADMIN_DRAFT_ID, ADMIN_LIVE_ID, ADMIN_PAST_ID, ADMIN_MARKET_ID, ADMIN_MARKET };

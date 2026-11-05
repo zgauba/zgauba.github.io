@@ -71,7 +71,7 @@ test("detail: map pins only pinned homes; list groups by village, search, unpinn
   await signIn(page);
   await page.goto("events/?id=" + LIVE_ID);
   await expect(page.locator("h1")).toHaveText("National Day Gathering");
-  await expect(page.locator("#map path.leaflet-interactive")).toHaveCount(1);   // e2 has no pin
+  await expect(page.locator("#map .leaflet-marker-icon")).toHaveCount(1);   // e2 has no pin
   await page.locator("#tab-list").click();
   await expect(page.locator("h2.group")).toHaveText(["Ain Al Maha · 1", "Seef Al Jubail · 1"]);  // alphabetical, with counts
   await expect(page.locator(".entries li").filter({ hasText: "Townhouse 40" })).toContainText("Not on the map yet");
@@ -178,7 +178,7 @@ test("hostile note / house number rendered as text (list + map tooltip)", async 
     await stubBackend(page, { rpc: eb.rpc });
     await signIn(page);
     await page.goto("events/?id=" + LIVE_ID);
-    await page.locator("#map path.leaflet-interactive").nth(1).click();
+    await page.locator("#map .leaflet-marker-icon").nth(1).click();
     await expect(page.locator(".leaflet-popup-content")).toContainText("<svg");
     await expect(page.locator(".leaflet-popup-content")).toContainText("<img");
     await page.locator("#tab-list").click();
@@ -231,7 +231,7 @@ test("tap a pin: answers, note, walking directions + view pin; distance after Fi
   await page.goto("events/?id=" + LIVE_ID);
   await page.locator("#locateBtn").click();
   await page.waitForTimeout(300);
-  await page.locator("#map path.leaflet-interactive").first().click({ force: true });
+  await page.locator("#map .leaflet-marker-icon").first().click({ force: true });
   const pop = page.locator(".leaflet-popup-content");
   await expect(pop).toContainText("Villa 3");
   await expect(pop).toContainText("Candy · Door");
@@ -375,7 +375,7 @@ test("non-numeric coordinates are treated as unpinned (no marker, no crash)", as
     page.on("pageerror", (e) => errors.push(String(e)));
     await signIn(page);
     await page.goto("events/?id=" + LIVE_ID);
-    await expect(page.locator("#map path.leaflet-interactive")).toHaveCount(1);   // only e1
+    await expect(page.locator("#map .leaflet-marker-icon")).toHaveCount(1);   // only e1
     await page.locator("#tab-list").click();
     await expect(page.locator(".entries li").filter({ hasText: "Villa 77" })).toContainText("Not on the map yet");
     await expect(page.locator(".entries li").filter({ hasText: "Villa 77" }).locator(".popacts")).toHaveCount(0);

@@ -63,6 +63,20 @@ Plan change (PR 3 splits; two new PRs):
 | 4b | **One-place resident screens** — venue on the map, "you're coming" / your spot number, "full" | No |
 | 6 | Reports | No |
 
+## PR 5 split (Zee, 2026-11-05)
+
+| # | PR | New RPC calls |
+|---|---|---|
+| 5a | **Looks + pins** — fill = availability (look colour · dark with red `?` = reported out · grey ✕ = done), ring = the "ring" question, icon = the "glyph" question, teal icon = allergy-friendly (per-choice builder tick, `allergy_friendly` in the schema), map key, look colours + marks + Haq al Laila tagline, list cards wear their look | None |
+| 5b | **Event day** — giant switch, supply, crowd reports + "we're not out", refresh every 60 s, measure `jc_event_get` size | `jc_entry_live_set`, `jc_entry_report`, `jc_entry_reports_clear` |
+
+Decisions: fill = availability in every look (the Haq al Laila concept's "fill = treats" dropped); nut-free =
+🧡 tinted teal (🍬 doesn't tint); **event-day window = 2 h before the start until the end** — controls +
+refresh only then, no refresh for undated events; **supply wording** 3 Plenty · 2 Some left · 1 Running low ·
+0 Almost out (separate from Done); header art = emoji mark + colours until the palette review. Egress
+estimate to verify in 5b: ~50 KB × 200 phones × 60/h ≈ 600 MB/h uncompressed at peak — slimmer RPC
+(DB PR) if too heavy. Server-side check for `allergy_friendly` → next events DB PR (5a review S2).
+
 ## Premortem (§0.5)
 
 | # | Exposure | Mitigation |
