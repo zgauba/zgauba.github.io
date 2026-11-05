@@ -41,11 +41,11 @@ test("signed out: platform entry with Sign in + Join, no hub, visit counted, no 
   await expect(page.locator("#credit a")).toHaveAttribute("href", "https://zgauba.github.io/");
   const card = page.locator(".community[data-community=jubail]");
   await expect(card.locator(".names b")).toHaveText("Jubail Commons");
-  await expect(card.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "account/?community=jubail");
+  await expect(card.getByRole("link", { name: "Sign In" })).toHaveAttribute("href", "account/?community=jubail");
   await expect(card.getByRole("link", { name: "Join" })).toHaveAttribute("href", "account/?community=jubail&view=join");
   await expect(page.locator("#hub")).toBeHidden();
   await expect(page.locator("#authLink")).toBeHidden();
-  await expect(page.getByRole("link", { name: "Sign in" })).toHaveCount(1);
+  await expect(page.getByRole("link", { name: "Sign In" })).toHaveCount(1);
   await expect(page.locator("#errbar")).toBeHidden();
   await expect.poll(() => calls.filter((c) => c.name === "jc_hit").length).toBe(1);
   expect(calls.find((c) => c.name === "jc_hit").args).toEqual({ p_community: "jubail", p_page: "landing" });
@@ -71,7 +71,7 @@ test("signed-in member: the hub (broadcast + enabled module), not the picker", a
   await signIn(page);
   await expect(page.locator("#brand")).toHaveText("Jubail Commons");
   await expect(page.locator("#bcast")).toHaveText("⚠️ Road closed at Souk");
-  await expect(page.locator("#cards a.go[href='events/']")).toHaveText("See events");
+  await expect(page.locator("#cards a.go[href='events/']")).toHaveText("See Events");
   await expect(page.locator("#cards .card svg.ico")).toHaveCount(4);  // + The Community
   await expect(page.locator("#picker")).toBeHidden();
   await expect(page.locator("#authLink")).toBeHidden();  // the My Home tab is the account page

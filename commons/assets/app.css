@@ -68,3 +68,11 @@ input:focus-visible, button:focus-visible, a:focus-visible{outline:2px solid var
 .pinmap .locate{position:absolute; bottom:40px;  /* clear of the map credits line */
   left:50%; transform:translateX(-50%); z-index:600;
   background:var(--jc-accent); color:var(--jc-accent-ink); border-color:var(--jc-accent); padding:9px 18px; font-size:14px}
+/* formatted descriptions (rich.js) — event page + editor preview */
+.rich p, .richpreview p{margin:0 0 6px}
+.rich h3, .richpreview h3{font-size:16px; margin:8px 0 4px}
+.rich ul, .rich ol, .richpreview ul, .richpreview ol{margin:0 0 6px; padding-inline-start:22px}
+.rich > :last-child, .richpreview > :last-child{margin-bottom:0}
+.richbar{display:flex; gap:6px; margin:2px 0 -2px}
+.richbar .rich-b{font-weight:900} .richbar .rich-u{text-decoration:underline}
+.richpreview{border:1px dashed var(--jc-line); border-radius:10px; padding:10px 12px; font-size:14px; overflow-wrap:anywhere}

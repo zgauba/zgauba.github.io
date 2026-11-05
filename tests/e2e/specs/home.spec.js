@@ -36,7 +36,7 @@ test("new member: landing sends them to claim; claim → pin (no skip) → My Ho
   const hb = homeBackend(MEMBER_NO_HOME);
   const { calls } = await stubBackend(page, { rpc: hb.rpc });
   await signIn(page, /\/commons\/home\/$/);
-  await expect(page.locator("h1")).toHaveText("Your home");
+  await expect(page.locator("h1")).toHaveText("Your Home");
   // upcoming villages can't be chosen
   await expect(page.locator('[data-village="bada-al-jubail"]')).toBeDisabled();
   await expect(page.locator('[data-village="bada-al-jubail"] small')).toHaveText("Coming Late 2027");
@@ -45,7 +45,7 @@ test("new member: landing sends them to claim; claim → pin (no skip) → My Ho
   await expect(page.locator("#bldWrap")).toBeHidden();
   await page.locator("#number").fill("12");
   await page.locator("#go").click();
-  await expect(page.locator("h1")).toHaveText("Pin your home");
+  await expect(page.locator("h1")).toHaveText("Pin Your Home");
   expect(calls.find((c) => c.name === "jc_home_claim").args).toEqual(
     { p_village: "ain-al-maha", p_type: "villa", p_building: null, p_number: "12" });
   // the pin is required: no skip, no cancel on a first pin
@@ -198,7 +198,7 @@ test("leave this home (confirmed) → back to claim", async ({ page }) => {
   await page.goto("home/?tab=account");
   page.once("dialog", (d) => d.accept());
   await page.locator("#leave").click();
-  await expect(page.locator("h1")).toHaveText("Your home");
+  await expect(page.locator("h1")).toHaveText("Your Home");
 });
 
 test("delete account needs DELETE typed; then signs out to the public landing", async ({ page }) => {
@@ -278,14 +278,14 @@ test("My Home header: the mark + community name, like the hub", async ({ page })
   expect(await page.locator(".topbar a.home").evaluate((n) => getComputedStyle(n).fontSize)).toBe("22px");
 });
 
-test("invite: 'Not now' declines without calling the server", async ({ page }) => {
+test("invite: 'Not Now' declines without calling the server", async ({ page }) => {
   const hb = homeBackend(MEMBER_NO_HOME);
   hb.rpc.jc_invite_accept = () => ok({ status: "joined", me: MEMBER });
   const { calls } = await stubBackend(page, { rpc: hb.rpc });
   await signIn(page, /\/commons\/home\/$/);
   await page.goto("home/?invite=TOKEN_abcdefghijklmnop");
   await page.locator("#inviteNo").click();
-  await expect(page.locator("h1")).toHaveText("Your home");
+  await expect(page.locator("h1")).toHaveText("Your Home");
   expect(calls.some((c) => c.name === "jc_invite_accept")).toBe(false);
 });
 
@@ -393,7 +393,7 @@ test("a home without a pin always opens on the pin screen (no skip)", async ({ p
   await stubBackend(page, { rpc: hb.rpc });
   await signIn(page);
   await page.goto("home/");
-  await expect(page.locator("h1")).toHaveText("Pin your home");
+  await expect(page.locator("h1")).toHaveText("Pin Your Home");
   await expect(page.locator("#skipPin, #cancelPin")).toHaveCount(0);
 });
 

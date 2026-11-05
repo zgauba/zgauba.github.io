@@ -45,7 +45,7 @@ test("join (wrong code, then right) → member → sign out/in → delete accoun
     await page.locator('[data-type="villa"]').click();
     await page.locator("#number").fill(NUMBER);
     await page.locator("#go").click();
-    await expect(page.locator("h1")).toHaveText("Pin your home", { timeout: 15000 });
+    await expect(page.locator("h1")).toHaveText("Pin Your Home", { timeout: 15000 });
     await page.locator("#skipPin").click();
     await expect(page.locator(".homehead b")).toHaveText("Villa " + NUMBER);
     await expect(page.locator(".members li")).toHaveCount(1);

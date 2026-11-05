@@ -157,7 +157,7 @@ test("recovery link (same browser) → new password → saved → in", async ({ 
   await requestReset(page);
   expect(calls.find((c) => c.name === "recover").args.code_challenge).toBeTruthy();
   await page.goto("account/?code=reset-code-1");
-  await expect(page.locator("h1")).toHaveText("Choose a new password");
+  await expect(page.locator("h1")).toHaveText("Choose a New Password");
   const exch = calls.find((c) => c.name === "token:pkce");
   expect(exch.args.auth_code).toBe("reset-code-1");
   expect(exch.args.code_verifier).toBeTruthy();
@@ -170,7 +170,7 @@ test("recovery link (same browser) → new password → saved → in", async ({ 
 test("reset code opened in a browser that didn't request it → refused, explained", async ({ page }) => {
   const { calls } = await stubBackend(page);
   await page.goto("account/?code=someone-elses-code");
-  await expect(page.locator("h1")).toHaveText("Reset your password");
+  await expect(page.locator("h1")).toHaveText("Reset Your Password");
   await expect(page.locator("#msg")).toHaveText(/opened in a different browser/);
   expect(calls.some((c) => c.name === "token:pkce")).toBe(false);
 });
@@ -204,7 +204,7 @@ test("reusing the current password says so (not 'too short')", async ({ page }) 
 test("expired reset link → forgot view with an explanation", async ({ page }) => {
   await stubBackend(page);
   await page.goto("account/?error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired");
-  await expect(page.locator("h1")).toHaveText("Reset your password");
+  await expect(page.locator("h1")).toHaveText("Reset Your Password");
   await expect(page.locator("#msg")).toHaveText(/expired/);
 });
 
@@ -228,7 +228,7 @@ test("sign out returns to sign-in", async ({ page }) => {
   await expect(page).toHaveURL(/\/commons\/$/);  // let the post-sign-in redirect land first
   await page.goto("account/");
   await page.locator("#signOut").click();
-  await expect(page.locator("h1")).toHaveText("Sign in");
+  await expect(page.locator("h1")).toHaveText("Sign In");
   expect(calls.some((c) => c.name === "logout")).toBe(true);
 });
 

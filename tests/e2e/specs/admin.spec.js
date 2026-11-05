@@ -15,7 +15,7 @@ test("lock: a wrong code says so; an events code opens the list (drafts included
   const { calls } = await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await page.goto("admin/");
-  await expect(page.locator("h1")).toHaveText("Organizer tools");
+  await expect(page.locator("h1")).toHaveText("Organizer Tools");
   await unlock(page, "nope");
   await expect(page.locator("#msg")).toHaveText("That code didn't work.");
   await unlock(page, "EVENTS-CODE-1");
@@ -240,7 +240,7 @@ test("write questions from scratch: pick-one with icons, yes/no, short answer �
   const { calls } = await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await openNewDraft(page, "Garage Sale");
-  await expect(page.locator("fieldset").filter({ hasText: "Sign-up questions" }))
+  await expect(page.locator("fieldset").filter({ hasText: "Sign-Up Questions" }))
     .toContainText("Avoid names, phone numbers or children's ages");
   let q = await addQ(page);
   await q.locator('[data-q-label="en"]').fill("What are you selling?");
@@ -460,7 +460,7 @@ test("grant link: asks first (nothing on page load), says what the role sees, ac
   const { calls } = await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await page.goto("admin/?eventadmin=" + GRANT);
-  await expect(page.locator("h1")).toHaveText("Help run an event");
+  await expect(page.locator("h1")).toHaveText("Help Run an Event");
   await expect(page.locator(".acclist li")).toHaveCount(3);
   await expect(page.locator(".acclist")).toContainText("house number, map pin and answers");
   await expect(page.locator(".acclist")).toContainText("5 days after the event closes");
@@ -494,10 +494,10 @@ test("grant link while signed out: sign in, then straight back to the question",
   await page.locator("#password").fill("correct-horse");
   await page.locator("#go").click();
   await expect(page).toHaveURL(new RegExp("/commons/admin/"));
-  await expect(page.locator("h1")).toHaveText("Help run an event");
+  await expect(page.locator("h1")).toHaveText("Help Run an Event");
 });
 
-test("already in: 'Enter another code' opens the code box with Back; a community code adds Codes", async ({ page }) => {
+test("already in: 'Enter Another Code' opens the code box with Back; a community code adds Codes", async ({ page }) => {
   const ab = adminBackend({ adminEvents: [LIVE_ID] });
   await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
@@ -594,20 +594,50 @@ test("Market template: one place + JICM notice + spots; place pinned from pasted
   await expect(page.locator('li[data-event="kids-market"] small')).toContainText("0 households");
 });
 
-test("a one-place draft without its place can't publish (NO_VENUE explained)", async ({ page }) => {
+test("required fields: * shown; Save without the place asks first; draft saves with a note; Publish says what's missing", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["community"] });
+  const { calls } = await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator("#newEv").click();
+  await page.locator('[data-tpl="gathering"]').click();
+  await expect(page.locator('label:has(#title_en) .req')).toHaveText("*");
+  await expect(page.locator('label:has(#venue_name_en) .req')).toHaveText("*");
+  await expect(page.locator("#venuePinHelp .req")).toHaveText("*");
+  await page.locator("#title_en").fill("Iftar");
+  // 1. Save → asked; Cancel keeps the editor open, fields highlighted, nothing sent
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.dismiss(); });
+  await page.locator("#save").click();
+  expect(asked).toContain("Still missing: Place name (English), Pin on the map.");
+  await expect(page.locator("#msg")).toHaveText("Fill in the highlighted fields — or save as a draft to finish later.");
+  await expect(page.locator("#venue_name_en")).toHaveClass(/missing/);
+  await expect(page.locator("#venuePinHelp")).toHaveClass(/missing/);
+  expect(calls.filter((c) => c.name === "jc_admin_event_save")).toHaveLength(0);
+  // 2. Save → OK: a draft, and the list of what publishing still needs
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#save").click();
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft. Before you can publish, add: Place name (English), Pin on the map.");
+  await expect(page.locator('li[data-event="iftar"] small')).toContainText("no place yet");
+  // 3. Publish from the list: explained here, the server isn't asked
+  await page.locator('li[data-event="iftar"] [data-act="publish"]').click();
+  await expect(page.locator("#msg")).toHaveText("Before you can publish, add: Place name (English), Pin on the map. Tap Edit to finish it.");
+  expect(calls.filter((c) => c.name === "jc_admin_event_publish")).toHaveLength(0);
+});
+
+test("required fields: a homes event with a title saves without any prompt", async ({ page }) => {
   const ab = adminBackend({ scopes: ["community"] });
   await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await page.goto("admin/");
   await page.locator("#newEv").click();
-  await page.locator('[data-tpl="gathering"]').click();
-  await expect(page.locator("#spots")).not.toBeChecked();
-  await page.locator("#title_en").fill("Iftar");
+  await page.locator('[data-tpl="yard_sale"]').click();
   await page.locator("#save").click();
-  await expect(page.locator('li[data-event="iftar"] small')).toContainText("no place yet");
-  page.once("dialog", (d) => d.accept());
-  await page.locator('li[data-event="iftar"] [data-act="publish"]').click();
-  await expect(page.locator("#msg")).toHaveText("A one-place event needs its place: add the name and pin it on the map.");
+  await expect(page.locator("#msg")).toHaveText("Add a title.");
+  await expect(page.locator("#title_en")).toHaveClass(/missing/);
+  await page.locator("#title_en").fill("Street sale");
+  await page.locator("#save").click();                                            // no dialog expected
+  await expect(page.locator("#msg")).toHaveText("Saved.");
 });
 
 test("editing: the kind is locked once homes signed up; an untouched venue sends nothing; one change sends one field", async ({ page }) => {
@@ -660,4 +690,60 @@ test("venue editor: Enter in the coordinates box moves the map and never saves; 
   await expect(page.locator("#msg")).toHaveText("Saved.");
   expect(lastCall(calls, "jc_admin_event_save").args.p_fields).toEqual({
     kind: "venue", venue_name_en: "Seef Park", venue_lat: 24.5301, venue_lng: 54.4312 });
+});
+
+test("description toolbar: buttons add the markers; the preview shows the formatting; text is stored plain", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["community"] });
+  const { calls } = await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator("#newEv").click();
+  await page.locator('[data-tpl="blank"]').click();
+  await page.locator("#title_en").fill("Clean-up day");
+  const t = page.locator("#description_en");
+  await t.fill("Join us\nbring gloves");
+  await t.evaluate((n) => n.setSelectionRange(0, 7));                            // "Join us"
+  await page.locator('label:has(#description_en) ~ .richbar .rich-b, .richbar .rich-b').first().click();
+  await expect(t).toHaveValue("**Join us**\nbring gloves");
+  await t.evaluate((n) => n.setSelectionRange(12, 24));                          // line 2
+  await page.locator(".richbar .rich-ul").first().click();
+  await expect(t).toHaveValue("**Join us**\n- bring gloves");
+  await expect(page.locator("#prev_en strong")).toHaveText("Join us");
+  await expect(page.locator("#prev_en ul li")).toHaveText(["bring gloves"]);
+  await page.locator(".richbar .rich-ul").first().click();                       // toggles off
+  await expect(t).toHaveValue("**Join us**\nbring gloves");
+  await page.locator("#save").click();
+  await expect(page.locator("#msg")).toHaveText("Saved.");
+  expect(calls.filter((c) => c.name === "jc_admin_event_save").pop().args.p_fields.description_en).toBe("**Join us**\nbring gloves");
+});
+
+test("description toolbar edge cases: blank lines kept, whole-line selection, toggle off from inside, outside the label", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["community"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator("#newEv").click();
+  await page.locator('[data-tpl="blank"]').click();
+  await expect(page.locator("label .richbar")).toHaveCount(0);                  // not part of the box's name
+  const t = page.locator("#description_en");
+  const ol = page.locator(".richbar .rich-ol").first();
+  // two paragraphs selected → numbered 1, 2; the blank line between stays blank
+  await t.fill("first\n\nsecond");
+  await t.evaluate((n) => n.setSelectionRange(0, n.value.length));
+  await ol.click();
+  await expect(t).toHaveValue("1. first\n\n2. second");
+  // a whole line selected with its line break doesn't take the next line
+  await t.fill("one\ntwo");
+  await t.evaluate((n) => n.setSelectionRange(0, 4));                           // "one\n"
+  await page.locator(".richbar .rich-h").first().click();
+  await expect(t).toHaveValue("## one\ntwo");
+  // bold switched off by selecting just the word inside the markers
+  await t.fill("a **word** b");
+  await t.evaluate((n) => n.setSelectionRange(4, 8));                           // "word"
+  await page.locator(".richbar .rich-b").first().click();
+  await expect(t).toHaveValue("a word b");
+  // a • line is recognised as a bullet and switched off
+  await t.fill("• tea");
+  await page.locator(".richbar .rich-ul").first().click();
+  await expect(t).toHaveValue("tea");
 });
