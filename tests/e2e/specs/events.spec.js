@@ -729,3 +729,29 @@ test("coming soon: a closed event never shows the badge", async ({ page }) => {
   await page.goto("events/");
   await expect(page.locator(".soon")).toHaveCount(0);
 });
+
+// Zee 2026-11-05: Sign Up label invisible on desktop — `a:visited` (more specific than .btn) painted the
+// label accent-on-accent once the link had been opened. Browsers hide :visited from getComputedStyle,
+// so check the loaded rules: every :visited color rule must be matched by a.btn:visited / a.btn.ghost:visited.
+test("link-buttons keep their label color after the link is visited", async ({ page }) => {
+  const eb = eventsBackend();
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/");
+  await expect(page.locator(".evacts a.btn").first()).toBeVisible();
+  const visited = await page.evaluate(() => {
+    const out = {};
+    for (const sh of document.styleSheets) {
+      let rules; try { rules = sh.cssRules; } catch (e) { continue; }
+      for (const r of rules) {
+        if (!r.selectorText || !r.style.color) continue;
+        r.selectorText.split(",").map((s) => s.trim()).filter((s) => s.includes(":visited"))
+          .forEach((s) => { out[s] = r.style.color.trim(); });
+      }
+    }
+    return out;
+  });
+  expect(visited["a:visited"]).toBeTruthy();                       // the rule that caused it is still there
+  expect(visited["a.btn:visited"]).toBe("var(--jc-accent-ink)");
+  expect(visited["a.btn.ghost:visited"]).toBe("var(--jc-ink)");
+});
