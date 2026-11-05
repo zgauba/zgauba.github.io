@@ -106,6 +106,9 @@ begin
   perform pg_temp.s12_as(c1);
   v := pg_temp.s12_ev(jc_admin_event_announce(ev_h), 'lights');                 -- open, nobody in
   if (v ->> 'signups_open')::boolean or not (v ->> 'coming_soon')::boolean then raise exception 'FAIL C11a back to soon: %', v; end if;
+  v_err := pg_temp.s12_err(format('select jc_admin_event_announce(%L)', ev_h));   -- already coming soon
+  if v_err is distinct from 'BAD_STATE' then raise exception 'FAIL C11d twice: %', v_err; end if;
+  k := k + 1;
   v_err := pg_temp.s12_err(format('select jc_admin_event_announce(%L)', ev_v));   -- r1 is in (C05)
   if v_err is distinct from 'HAS_SIGNUPS' then raise exception 'FAIL C11b with a sign-up: %', v_err; end if;
   perform pg_temp.s12_as(r1); perform jc_entry_withdraw(ev_v);                  -- withdrawn doesn't count

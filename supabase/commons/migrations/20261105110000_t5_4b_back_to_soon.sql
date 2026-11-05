@@ -12,11 +12,12 @@ CREATE OR REPLACE FUNCTION public.jc_admin_event_announce(p_event uuid)
  SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
 AS $function$
-declare v_comm text; v_status text;
+declare v_comm text; v_status text; v_open boolean; v_soon boolean;
 begin
   v_comm := jc_assert_admin('events');                 -- organizer only, as jc_admin_event_publish
-  select status into v_status from jc_events where id = p_event and community_id = v_comm for update;
-  if v_status is null or v_status not in ('draft', 'live') then raise exception 'BAD_STATE'; end if;
+  select status, signups_open, coming_soon into v_status, v_open, v_soon
+    from jc_events where id = p_event and community_id = v_comm for update;
+  if v_status is null or v_status not in ('draft', 'live') or v_soon then raise exception 'BAD_STATE'; end if;   -- already coming soon: nothing to do (review)
   -- T5.4b: a published event goes back only while nobody is signed up (the lock above holds
   -- sign-ups off: jc_event_signup reads the event row FOR SHARE)
   if v_status = 'live' and exists (select 1 from jc_event_entries where event_id = p_event and status = 'in') then
@@ -24,7 +25,8 @@ begin
   end if;
   update jc_events set status = 'live', signups_open = false, coming_soon = true
    where id = p_event and community_id = v_comm;
-  perform jc_admin_log_add(v_comm, 'event_announce', jsonb_build_object('event_id', p_event, 'from', v_status));
+  perform jc_admin_log_add(v_comm, 'event_announce', jsonb_build_object('event_id', p_event, 'from', v_status,
+    'was_open', v_status = 'live' and v_open));                                    -- open vs paused (review)
   return jc_admin_events_list();
 end;
 $function$;

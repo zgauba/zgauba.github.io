@@ -17,3 +17,24 @@
 
 - Applied in one transaction with its history row; live suite **626 checks** green; advisors: no new categories
   (the new function appears only in the expected "signed-in users can execute SECURITY DEFINER" list).
+
+## T5.4b — back to coming soon (Zee, 2026-11-05) — review
+
+**Ask:** a published event should be able to go back to "coming soon" — decided: only while nobody has
+signed up. Migration `20261105110000_t5_4b_back_to_soon.sql` replaces `jc_admin_event_announce` (same
+signature): draft → coming soon as before; live (open or paused) with no "in" sign-ups → coming soon;
+anyone in → `HAS_SIGNUPS`; archived / already coming soon → `BAD_STATE`. App: "Move to Coming Soon" on
+published events with no sign-ups (organizers), its own confirm, `err_HAS_SIGNUPS`.
+
+**Reviewer:** database-reviewer (combined database + security pass, gate) — **safe to apply; no High / Medium.**
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| B0 | — | Locking: announce FOR UPDATE vs sign-up / withdraw FOR SHARE, close / open FOR UPDATE | **Correct in every order** (READ COMMITTED); community-scoped select + update |
+| B1 | Low | Re-announcing an already-coming-soon event logged a no-op | **Fixed** — `BAD_STATE`; test C11d |
+| B2 | Low | Log couldn't tell open from paused | **Fixed** — `was_open` in the log |
+| B3 | Low | Withdrawn entries keep payload / event pin — could they show while coming soon? | **Checked:** resident reads count / list only `status = 'in'`; re-sign-up resets pin, spot, state |
+| B4 | Low | A resident mid-sign-up gets SIGNUPS_CLOSED | **Checked:** shown as the existing friendly "sign-ups are closed" message |
+
+- SQL dry run: **631 checks** (626 + 5: C07a now `HAS_SIGNUPS`, C10b, C11a–d); live unchanged until apply.
+- Playwright **187 ×2** (+1: offered with no sign-ups, hidden with sign-ups, refused if someone joins meanwhile).
