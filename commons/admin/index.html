@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <!-- CSP: keep in sync across Commons pages (see account/index.html). Map tiles (Esri, OSM) for the venue pin (T5.2 2c); referrer stays off except OSM's bare origin. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://server.arcgisonline.com https://tile.openstreetmap.org; connect-src 'self' https://qrpxfssdeeuzmsmlbtbu.supabase.co wss://qrpxfssdeeuzmsmlbtbu.supabase.co; base-uri 'self'; form-action 'self'; object-src 'none'">
+<!-- already dark: browsers' auto-dark modes and Dark Reader must not repaint it (blank-button report, 2026-11-05) -->
+<meta name="color-scheme" content="dark">
+<meta name="darkreader-lock">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <!-- a rotated code is shown on this page: never leak the URL either -->

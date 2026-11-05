@@ -17,6 +17,7 @@
    The config loader DROPS these keys from override rows; keep it that way. */
 
 :root{
+  color-scheme:dark;          /* the site is already dark: no browser auto-darkening (2026-11-05) */
   /* surfaces — warm dark (product default) */
   --jc-bg:#141210;
   --jc-surface:#1f1c17;
@@ -44,6 +45,7 @@
 
 /* Light — print, docs, light surfaces (warm sand) */
 [data-theme="light"]{
+  color-scheme:light;
   --jc-bg:#fbf7ef;
   --jc-surface:#ffffff;
   --jc-surface-2:#f4eee2;

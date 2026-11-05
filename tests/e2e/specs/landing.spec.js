@@ -210,3 +210,13 @@ test("the footer credit opens in its own tab", async ({ page }) => {
   await expect(a).toHaveAttribute("target", "_blank");
   await expect(a).toHaveAttribute("rel", "noopener");
 });
+
+// 2026-11-05: a browser's auto-dark / Dark Reader repainted the pages (a green button lost its label)
+test("every Commons page declares itself dark, so browsers don't repaint it", async ({ page }) => {
+  for (const path of ["./", "account/", "home/", "events/", "admin/"]) {
+    await page.goto(path);
+    await expect(page.locator('meta[name="color-scheme"]')).toHaveAttribute("content", "dark");
+    await expect(page.locator('meta[name="darkreader-lock"]')).toHaveCount(1);
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe("dark");
+  }
+});
