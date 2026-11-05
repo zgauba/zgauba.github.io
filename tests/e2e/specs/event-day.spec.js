@@ -15,7 +15,7 @@ async function openDay(page, opts = {}, tab = "mine") {
   return { db, calls: sb.calls };
 }
 const rpcCalls = (calls, name) => calls.filter((c) => c.kind === "rpc" && c.name === name);
-const myPin = (page) => page.locator("#map .leaflet-marker-icon .pin.mine");
+const myPin = (page) => page.locator('#map .leaflet-marker-icon[title="Villa 12"] .pin');
 
 test("event day: the switch shows both sides, the current one pressed; supply shows all four levels", async ({ page }) => {
   await openDay(page);
@@ -121,6 +121,21 @@ test("report a neighbor: asks first, one call, the button becomes a thank-you; n
   await myPin(page).dispatchEvent("click");
   await expect(page.locator(".leaflet-popup")).toContainText("Villa 12");
   await expect(page.locator(".leaflet-popup .rep")).toHaveCount(0);
+});
+
+test("the report is a text link in the same row as Directions / Google Maps, no bigger than them", async ({ page }) => {
+  await openDay(page, {}, "map");
+  await page.locator("#map .leaflet-marker-icon").nth(0).dispatchEvent("click");
+  const row = page.locator(".leaflet-popup .popacts");
+  await expect(row.locator("> *")).toHaveText(["Directions", "Google Maps", "They're Out of Treats"]);
+  const box = (sel) => row.locator(sel).first().evaluate((n) => {
+    const c = getComputedStyle(n); return { h: n.getBoundingClientRect().height, fs: c.fontSize, border: c.borderTopWidth, bg: c.backgroundColor };
+  });
+  const link = await box("a"), rep = await box(".rep");
+  expect(rep.fs).toBe(link.fs);
+  expect(rep.h).toBeLessThanOrEqual(link.h + 1);
+  expect(rep.border).toBe("0px");
+  expect(rep.bg).toBe("rgba(0, 0, 0, 0)");
 });
 
 test("a refused report says why and keeps the button", async ({ page }) => {
