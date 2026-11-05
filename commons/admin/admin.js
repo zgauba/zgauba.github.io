@@ -49,7 +49,8 @@ var HALLOWEEN = { fields: {
   entrance: { type: "enum", values: ["front", "garden", "both"], required: true, pin: "ring",
     label_en: "Kids should come to…", label_ar: "على الأطفال القدوم إلى…",
     labels_en: { front: "Front gate", garden: "Garden gate (park side)", both: "Both gates" },
-    labels_ar: { front: "البوابة الأمامية", garden: "بوابة الحديقة (جهة المنتزه)", both: "البوابتان" } }
+    labels_ar: { front: "البوابة الأمامية", garden: "بوابة الحديقة (جهة المنتزه)", both: "البوابتان" },
+    ring_split: ["both"] }   /* half front, half garden — the Halloween split ring */
 } };
 var FEATURES = ["giant_switch", "supply", "crowd_reports"];
 var REQ = '<span class="req" aria-hidden="true">*</span>';   /* needed before publishing */
@@ -971,7 +972,7 @@ function wireBanner(){
 }
 
 /* ---------- questions: schema <-> editable list ---------- */
-function newChoice(){ return { value: null, en: "", ar: "", glyph: "", allergy: false }; }
+function newChoice(){ return { value: null, en: "", ar: "", glyph: "", allergy: false, split: false }; }
 function fromSchema(schema){
   var fields = (schema && schema.fields) || {};
   return Object.keys(fields).map(function(k){
@@ -982,7 +983,8 @@ function fromSchema(schema){
       type: f.type === "bool" || f.type === "text" ? f.type : "enum",
       required: !!f.required, pin: f.pin === "ring" || f.pin === "glyph" ? f.pin : "", max: f.max,
       choices: (f.values || []).map(function(v){ return { value: v, en: jcOwn(len, v) || "", ar: jcOwn(lar, v) || "", glyph: jcOwn(gl, v) || "",
-        allergy: Array.isArray(f.allergy_friendly) && f.allergy_friendly.indexOf(v) >= 0 }; })
+        allergy: Array.isArray(f.allergy_friendly) && f.allergy_friendly.indexOf(v) >= 0,
+        split: Array.isArray(f.ring_split) && f.ring_split.indexOf(v) >= 0 }; })
     };
   });
 }
@@ -1014,7 +1016,7 @@ function toSchema(qs){
       if (cs.length < 2) return { err: "Q_CHOICES" };
       if (cs.length > 20) return { err: "Q_CHOICES_MAX" };
       var vals = cs.map(function(c){ return c.value; }).filter(Boolean);
-      var len = {}, lar = {}, gl = {}, af = [], anyAr = false, anyGl = false;
+      var len = {}, lar = {}, gl = {}, af = [], rs = [], anyAr = false, anyGl = false;
       for (var j = 0; j < cs.length; j++) {
         var c = cs[j];
         if (!c.en.trim()) return { err: "Q_CHOICE_LABEL" };
@@ -1023,6 +1025,7 @@ function toSchema(qs){
         if (c.ar.trim()) { lar[c.value] = c.ar.trim(); anyAr = true; }
         if (q.pin === "glyph" && c.glyph.trim()) { gl[c.value] = c.glyph.trim(); anyGl = true; }
         if (q.pin === "glyph" && c.allergy) af.push(c.value);   /* PR 5a: its icon shows teal on the map */
+        if (q.pin === "ring" && c.split) rs.push(c.value);      /* 5a.1: "both" = a split ring */
       }
       f.values = cs.map(function(c){ return c.value; });
       f.labels_en = len;
@@ -1030,6 +1033,7 @@ function toSchema(qs){
       if (q.pin) f.pin = q.pin;
       if (anyGl) f.glyphs = gl;
       if (af.length) f.allergy_friendly = af;
+      if (rs.length) f.ring_split = rs;
     }
     fields[q.key] = f;
   }
@@ -1077,9 +1081,12 @@ function drawBuilder(){
               '<input type="text" maxlength="40" dir="rtl" data-c-f="ar" placeholder="' + esc(jcT("ed_q_choice_ar")) + '" aria-label="' + esc(jcT("ed_q_choice_ar")) + '">' +
               (q.pin === "glyph" ? '<label class="check allergy" title="' + esc(jcT("ed_q_allergy")) + '"><input type="checkbox" data-c-allergy' +
                 (c.allergy ? ' checked' : '') + ' aria-label="' + esc(jcT("ed_q_allergy")) + '"><span class="tealdot" aria-hidden="true"></span></label>' : '') +
+              (q.pin === "ring" ? '<label class="check allergy" title="' + esc(jcT("ed_q_split")) + '"><input type="checkbox" data-c-split' +
+                (c.split ? ' checked' : '') + ' aria-label="' + esc(jcT("ed_q_split")) + '"><span class="splitdot" aria-hidden="true"></span></label>' : '') +
               '<button type="button" class="mini" data-cact="del" aria-label="' + esc(jcT("ed_q_remove_choice")) + '">✕</button></div>';
           }).join("") +
           (q.pin === "glyph" ? '<p class="help">' + esc(jcT("ed_q_allergy_help")) + '</p>' : '') +
+          (q.pin === "ring" ? '<p class="help">' + esc(jcT("ed_q_split_help")) + '</p>' : '') +
           '<button type="button" class="btn ghost small" data-qact="addc">' + esc(jcT("ed_q_add_choice")) + '</button></div>'
         : '') +
     '</div>';
@@ -1116,6 +1123,8 @@ function drawBuilder(){
       });
       var al = row.querySelector("[data-c-allergy]");
       if (al) al.addEventListener("change", function(){ c.allergy = al.checked; });
+      var sp = row.querySelector("[data-c-split]");
+      if (sp) sp.addEventListener("change", function(){ c.split = sp.checked; });
       row.querySelector('[data-cact="del"]').addEventListener("click", function(){
         q.choices.splice(+row.dataset.c, 1); drawBuilder();
       });

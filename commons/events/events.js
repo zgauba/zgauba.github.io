@@ -80,9 +80,14 @@ function whatsappUrl(){
    Look = a preset the app knows (colours in tokens.css, a mark here); anything else is plain.
    Pins (Halloween parity): FILL = availability (look colour · dark with a red ? = neighbors say
    they're out · grey = done), RING = the question marked "ring", ICON = the question marked "glyph";
-   a choice listed in allergy_friendly gets the teal icon. Colour never carries meaning alone:
-   done shows ✕, reported shows ?, and the key under the map names every ring and icon. */
-var LOOK_MARKS = { halloween: "🎃", haq_al_laila: "🏮", gathering: "🤝", market: "🛍️", yard_sale: "🏷️" };
+   a choice listed in allergy_friendly gets the teal icon; a ring choice listed in ring_split ("both
+   gates") draws half in each of the first two other choices' colours (Halloween parity, 5a.1).
+   Colour never carries meaning alone: done shows ✕, reported shows ?, and the key under the map
+   names every ring and icon. */
+var LOOK_MARKS = { halloween: "🎃", haq_al_laila: "🌙", gathering: "🤝", market: "🛍️", yard_sale: "🏷️" };
+/* treat nights say "out of treats"; everything else says "done" (Halloween copy rule) */
+var TREAT_LOOKS = { halloween: true, haq_al_laila: true };
+function outKey(ev, kind){ return TREAT_LOOKS[lookOf(ev)] === true ? "ev_out_treats" : kind; }
 function lookOf(ev){ return ev && jcOwn(LOOK_MARKS, ev.look) ? ev.look : null; }
 function setLook(look){
   if (look) document.documentElement.setAttribute("data-look", look);
@@ -114,31 +119,46 @@ function glyphHtml(spec, v){
 }
 /* "done" | "reported" | null — what the server says about this home tonight */
 function pinState(e){ return e.live_state === "done" ? "done" : e.reported_out ? "reported" : null; }
-function ringClass(f, e){
-  if (!f) return "";
-  var i = (f.spec.values || []).indexOf(e.payload && e.payload[f.key]);
-  return i < 0 ? "" : " r" + (i % 6);
+/* the ring for one answer: ' r<n>' (one colour) or ' rs' plus a split border-color, from the first
+   two choices that aren't themselves split. Indexes only — nothing typed reaches the HTML. */
+function ringOf(spec, v){
+  var vals = (spec && spec.values) || [], i = vals.indexOf(v);
+  if (i < 0) return { cls: "", style: "" };
+  var split = Array.isArray(spec.ring_split) ? spec.ring_split : [];
+  if (split.indexOf(v) >= 0) {
+    var others = vals.filter(function(x){ return split.indexOf(x) < 0; });
+    if (others.length >= 2) {
+      var a = "var(--jc-ring-" + (vals.indexOf(others[0]) % 6) + ")", b = "var(--jc-ring-" + (vals.indexOf(others[1]) % 6) + ")";
+      return { cls: " rs", style: ' style="border-color:' + a + ' ' + b + ' ' + b + ' ' + a + '"' };
+    }
+  }
+  return { cls: " r" + (i % 6), style: "" };
 }
+function ringClass(f, e){ return f ? ringOf(f.spec, e.payload && e.payload[f.key]) : { cls: "", style: "" }; }
 function pinIcon(e){
   var ev = data.event, st = pinState(e), gf = pinField(ev, "glyph");
   var inner = st === "done" ? "✕" : st === "reported" ? "?" : gf ? glyphHtml(gf.spec, e.payload && e.payload[gf.key]) : "";
-  var size = e.mine ? 38 : 30;
+  var size = e.mine ? 40 : 32, ring = ringClass(pinField(ev, "ring"), e);
   return L.divIcon({ className: "", iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2],
-    html: '<div class="pin' + (e.mine ? " mine" : "") + (st ? " " + st : "") + ringClass(pinField(ev, "ring"), e) + '">' + inner + '</div>' });
+    html: '<div class="pin' + (e.mine ? " mine" : "") + (st ? " " + st : "") + ring.cls + '"' + ring.style + '>' + inner + '</div>' });
 }
-/* the map key: every icon and ring choice by name, plus the availability states this event uses */
+/* the map key, one row each: icons · gates (rings) · tonight's states — wraps, never scrolls
+   sideways (5a.1: the gate chips sat off-screen) */
 function legendHtml(ev){
-  var chips = [], gf = pinField(ev, "glyph"), rf = pinField(ev, "ring"), feats = ev.features || {};
+  var icons = [], rings = [], states = [], gf = pinField(ev, "glyph"), rf = pinField(ev, "ring"), feats = ev.features || {};
   if (gf) (gf.spec.values || []).forEach(function(v){
     var g = glyphHtml(gf.spec, v);
-    if (g) chips.push('<span class="chip">' + g + ' ' + esc(valueLabel(gf.spec, v)) + '</span>');
+    if (g) icons.push('<span class="chip">' + g + ' ' + esc(valueLabel(gf.spec, v)) + '</span>');
   });
-  if (rf) (rf.spec.values || []).forEach(function(v, i){
-    chips.push('<span class="chip"><i class="ringdot r' + (i % 6) + '"></i>' + esc(valueLabel(rf.spec, v)) + '</span>');
+  if (rf) (rf.spec.values || []).forEach(function(v){
+    var r = ringOf(rf.spec, v);
+    rings.push('<span class="chip"><i class="ringdot' + r.cls + '"' + r.style + '></i>' + esc(valueLabel(rf.spec, v)) + '</span>');
   });
-  if (feats.giant_switch) chips.push('<span class="chip"><i class="ringdot st done">✕</i>' + esc(jcT("ev_legend_done")) + '</span>');
-  if (feats.crowd_reports) chips.push('<span class="chip"><i class="ringdot st reported">?</i>' + esc(jcT("ev_legend_reported")) + '</span>');
-  return chips.length ? '<div class="legend" role="note" aria-label="' + esc(jcT("ev_legend")) + '">' + chips.join("") + '</div>' : '';
+  if (feats.giant_switch) states.push('<span class="chip"><i class="ringdot st done">✕</i>' + esc(jcT(outKey(ev, "ev_legend_done"))) + '</span>');
+  if (feats.crowd_reports) states.push('<span class="chip"><i class="ringdot st reported">?</i>' + esc(jcT("ev_legend_reported")) + '</span>');
+  var rows = [icons, rings, states].filter(function(r){ return r.length; });
+  return rows.length ? '<div class="legend" role="note" aria-label="' + esc(jcT("ev_legend")) + '">' +
+    rows.map(function(r){ return '<div class="row">' + r.join("") + '</div>'; }).join("") + '</div>' : '';
 }
 
 function show(name){
@@ -460,7 +480,7 @@ function answers(e){
 /* "Done for the night" / "Neighbors say they're out" — or nothing */
 function stateLine(e){
   var st = pinState(e);
-  return st ? '<div class="pinstate ' + st + '">' + esc(jcT(st === "done" ? "ev_pin_done" : "ev_pin_reported")) + '</div>' : '';
+  return st ? '<div class="pinstate ' + st + '">' + esc(jcT(st === "done" ? outKey(data.event, "ev_pin_done") : "ev_pin_reported")) + '</div>' : '';
 }
 /* Popup = HTML, so EVERYTHING resident-typed is escaped (numbers, buildings, notes). */
 function popupHtml(e){
@@ -502,7 +522,11 @@ function fitMap(){
   var ah = el("mapAfter") ? el("mapAfter").getBoundingClientRect().height : 0;   /* the key, venue line… (may be empty) */
   var after = ah ? ah + 8 : 0;
   var top = m.getBoundingClientRect().top + window.scrollY;
-  var h = Math.max(260, Math.floor(vh - top - bar - after - 12));
+  var want = Math.floor(vh - top - bar - after - 12);
+  var h = Math.max(260, want);
+  /* too tall to fit (a long header + a three-row key on a small phone): let the page scroll, with
+     room under the key for the tab bar, instead of hiding the key behind it (5a.1) */
+  document.body.classList.toggle("evfit", want >= 260);
   if (Math.abs(m.offsetHeight - h) < 2) return;
   m.style.height = h + "px";
   if (map) map.invalidateSize();

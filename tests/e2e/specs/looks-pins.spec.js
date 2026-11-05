@@ -36,7 +36,7 @@ test("pins: icon from the glyph question, ring from the ring question, ✕ done,
 test("map key names every icon and ring choice, plus Done / Reported only when the event uses them", async ({ page }) => {
   await openEvent(page, pinEvent());
   const key = page.locator("#mapAfter .legend .chip");
-  await expect(key).toHaveText(["🍬 Candy only", "🎃 Non-food", "🍬🎃 Both", "Front gate", "Garden gate", "Both gates", "✕Done", "?Reported out"]);
+  await expect(key).toHaveText(["🍬 Candy only", "🎃 Non-food", "🍬🎃 Both", "Front gate", "Garden gate", "Both gates", "✕Out of treats", "?Reported out"]);   // treat night wording (5a.1)
   await expect(page.locator("#mapAfter .legend .gl.teal")).toHaveText("🎃");
 });
 
@@ -52,10 +52,10 @@ test("no pin questions and no switches: plain pins, no key", async ({ page }) =>
   await expect(pin(page, 0)).not.toHaveClass(/\br\d\b/);
 });
 
-test("popup + list say 'Done for the night' / 'Neighbors say they're out'", async ({ page }) => {
+test("popup + list say 'Out of treats' (treat night) / 'Neighbors say they're out'", async ({ page }) => {
   await openEvent(page, pinEvent());
   await page.locator("#map .leaflet-marker-icon").nth(2).dispatchEvent("click");   // the pin itself, even mid-zoom
-  await expect(page.locator(".leaflet-popup-content")).toContainText("Done for the night");
+  await expect(page.locator(".leaflet-popup-content")).toContainText("Out of treats");
   await page.locator("#tab-list").click();
   await expect(page.locator(".entries li").filter({ hasText: "Villa 4" })).toContainText("Neighbors say they're out");
   await expect(page.locator(".entries li").filter({ hasText: "Villa 2" }).locator(".gl.teal")).toHaveText("🎃");
@@ -94,7 +94,7 @@ test("Haq al Laila: navy + gold, Arabic tagline above the English title", async 
   await expect(page.locator("html")).toHaveAttribute("data-look", "haq_al_laila");
   await expect(page.locator(".evhead .tagline")).toHaveText("عطونا الله يعطيكم");
   await expect(page.locator(".evhead .tagline")).toHaveAttribute("dir", "rtl");
-  await expect(page.locator(".evhead h1 .mark")).toHaveText("🏮");
+  await expect(page.locator(".evhead h1 .mark")).toHaveText("🌙");
   // fill = availability must survive the gold look: "reported" can't be gold-ish amber
   const rgb = (i) => pin(page, i).evaluate((n) => getComputedStyle(n).backgroundColor.match(/\d+/g).slice(0, 3).map(Number));
   const [a, r] = [await rgb(0), await rgb(3)];
@@ -218,4 +218,88 @@ test("look '__proto__' is not a look", async ({ page }) => {
   await openEvent(page, pinEvent({ look: "__proto__" }));
   await expect(page.locator("html")).not.toHaveAttribute("data-look", /.*/);
   await expect(page.locator(".evhead .mark")).toHaveCount(0);
+});
+
+// ---- 5a.1 (Zee 2026-11-05): split ring for "both gates", key in rows, wording, 🌙 ----
+const SPLIT = { fields: {
+  entrance: { type: "enum", values: ["front", "garden", "both"], pin: "ring",
+    labels_en: { front: "Front gate", garden: "Garden gate", both: "Both gates" }, ring_split: ["both"] },
+} };
+test("'both gates' draws a split ring: half front colour, half garden colour (pin + key)", async ({ page }) => {
+  await openEvent(page, pinEvent({ payload_schema: SPLIT }, [home("a", "1", 24.521, { entrance: "both" }),
+                                                              home("b", "2", 24.526, { entrance: "garden" })]));
+  await expect(pin(page, 0)).toHaveClass(/\brs\b/);
+  const sides = (loc) => loc.evaluate((n) => { const c = getComputedStyle(n); return [c.borderTopColor, c.borderRightColor, c.borderBottomColor, c.borderLeftColor]; });
+  const [t, r, b, l] = await sides(pin(page, 0));
+  expect(t).toBe(l); expect(r).toBe(b); expect(t).not.toBe(r);
+  expect(t).toBe("rgb(255, 255, 255)");                                   // front gate = ring 0
+  expect((await sides(pin(page, 1)))[0]).toBe(r);                         // garden gate = the other half
+  const dot = page.locator(".legend .chip").filter({ hasText: "Both gates" }).locator(".ringdot");
+  expect(await sides(dot)).toEqual([t, r, b, l]);
+});
+
+test("map key: icons, gates and states each get a row; nothing hidden off the side", async ({ page }) => {
+  await openEvent(page, pinEvent());
+  await expect(page.locator(".legend .row")).toHaveCount(3);
+  await expect(page.locator(".legend .row").nth(1)).toContainText("Front gate");
+  const fits = await page.locator(".legend .row").evaluateAll((rows) => rows.every((n) => n.scrollWidth <= n.clientWidth + 1));
+  expect(fits).toBe(true);                                                 // no row runs off the side
+  await expect(page.locator(".legend .chip").filter({ hasText: "Both gates" })).toBeInViewport();
+});
+
+test("events that aren't treat nights say 'Done', not 'Out of treats'", async ({ page }) => {
+  await openEvent(page, pinEvent({ look: "yard_sale" }));
+  await expect(page.locator(".legend")).toContainText("Done");
+  await expect(page.locator(".legend")).not.toContainText("Out of treats");
+});
+
+test("gate rings are thick enough to see (≥ 4px)", async ({ page }) => {
+  await openEvent(page, pinEvent());
+  expect(await pin(page, 0).evaluate((n) => parseFloat(getComputedStyle(n).borderTopWidth))).toBeGreaterThanOrEqual(4);
+});
+
+test("builder: Halloween template pre-ticks 'Both gates' as a split ring; ticks round-trip", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  const { calls } = await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator("#newEv").click();
+  await page.locator('[data-tpl="halloween"]').click();
+  await page.locator("#title_en").fill("Halloween 2027");
+  const gate = page.locator('.qcard[data-q="2"]');
+  await expect(gate.locator("[data-c-split]")).toHaveCount(3);
+  await expect(gate.locator("[data-c-split]").nth(2)).toBeChecked();
+  await expect(gate.locator(".help")).toContainText("half in each");
+  await expect(page.locator('.qcard[data-q="0"] [data-c-split]')).toHaveCount(0);   // icon question: no split tick
+  await gate.locator("[data-c-split]").nth(0).check();
+  await gate.locator("[data-c-split]").nth(0).uncheck();
+  await page.locator("#save").click();
+  await expect(page.locator("#msg")).toHaveText("Saved.");
+  const saves = calls.filter((c) => c.name === "jc_admin_event_save");
+  expect(saves[saves.length - 1].args.p_fields.payload_schema.fields.entrance.ring_split).toEqual(["both"]);
+});
+
+test("a long header + three-row key on a small phone: the key can still be scrolled clear of the tab bar", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 640 });
+  await openEvent(page, pinEvent({ look: "haq_al_laila" }));
+  const last = page.locator(".legend .row").last();
+  await expect(page.locator("body")).not.toHaveClass(/\bevfit\b/);       // the screen unlocked scrolling
+  const bar = await page.locator("#tabbar").boundingBox();
+  await expect.poll(async () => {                                          // scroll as a thumb would, until settled
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const k = await last.boundingBox();
+    return k.y + k.height <= bar.y + 1;                                    // not hidden behind the tab bar
+  }).toBe(true);
+});
+
+test("split ring falls back to one colour when it can't split", async ({ page }) => {
+  const two = { fields: { g: { type: "enum", values: ["a", "b"], pin: "ring", ring_split: ["b"] } } };
+  await openEvent(page, pinEvent({ payload_schema: two }, [home("a", "1", 24.521, { g: "b" })]));
+  await expect(pin(page, 0)).toHaveClass(/\br1\b/);                       // only one other choice: plain ring
+  await expect(pin(page, 0)).not.toHaveAttribute("style", /.*/);
+});
+test("a non-array ring_split never splits", async ({ page }) => {
+  const odd = { fields: { g: { type: "enum", values: ["a", "b", "c"], pin: "ring", ring_split: "c" } } };
+  await openEvent(page, pinEvent({ payload_schema: odd }, [home("a", "1", 24.521, { g: "c" })]));
+  await expect(pin(page, 0)).toHaveClass(/\br2\b/);
 });
