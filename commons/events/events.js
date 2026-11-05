@@ -162,8 +162,10 @@ function legendHtml(ev){
 }
 
 function show(name){
-  if (map) { map.remove(); map = null; }
-  homeLayer = null; popupOpen = false; pendingRepaint = false;
+  /* state first: map.remove() fires popupclose, which must not draw onto a dying map (review R1) */
+  var old = map;
+  map = null; homeLayer = null; popupOpen = false; pendingRepaint = false; mineShown = null;
+  if (old) old.remove();
   current = name;
   setLook(name === "list" ? null : lookOf(data && data.event));
   jcBack(name === "list" ? null : "./", "ev_back");   /* back to the events list, in the top bar */
@@ -356,6 +358,7 @@ function renderMine(){
   var wa = whatsappUrl();
   if (wa) html += '<a class="btn ghost" target="_blank" rel="noopener" href="' + esc(wa) + '">' + esc(jcT("ev_whatsapp")) + '</a>';
   el("body").innerHTML = '<div class="cta" id="cta">' + html + '</div>';
+  mineShown = mineKey();
   wireLive();
   on("toSignup", function(){
     if (!isVenue(ev) && !hasPos(myHome())) return goPin();
@@ -364,6 +367,7 @@ function renderMine(){
   on("withdraw", function(){
     if (!window.confirm(jcFmt("ev_withdraw_confirm", { h: myLabel() }))) return;
     busy("withdraw", true);
+    gen++;                                   /* a refresh already on its way is now stale (review R4) */
     rpc("jc_entry_withdraw", { p_event: ev.id }).then(function(d){
       data = d; show("detail"); showOk(jcFmt("ev_withdrawn", { h: myLabel() }));
     }, function(e){ busy("withdraw", false); showErr(e.code); });
@@ -439,6 +443,7 @@ function renderForm(){
     var note = el("note").value.trim();
     if (note) payload.note = note;
     busy("go", true);
+    gen++;
     rpc("jc_event_signup", { p_event: ev.id, p_payload: payload }).then(function(d){
       data = d; editing = false; show("detail"); showOk(jcFmt(isVenue(d.event) ? "ev_venue_in" : "ev_signed_up", { h: myLabel() }));
     }, function(e){
@@ -458,10 +463,11 @@ function renderForm(){
    neighbors' "they're out" reports, and a refresh every 2 minutes while the page is in view.
    Undated events never get an event day; a start with no end runs 6 h. */
 var LEAD_MS = 2 * 3600e3, NO_END_MS = 6 * 3600e3;
-var REFRESH_MS = window.JC_REFRESH_MS || 120000;
+var REFRESH_MS = window.JC_REFRESH_MS || 120000;   /* JC_REFRESH_MS: tests only */
 var lastAt = null, stale = false;   /* when `data` last came from the server; the last refresh failed */
 var acting = false, gen = 0;        /* an event-day action in flight; bumps so an older refresh is dropped */
-var reported = {};                  /* entries this device reported — memory only (the server dedups too) */
+var reported = {};
+var staleAfterReport = false;                  /* entries this device reported — memory only (the server dedups too) */
 
 function eventDay(ev){
   if (!ev || ev.status !== "live" || isVenue(ev) || !ev.starts_at) return false;
@@ -533,7 +539,8 @@ function bannerHtml(){
     (feat(ev, "giant_switch") ? '<button type="button" class="btn ghost" id="yesOut">' + esc(jcT(treatKey(ev, "ev_yes_out"))) + '</button>' : '') +
     '</div></div>';
 }
-/* banner + "Updated 7:42 PM"; returns true when the banner changed (the map needs refitting) */
+/* banner + "Updated 7:42 PM"; returns true when either changed (the map needs refitting) */
+var dayShown = false;               /* was the event-day window open at the last paint */
 function paintDay(){
   var b = el("banner"), u = el("upd"), changed = false;
   if (b) {
@@ -548,11 +555,14 @@ function paintDay(){
       });
     }
   }
+  dayShown = eventDay(data.event);
   if (u) {
-    var show = eventDay(data.event) && !!lastAt;
+    var show = dayShown && !!lastAt;
+    var text = show ? jcFmt(stale ? "ev_updated_stale" : "ev_updated", { t: fmtTime(lastAt) }) : "";
+    if (u.hidden !== !show || u.textContent !== text) changed = true;   /* the line can wrap: refit the map (R6) */
     u.hidden = !show;
     u.classList.toggle("stale", stale);
-    if (show) u.textContent = jcFmt(stale ? "ev_updated_stale" : "ev_updated", { t: fmtTime(lastAt) });
+    u.textContent = text;
   }
   return changed;
 }
@@ -561,6 +571,7 @@ function paintDay(){
 function act(name, args, okText){
   if (acting) return;
   acting = true; gen++;
+  refocus = focusSel();
   Array.prototype.forEach.call(document.querySelectorAll("#live button, #banner button"), function(x){ x.disabled = true; });
   rpc(name, args).then(function(d){
     data = d; lastAt = new Date(); stale = false;
@@ -569,7 +580,7 @@ function act(name, args, okText){
   }, function(e){
     Array.prototype.forEach.call(document.querySelectorAll("#live button, #banner button"), function(x){ x.disabled = false; });
     showErr(e.code);
-  }).then(function(){ acting = false; });
+  }).finally(function(){ acting = false; });   /* finally: a throw while drawing never leaves it stuck (review R2) */
 }
 
 /* A neighbor's popup: "They're Out of Treats" → one report (asks first). */
@@ -589,7 +600,11 @@ function report(e, popup, btn){
   }, function(err){
     btn.disabled = false;
     showErr(err.code);
-  }).then(function(){ acting = false; });
+    if (err.code === "ALREADY_DONE" || err.code === "NOT_FOUND") staleAfterReport = true;   /* the pin was out of date (R5) */
+  }).finally(function(){
+    acting = false;
+    if (staleAfterReport) { staleAfterReport = false; refresh(); }
+  });
 }
 
 /* Redraw what the server changed without rebuilding the page: the map keeps its zoom and an open
@@ -610,9 +625,25 @@ function repaint(){
     var y = window.scrollY;
     renderList(data.entries || [], q ? q.value : "");
     window.scrollTo(0, y);
-  } else if (!editing) {
+  } else if (!editing && mineKey() !== mineShown) {
+    /* only when something on this tab changed; keep focus on the switch / level just tapped (R3) */
+    var sel = refocus || focusSel();
     renderMine();
+    var nf = sel && (document.querySelector("#live " + sel) || document.querySelector("#live [data-live]"));
+    if (nf) nf.focus();
   }
+  refocus = null;
+}
+/* the switch side / level that has focus — noted before act() disables it (disabling drops focus) */
+var refocus = null;
+function focusSel(){
+  var f = document.activeElement;
+  return f && f.dataset && (f.dataset.live ? '[data-live="' + f.dataset.live + '"]'
+    : f.dataset.supply ? '[data-supply="' + f.dataset.supply + '"]' : null);
+}
+var mineShown = null;
+function mineKey(){
+  return JSON.stringify([data.mine, data.event.features, data.event.signups_open, eventDay(data.event)]);
 }
 
 function refreshDue(){
@@ -629,10 +660,17 @@ function refresh(){
     repaint();
   }, function(){
     stale = true;                             /* keep what's on screen; say how old it is */
-    paintDay();
-  }).then(function(){ refreshing = false; });
+    if (paintDay()) fitSoon();
+  }).finally(function(){ refreshing = false; });
 }
-setInterval(refresh, REFRESH_MS);
+/* every ~2 minutes, ±10 % so a street of phones doesn't hit the database in the same second; the
+   window opening or closing while the page sits open redraws once (controls appear / go — R7) */
+function tick(){
+  if (current === "detail" && data && !editing && eventDay(data.event) !== dayShown) repaint();
+  refresh();
+  setTimeout(tick, REFRESH_MS * (0.9 + 0.2 * Math.random()));
+}
+setTimeout(tick, REFRESH_MS * (0.9 + 0.2 * Math.random()));
 document.addEventListener("visibilitychange", function(){
   /* back in view: at most once every 15 s (switching apps quickly) */
   if (!document.hidden && (!lastAt || Date.now() - lastAt.getTime() > 15000)) refresh();

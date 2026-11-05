@@ -88,7 +88,13 @@ function dayBackend(opts = {}) {
   return {
     st, event,
     rpc: Object.assign({
-      jc_event_get: () => { st.gets++; if (opts.onGet) opts.onGet(st); return st.getFails ? raise("UNKNOWN") : ok(get()); },
+      // the reply is what the server held when the request ARRIVED; st.hold (a Promise) answers it late
+      jc_event_get: async () => {
+        st.gets++;
+        const reply = st.getFails ? raise("UNKNOWN") : ok(get()), hold = st.hold;
+        if (hold) await hold;
+        return reply;
+      },
       jc_entry_live_set: (a) => {
         if (a.p_state != null && !feat("giant_switch")) return raise("FEATURE_OFF");
         if (a.p_supply != null && !feat("supply")) return raise("FEATURE_OFF");

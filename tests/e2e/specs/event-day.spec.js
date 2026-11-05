@@ -153,16 +153,21 @@ test("reported household: Yes, We're Out sets done and the banner goes", async (
     .toEqual([{ p_event: DAY_ID, p_state: "done", p_supply: null }]);
 });
 
-test("refresh: a neighbor going out shows up without moving the map", async ({ page }) => {
-  const { db, calls } = await openDay(page, { refreshMs: 400 }, "map");
-  await page.evaluate(() => {});
+test("refresh: a neighbor going out shows up without moving the map you zoomed", async ({ page }) => {
+  const { db } = await openDay(page, { refreshMs: 400 }, "map");
   const pin0 = page.locator("#map .leaflet-marker-icon .pin").nth(0);
   await expect(pin0).not.toHaveClass(/\bdone\b/);
-  const before = await page.locator("#map .leaflet-map-pane").getAttribute("style");
+  const zoom = () => page.evaluate(() => map.getZoom() + "@" + map.getCenter().toString());
+  await page.waitForTimeout(500);                                                // the first fit has settled
+  const fitted = await zoom();
+  await page.evaluate(() => map.setView([24.53, 54.44], map.getZoom() + 1, { animate: false }));   // the user moves the map
+  await expect.poll(zoom).not.toBe(fitted);
+  const view = await zoom();
+  const gets = db.st.gets;
   db.st.others[0].live_state = "done";
   await expect(pin0).toHaveClass(/\bdone\b/);
-  expect(rpcCalls(calls, "jc_event_get").length).toBeGreaterThan(1);
-  expect(await page.locator("#map .leaflet-map-pane").getAttribute("style")).toBe(before);   // same pan / zoom
+  expect(db.st.gets).toBeGreaterThan(gets);
+  expect(await zoom()).toBe(view);                                               // a rebuild would re-fit the pins
 });
 
 test("refresh waits while a popup is open, then redraws when it closes", async ({ page }) => {
@@ -170,11 +175,57 @@ test("refresh waits while a popup is open, then redraws when it closes", async (
   await page.locator("#map .leaflet-marker-icon").nth(0).dispatchEvent("click");
   await expect(page.locator(".leaflet-popup")).toBeVisible();
   db.st.others[1].live_state = "done";
-  await page.waitForTimeout(900);
-  await expect(page.locator(".leaflet-popup")).toBeVisible();                      // not yanked away
+  const gets = db.st.gets;
+  await expect.poll(() => db.st.gets).toBeGreaterThan(gets + 1);                 // refreshes really ran meanwhile
+  await expect(page.locator(".leaflet-popup")).toBeVisible();                    // not yanked away
   await expect(page.locator("#map .leaflet-marker-icon .pin").nth(1)).not.toHaveClass(/\bdone\b/);
   await page.locator(".leaflet-popup-close-button").click();
   await expect(page.locator("#map .leaflet-marker-icon .pin").nth(1)).toHaveClass(/\bdone\b/);
+});
+
+test("a refresh that left before your tap never undoes it", async ({ page }) => {
+  const { db } = await openDay(page, { refreshMs: 300 }, "mine");
+  let release;
+  db.st.hold = new Promise((r) => { release = r; });                              // the next refresh hangs…
+  const gets = db.st.gets;
+  await expect.poll(() => db.st.gets).toBeGreaterThan(gets);                     // …in flight, holding "active"
+  db.st.hold = null;
+  await page.locator("#live [data-live=done]").click();
+  await expect(page.locator("#live [data-live=done]")).toHaveAttribute("aria-pressed", "true");
+  db.st.hold = new Promise(() => {});                                            // later refreshes hang: nothing corrects it
+  release();                                                                     // the old "active" reply lands
+  await page.waitForTimeout(400);
+  await expect(page.locator("#live [data-live=done]")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("switching language with a popup open and a redraw waiting: no error, the page redraws", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const { db } = await openDay(page, { refreshMs: 300 }, "map");
+  await page.locator("#map .leaflet-marker-icon").nth(0).dispatchEvent("click");
+  await expect(page.locator(".leaflet-popup")).toBeVisible();
+  const gets = db.st.gets;
+  await expect.poll(() => db.st.gets).toBeGreaterThan(gets);                     // a redraw is now waiting
+  await page.locator("#langBtn").click();
+  await expect(page.locator("#tab-map")).toHaveText("الخريطة");
+  await expect(page.locator("#map .leaflet-marker-icon")).toHaveCount(6);
+  expect(errors).toEqual([]);
+});
+
+test("when the event ends, the controls go without a reload", async ({ page }) => {
+  // started 3 h 59.5 m ago, 4 h long: ends ~0.5 s after the page opens
+  await openDay(page, { startsIn: -(4 * 3600e3 - 1500), refreshMs: 300 });
+  await expect(page.locator("#live .tog")).toBeVisible();
+  await expect(page.locator("#live")).toHaveCount(0, { timeout: 5000 });
+  await expect(page.locator("#upd")).toBeHidden();
+});
+
+test("tapping a level keeps keyboard focus on it", async ({ page }) => {
+  await openDay(page);
+  await page.locator("#live [data-supply='2']").focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#live [data-supply='2']")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#live [data-supply='2']")).toBeFocused();
 });
 
 test("refresh never touches an open sign-up form, and a failed refresh says how old the screen is", async ({ page }) => {
