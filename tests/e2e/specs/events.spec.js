@@ -1,4 +1,4 @@
-// T5.1 — Events: list, detail (map/list), schema-driven signup, withdraw, stats, "Our year".
+// T5.1 — Events: list, detail (map/list), schema-driven signup, withdraw, stats, "Our Year".
 const { test, expect } = require("@playwright/test");
 const { stubBackend, ok, raise, CONFIG, MEMBER, MEMBER_NO_PIN, HOME_V12 } = require("./stub");
 const { eventsBackend, adminBackend, signIn, LIVE_ID, PAST_ID, SCHEMA, LIVE, PAST, ENTRIES, STATS } = require("./backends");
@@ -13,7 +13,7 @@ test("list: live events with View + Sign up (no status pill), then Past with 'se
   await expect(live).toContainText("National Day Gathering");
   await expect(live).toContainText("37 homes in");
   await expect(live.locator(".pill")).toHaveCount(0);                     // the button says it
-  await expect(live.locator(".evacts a")).toHaveText(["View", "Sign up"]);
+  await expect(live.locator(".evacts a")).toHaveText(["View", "Sign Up"]);
   await expect(live.locator(".evacts a").first()).toHaveAttribute("href", "?id=" + LIVE_ID);
   await expect(live.locator(".evacts a").last()).toHaveAttribute("href", "?id=" + LIVE_ID + "&tab=mine");
   await expect(live.locator(".badge")).toHaveCount(0);                    // residents: no Admin badge
@@ -40,7 +40,7 @@ test("list: upcoming soonest first (undated last); no Sign up when closed or alr
   await expect(page.locator('[data-event="closed"]')).toContainText("sign-ups closed");
   await expect(page.locator('[data-event="closed"] .evacts a')).toHaveText(["View"]);
   await expect(page.locator('[data-event="joined"] .evacts a')).toHaveText(["View"]);
-  await expect(page.locator('[data-event="late"] .evacts a')).toHaveText(["View", "Sign up"]);
+  await expect(page.locator('[data-event="late"] .evacts a')).toHaveText(["View", "Sign Up"]);
 });
 
 for (const scope of ["events", "community"]) test(`organizers (${scope} scope) see an Admin badge that opens that event's editor`, async ({ page }) => {
@@ -89,7 +89,7 @@ test("signup: required answers enforced; full payload + note sent; 'Villa 12 is 
   await expect(page.locator("#map")).toHaveCount(0);                     // no map beside sign-up
   await expect(page.locator(".pinline")).toContainText("Villa 12 is pinned on the map.");
   await page.locator("#toSignup").click();
-  await expect(page.locator("h2.formtitle")).toHaveText("Sign Villa 12 up");
+  await expect(page.locator("h2.formtitle")).toHaveText("Sign Up Villa 12");
   await page.locator('[data-field="treats"][data-value=\'"candy"\']').click();
   await page.locator("#go").click();
   await expect(page.locator("#msg")).toHaveText("Please answer the required questions.");
@@ -130,7 +130,7 @@ test("withdraw (confirmed) → withdrawn, sign-up offered again", async ({ page 
   page.once("dialog", (d) => d.accept());
   await page.locator("#withdraw").click();
   await expect(page.locator("#msg")).toHaveText("Villa 12 has withdrawn.");
-  await expect(page.locator("#toSignup")).toHaveText("Sign Villa 12 up");
+  await expect(page.locator("#toSignup")).toHaveText("Sign Up Villa 12");
 });
 
 test("sign-ups closed: no sign-up button; a race shows the server's answer", async ({ page }) => {
@@ -188,7 +188,7 @@ test("hostile note / house number rendered as text (list + map tooltip)", async 
   } finally { ENTRIES.pop(); }
 });
 
-test("My Home 'Our year' lists joined events; hidden while Events is off", async ({ page }) => {
+test("My Home 'Our Year' lists joined events; hidden while Events is off", async ({ page }) => {
   const eb = eventsBackend();
   await stubBackend(page, { rpc: eb.rpc });
   await signIn(page);
@@ -197,7 +197,7 @@ test("My Home 'Our year' lists joined events; hidden while Events is off", async
   await expect(page.locator("#history a")).toHaveAttribute("href", "../events/?id=" + PAST_ID);
 });
 
-test("'Our year' stays hidden when the module is off", async ({ page }) => {
+test("'Our Year' stays hidden when the module is off", async ({ page }) => {
   await stubBackend(page, { rpc: { jc_my_history: () => raise("MODULE_OFF") } });
   await signIn(page);
   await page.goto("home/");
@@ -286,7 +286,7 @@ test("the organizers' note to my home is shown on the event", async ({ page }) =
   await page.goto("events/?id=" + LIVE_ID);
   await expect(page.locator(".orgnote")).toHaveCount(0);                 // it lives on My home
   await page.locator("#tab-mine").click();
-  await expect(page.locator(".orgnote")).toContainText("Message from the organizers");
+  await expect(page.locator(".orgnote")).toContainText("Message From the Organizers");
   await expect(page.locator(".orgnote")).toContainText("Your pin looks misplaced");
 });
 
@@ -296,11 +296,11 @@ test("WhatsApp link: shown when configured, never for a non-WhatsApp URL", async
   await stubBackend(page, { rpc: Object.assign(eb.rpc, { jc_config_get: () => ok(Object.assign({}, CONFIG, { links: { whatsapp: wa } })) }) });
   await signIn(page);
   await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
-  await expect(page.getByRole("link", { name: "Message the organizers on WhatsApp" })).toHaveAttribute("href", wa);
+  await expect(page.getByRole("link", { name: "Message the Organizers on WhatsApp" })).toHaveAttribute("href", wa);
   wa = "javascript:alert(1)";
   await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
   await expect(page.locator("h1")).toHaveText("National Day Gathering");
-  await expect(page.getByRole("link", { name: "Message the organizers on WhatsApp" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Message the Organizers on WhatsApp" })).toHaveCount(0);
 });
 
 // ---- T5.2 PR 1: tabs, no map beside sign-up, pin required → redirect (never refuse) ----
@@ -312,7 +312,7 @@ test("tabs: Map · List · My home; the tab is kept in the URL", async ({ page }
   await stubBackend(page, { rpc: eb.rpc });
   await signIn(page);
   await page.goto("events/?id=" + LIVE_ID);
-  await expect(page.locator('.subtabs [role="tab"]')).toHaveText(["Map", "List", "My home"]);
+  await expect(page.locator('.subtabs [role="tab"]')).toHaveText(["Map", "List", "Sign Up"]);
   await expect(page.locator("#tab-map")).toHaveAttribute("aria-selected", "true");
   await page.locator("#tab-list").click();
   await expect(page).toHaveURL(new RegExp("events/\\?id=" + LIVE_ID + "&tab=list$"));
@@ -343,7 +343,7 @@ test("server safety net: NO_PIN on sign-up redirects to the pin screen, not an e
   await page.locator('[data-field="handout"][data-value=\'"door"\']').click();
   await page.locator("#go").click();
   await expect(page).toHaveURL(/\/commons\/home\/\?view=pin&next=/);
-  await expect(page.locator("h1")).toHaveText("Pin your home");
+  await expect(page.locator("h1")).toHaveText("Pin Your Home");
 });
 
 // T5.1 review Lows: no selector built from schema keys; no in-band "__missing" sentinel.
@@ -527,7 +527,7 @@ test("one-place: list says households coming + where; map is the place with Dire
   await page.goto("events/");
   await expect(page.locator('[data-event="kids-market"] small')).toContainText("at Central Park · 7 households coming");
   await page.goto("events/?id=" + VENUE_ID + "&tab=list");                       // List doesn't exist here → Map
-  await expect(page.locator(".subtabs button")).toHaveText(["Map", "My home"]);
+  await expect(page.locator(".subtabs button")).toHaveText(["Map", "Sign Up"]);
   await expect(page.locator(".evhead .sub")).toContainText("7 households coming · 3 places left");
   await expect(page.locator(".venueline")).toContainText("Central Park");
   await expect(page.locator(".venueline a")).toHaveAttribute("href", /destination=24\.531%2C54\.432/);
@@ -589,7 +589,7 @@ test("one-place in Arabic: place name, counts, tabs", async ({ page }) => {
   await page.locator("#langBtn").click();
   await expect(page.locator(".evhead .sub")).toContainText("المنازل الحاضرة: 7 · الأماكن المتبقية: 3");   // number-safe Arabic
   await expect(page.locator(".venueline")).toContainText("الحديقة المركزية");
-  await expect(page.locator(".subtabs button")).toHaveText(["الخريطة", "منزلي"]);
+  await expect(page.locator(".subtabs button")).toHaveText(["الخريطة", "التسجيل"]);
 });
 
 test("one-place archive: households total only, no villages", async ({ page }) => {
@@ -650,4 +650,36 @@ test("one-place: FULL and then the refresh fails → form closed anyway, says Fu
   await page.locator("#go").click();
   await expect(page.locator("#msg")).toHaveText("This event is full.");
   await expect(page.locator("#form")).toHaveCount(0);
+});
+
+// ── Zee 2026-11-05: tab label, formatted descriptions ──
+test("own-entry tab: 'Sign Up' until this home is in, then 'My Sign-Up'", async ({ page }) => {
+  const eb = eventsBackend();
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
+  await expect(page.locator("#tab-mine")).toHaveText("Sign Up");
+  await page.locator("#toSignup").click();
+  await page.locator('[data-field="treats"][data-value="\\"candy\\""]').click();
+  await page.locator('[data-field="handout"][data-value="\\"door\\""]').click();
+  await page.locator("#go").click();
+  await expect(page.locator("#tab-mine")).toHaveText("My Sign-Up");
+});
+
+test("description: heading, bold, underline, bullets, numbers render; anything else stays text", async ({ page }) => {
+  const d = "## Bring a lantern\n**Free** sweets for __everyone__\n- nut-free table\n- face paint\n1. Meet at 7\n2. Walk together\n<img src=x onerror=\"window.__x=1\"> & <b>not bold</b>";
+  const eb = eventsBackend({ rpc: { jc_event_get: () => ok({ event: Object.assign({}, LIVE, { description_en: d }), mine: null, stats: null, entries: ENTRIES }) } });
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await page.locator("#descMore").click();
+  const desc = page.locator("#desc");
+  await expect(desc.locator("h3")).toHaveText("Bring a lantern");
+  await expect(desc.locator("strong")).toHaveText("Free");
+  await expect(desc.locator("u")).toHaveText("everyone");
+  await expect(desc.locator("ul li")).toHaveText(["nut-free table", "face paint"]);
+  await expect(desc.locator("ol li")).toHaveText(["Meet at 7", "Walk together"]);
+  await expect(desc.locator("img, b")).toHaveCount(0);                          // typed tags are text
+  await expect(desc).toContainText('<img src=x onerror="window.__x=1"> & <b>not bold</b>');
+  expect(await page.evaluate(() => window.__x)).toBeUndefined();
 });

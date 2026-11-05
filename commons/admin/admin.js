@@ -52,6 +52,7 @@ var HALLOWEEN = { fields: {
     labels_ar: { front: "البوابة الأمامية", garden: "بوابة الحديقة (جهة المنتزه)", both: "البوابتان" } }
 } };
 var FEATURES = ["giant_switch", "supply", "crowd_reports"];
+var REQ = '<span class="req" aria-hidden="true">*</span>';   /* needed before publishing */
 
 /* T5.2 2c — "New event" starts from a template (plan amendment A5). A template only
    pre-fills: kind, look, questions, switches, spots — the organizer changes anything.
@@ -283,13 +284,18 @@ var VIEWS = {
     el("view").innerHTML =
       '<h1>' + esc(jcT(ed.ev ? "ed_edit" : "ed_new")) + '</h1>' +
       '<form class="panel" id="form" novalidate data-no-autoreload>' +
-        '<label>' + esc(jcT("ed_title_en")) + '<input id="title_en" type="text" maxlength="120" required dir="ltr"></label>' +
+        '<p class="help">' + REQ + ' ' + esc(jcT("ed_req_note")) + '</p>' +
+        '<label>' + esc(jcT("ed_title_en")) + REQ + '<input id="title_en" type="text" maxlength="120" required aria-required="true" dir="ltr"></label>' +
         '<label>' + esc(jcT("ed_title_ar")) + '<input id="title_ar" type="text" maxlength="120" dir="rtl"></label>' +
         '<label>' + esc(jcT("ed_slug")) + '<input id="slug" type="text" maxlength="41" autocapitalize="none" spellcheck="false"' +
           (draft ? '' : ' disabled') + '></label>' +
         '<p class="help">' + esc(jcT("ed_slug_help")) + '</p>' +
+        /* formatting toolbar + preview (rich.js) — the text stays plain, markers only */
         '<label>' + esc(jcT("ed_desc_en")) + '<textarea id="description_en" maxlength="2000" dir="ltr"></textarea></label>' +
+        '<div class="richpreview" id="prev_en" dir="ltr" hidden></div>' +
         '<label>' + esc(jcT("ed_desc_ar")) + '<textarea id="description_ar" maxlength="2000" dir="rtl"></textarea></label>' +
+        '<div class="richpreview" id="prev_ar" dir="rtl" hidden></div>' +
+        '<p class="help">' + esc(jcT("rich_help")) + '</p>' +
         '<div class="dates"><label>' + esc(jcT("ed_starts")) + '<input id="starts_at" type="datetime-local"></label>' +
           '<label>' + esc(jcT("ed_ends")) + '<input id="ends_at" type="datetime-local"></label></div>' +
         '<p class="help">' + esc(jcT("ed_time_help")) + '</p>' +
@@ -308,9 +314,9 @@ var VIEWS = {
         '</fieldset>' +
         '<fieldset id="venueBox" hidden><legend>' + esc(jcT("ed_venue")) + '</legend>' +
           '<p class="notice">' + esc(jcT("ed_jicm")) + '</p>' +
-          '<label>' + esc(jcT("ed_venue_name_en")) + '<input id="venue_name_en" type="text" maxlength="120" dir="ltr"></label>' +
+          '<label>' + esc(jcT("ed_venue_name_en")) + REQ + '<input id="venue_name_en" type="text" maxlength="120" aria-required="true" dir="ltr"></label>' +
           '<label>' + esc(jcT("ed_venue_name_ar")) + '<input id="venue_name_ar" type="text" maxlength="120" dir="rtl"></label>' +
-          '<p class="help">' + esc(jcT("ed_venue_pin_help")) + '</p>' +
+          '<p class="help" id="venuePinHelp">' + esc(jcT("ed_venue_pin_label")) + REQ + ' ' + esc(jcT("ed_venue_pin_help")) + '</p>' +
           pinMapHtml() +
           '<div class="row"><button type="button" class="btn ghost" id="setVenue">' + esc(jcT("ed_venue_here")) + '</button></div>' +
           '<p class="help" id="venueState" role="status"></p>' +
@@ -337,6 +343,8 @@ var VIEWS = {
     ["title_en", "title_ar", "slug", "description_en", "description_ar"].forEach(function(k){
       el(k).value = el(k).defaultValue = ev[k] || "";
     });
+    jcRichToolbar(el("description_en"), el("prev_en"));
+    jcRichToolbar(el("description_ar"), el("prev_ar"));
     el("starts_at").value = el("starts_at").defaultValue = toLocalInput(ev.starts_at);
     el("ends_at").value = el("ends_at").defaultValue = toLocalInput(ev.ends_at);
     var feats0 = ed.ev ? ev.features : ed.tpl && ed.tpl.features;      /* a template pre-sets switches */
@@ -500,6 +508,12 @@ function act(a, id, b){
   if (a === "signups") return openSignups(e);
   if (a === "admins") return toggleAdmins(id);
   if (a === "close") { closing = closing === id ? null : id; admining = null; adminsData = null; show("home"); if (el("closeSlug")) el("closeSlug").focus(); return; }
+  if (a === "publish" && e.kind === "venue" && (!e.venue_name_en || e.venue_lat == null)) {
+    /* say what's missing before asking the server (which refuses with NO_VENUE anyway) */
+    var miss = [!e.venue_name_en ? jcT("ed_venue_name_en") : null, e.venue_lat == null ? jcT("ed_venue_pin_label") : null].filter(Boolean);
+    var m = el("msg"); m.className = "msg err"; m.textContent = jcFmt("adm_publish_missing", { list: miss.join(", ") });
+    return m.scrollIntoView({ block: "nearest" });
+  }
   if (a === "publish" && !window.confirm(jcFmt("adm_publish_confirm", { t: title(e) }))) return;
   var call = a === "publish" ? rpc("jc_admin_event_publish", { p_event: id })
     : rpc("jc_admin_event_signups", { p_event: id, p_open: a === "open" });
@@ -1128,13 +1142,41 @@ function drawPreview(){
   }).join("") + '</ol>' : '<p class="help">' + esc(jcT("ed_q_none")) + '</p>';
 }
 
+/* What publishing (or opening sign-ups) still needs — the server's rule, said up front (Zee,
+   2026-11-05: it saved, and only Publish said something was missing). Draft saves stay allowed. */
+function missingForPublish(){
+  var miss = [];
+  if (kindNow() === "venue") {
+    if (!el("venue_name_en").value.trim()) miss.push({ id: "venue_name_en", label: jcT("ed_venue_name_en") });
+    if (!ed.venue) miss.push({ id: "venuePinHelp", label: jcT("ed_venue_pin_label") });
+  }
+  return miss;
+}
+function markMissing(miss){
+  Array.prototype.forEach.call(document.querySelectorAll("#form .missing"), function(n){ n.classList.remove("missing"); n.removeAttribute("aria-invalid"); });
+  miss.forEach(function(m){ var n = el(m.id); if (n) { n.classList.add("missing"); n.setAttribute("aria-invalid", "true"); } });
+}
+
 /* Only what changed goes to the server (premortem #1); a new event sends what's filled. */
 function saveEvent(){
   var ev = ed.ev, orig = ev || {};
   var draft = !ev || ev.status === "draft";
   var f = {};
   var title_en = el("title_en").value.trim();
-  if (!title_en) return showErr("TITLE_REQUIRED");
+  markMissing(title_en ? [] : [{ id: "title_en" }]);
+  if (!title_en) { el("title_en").focus(); return showErr("TITLE_REQUIRED"); }
+  var miss = missingForPublish();
+  var missText = miss.map(function(m){ return m.label; }).join(", ");
+  markMissing(miss);
+  if (miss.length) {
+    if (draft) {
+      /* a draft may be saved half-done — but never silently */
+      if (!window.confirm(jcFmt("ed_missing_confirm", { list: missText }))) { el(miss[0].id).scrollIntoView({ block: "center" }); return showErr("MISSING_FOR_PUBLISH"); }
+    } else {
+      el(miss[0].id).scrollIntoView({ block: "center" });
+      return showErr("NO_VENUE");                     /* a live event can't lose its place (server says so too) */
+    }
+  }
   var slug = el("slug").value.trim();
   if (draft && !/^[a-z][a-z0-9-]{1,40}$/.test(slug)) return showErr("BAD_SLUG");
   function text(k){ var v = el(k).value.trim(); return v === "" ? null : v; }
@@ -1191,7 +1233,8 @@ function saveEvent(){
   if (ev && !Object.keys(f).length) return showOk(jcT("adm_nothing"));
   busy("save", true);
   rpc("jc_admin_event_save", { p_event: ev ? ev.id : null, p_fields: f }).then(function(list){
-    events = list; ed = null; show("home"); showOk(jcT("adm_saved"));
+    events = list; ed = null; show("home");
+    showOk(miss.length ? jcFmt("adm_saved_draft_missing", { list: missText }) : jcT("adm_saved"));
   }, function(err){ busy("save", false); fail(err); });
 }
 

@@ -81,7 +81,7 @@ test("move pin just for this event: confirm names the home; Undo puts the old pi
   await page.goto("admin/");
   await openSignups(page, "test-event");
   await card(page, "12").locator('[data-su="pin"]').click();
-  await expect(page.locator("h1")).toHaveText("Move pin");
+  await expect(page.locator("h1")).toHaveText("Move Pin");
   await expect(page.locator(".sub")).toHaveText("Villa 12 · Ain Al Maha");
   await expect(page.locator("#pmReset")).toHaveCount(0);                          // no event pin yet
   let asked = "";
@@ -130,7 +130,7 @@ test("declining the pin confirm sends nothing", async ({ page }) => {
   await card(page, "12").locator('[data-su="pin"]').click();
   page.once("dialog", (d) => d.dismiss());
   await page.locator("#pmHome").click();
-  await expect(page.locator("h1")).toHaveText("Move pin");
+  await expect(page.locator("h1")).toHaveText("Move Pin");
   expect(calls.filter((c) => c.name === "jc_admin_home_pin_set")).toHaveLength(0);
 });
 

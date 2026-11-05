@@ -17,7 +17,7 @@ test("resident: the form says it goes with the home; sends kind + text + page; c
     jc_feedback_send: (a) => (a.p_body === "spam" && fails-- > 0 ? raise("RATE_LIMITED") : ok({ ok: true })) } });
   await signIn(page);
   await page.goto("home/?tab=account#feedback");
-  await expect(page.locator("#feedback h2")).toHaveText("Ideas & feedback");
+  await expect(page.locator("#feedback h2")).toHaveText("Ideas & Feedback");
   await expect(page.locator("#feedback .help")).toContainText("Sent with your home (Villa 12) so we can follow up. Only the person who runs Commons reads it.");
   await page.locator("#fbSend").click();
   await expect(page.locator("#msg")).toHaveText("Write something first.");
@@ -49,7 +49,7 @@ test("hub footer links members to the feedback form", async ({ page }) => {
   await stubBackend(page, {});
   await signIn(page);
   await expect(page.locator("#fbLink")).toHaveAttribute("href", "home/?tab=account#feedback");
-  await expect(page.locator("#fbLink")).toHaveText("Ideas & feedback");
+  await expect(page.locator("#fbLink")).toHaveText("Ideas & Feedback");
 });
 
 test("owner: inbox shows unread first, text as text, marks read / unread", async ({ page }) => {
@@ -57,9 +57,9 @@ test("owner: inbox shows unread first, text as text, marks read / unread", async
   const { calls } = await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await page.goto("admin/");
-  await expect(page.locator("#fbOpen")).toHaveText("Feedback inbox · 1 unread");
+  await expect(page.locator("#fbOpen")).toHaveText("Feedback Inbox · 1 Unread");
   await page.locator("#fbOpen").click();
-  await expect(page.locator("h1")).toHaveText("Feedback inbox");
+  await expect(page.locator("h1")).toHaveText("Feedback Inbox");
   await expect(page.locator(".fblist li")).toHaveCount(2);
   await expect(page.locator(".fblist li").first().locator(".fbbody")).toHaveText("A dog park near North?\n<b>please</b>");
   await expect(page.locator(".fblist li b")).toHaveCount(0);                    // resident text never becomes markup
@@ -71,7 +71,7 @@ test("owner: inbox shows unread first, text as text, marks read / unread", async
   await page.locator('[data-fb="f1"]').click();
   await expect(page.locator(".sub")).toHaveText("1 unread");
   await page.locator("#jcBackBtn").click();
-  await expect(page.locator("#fbOpen")).toHaveText("Feedback inbox · 1 unread");
+  await expect(page.locator("#fbOpen")).toHaveText("Feedback Inbox · 1 Unread");
 });
 
 test("not the owner: no inbox button, even for a community admin", async ({ page }) => {
@@ -89,7 +89,7 @@ test("owner with no organizer code still reaches the inbox — right subtitle, n
   await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await page.goto("admin/");
-  await expect(page.locator("#fbOpen")).toHaveText("Feedback inbox · 1 unread");
+  await expect(page.locator("#fbOpen")).toHaveText("Feedback Inbox · 1 Unread");
   await expect(page.locator("#code")).toHaveCount(0);
   await expect(page.locator(".sub")).toHaveText("You run Commons: feedback from every community comes here.");
   await expect(page.locator("#msg")).toBeEmpty();
@@ -104,7 +104,7 @@ test("the unread count arriving late never wipes a half-typed banner", async ({ 
   await signIn(page);
   await page.goto("admin/");
   await page.locator("#bannerText").fill("Typing before the count lands");
-  await expect(page.locator("#fbOpen")).toHaveText("Feedback inbox · 1 unread");
+  await expect(page.locator("#fbOpen")).toHaveText("Feedback Inbox · 1 Unread");
   await expect(page.locator("#bannerText")).toHaveValue("Typing before the count lands");
 });
 
@@ -124,5 +124,5 @@ test("hub feedback link isn't duplicated by a language switch", async ({ page })
   await page.locator("#langBtn").click();
   await page.locator("#langBtn").click();
   await expect(page.locator("#fbLink")).toHaveCount(1);
-  await expect(page.locator("#fbLink")).toHaveText("Ideas & feedback");
+  await expect(page.locator("#fbLink")).toHaveText("Ideas & Feedback");
 });

@@ -148,11 +148,14 @@ var VIEWS = {
       '<div class="evhead"><h1>' + esc(title(ev)) + '</h1>' +
         '<p class="sub">' + esc([fmtDate(ev.starts_at), jcT(ev.signups_open ? "ev_open" : "ev_closed"), count].join(" · ")) + '</p>' +
         /* two lines, then "More" — the map stays above the fold (Zee, 2026-11-04) */
-        (desc(ev) ? '<p class="desc" id="desc" dir="auto">' + esc(desc(ev)) + '</p>' +
+        /* formatted with the editor's markers — jcRich escapes everything first (rich.js) */
+        (desc(ev) ? '<div class="desc rich" id="desc" dir="auto">' + jcRich(desc(ev)) + '</div>' +
           '<button type="button" class="more" id="descMore" hidden>' + esc(jcT("ev_more")) + '</button>' : '') + '</div>' +
       '<div class="subtabs" role="tablist">' + tabs.map(function(t){
+        /* my own entry: "Sign Up" until this home is in, then "My Sign-Up" (Zee, 2026-11-05) */
+        var key = t !== "mine" ? "ev_tab_" + t : (data.mine && data.mine.status === "in" ? "ev_tab_mine" : "ev_tab_signup");
         return '<button type="button" role="tab" id="tab-' + t + '" aria-selected="' + (tab === t) + '">' +
-          esc(jcT("ev_tab_" + t)) + '</button>';
+          esc(jcT(key)) + '</button>';
       }).join("") + '</div>' +
       msgBox() +
       '<div id="body"></div>';

@@ -104,3 +104,8 @@ label.check span small{display:block; color:var(--jc-muted); font-size:12.5px; f
 .fbkind{font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:var(--jc-accent)}
 .fbhead small, .fbpage{color:var(--jc-muted); font-size:12.5px}
 .fbbody{margin:0; white-space:pre-wrap; overflow-wrap:anywhere; font-size:14.5px}
+
+/* required fields (Zee, 2026-11-05): * = needed before publishing; missing ones highlighted on Save */
+.req{color:var(--jc-accent); font-weight:800; margin-inline-start:3px}
+#form .missing, #form input.missing{border-color:var(--jc-danger) !important; box-shadow:0 0 0 1px var(--jc-danger)}
+#form p.missing{color:var(--jc-danger)}
