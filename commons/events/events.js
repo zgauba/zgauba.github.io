@@ -104,17 +104,17 @@ var VIEWS = {
          no status pill — the button says it. Past: the whole card opens the numbers. */
       function row(e){
         var url = "?id=" + encodeURIComponent(e.id);
-        var line = [fmtDate(e.starts_at), isVenue(e)
+        var soon = e.coming_soon && e.status !== "archived";              /* T5.4: the badge says it; no count yet */
+        var line = [fmtDate(e.starts_at), soon ? null : isVenue(e)
           /* households_in = every "in" household, as the event page counts (homes_in skips hidden ones) */
           ? (e.status === "archived" ? jcFmt("ev_came", { n: e.homes_in || 0 })
              : comingLine(e.households_in != null ? e.households_in : (e.homes_in || 0), {}, e.full))
           : jcFmt("ev_homes_in", { n: e.homes_in || 0 })];
         if (isVenue(e) && placeName(e)) line.splice(1, 0, jcFmt("ev_at", { v: placeName(e) }));
         if (e.status === "archived") line.push(jcT("ev_see_numbers"));
-        else if (e.coming_soon) line.push(jcT("ev_soon"));                 /* T5.4 */
-        else if (!e.signups_open) line.push(jcT("ev_closed"));
+        else if (!soon && !e.signups_open) line.push(jcT("ev_closed"));
         if (e.my_status === "in") line.push(jcT("ev_mine"));
-        var info = (e.coming_soon && e.status !== "archived" ? '<span class="soon">' + esc(jcT("coming_soon")) + '</span>' : '') +
+        var info = (soon ? '<span class="soon">' + esc(jcT("coming_soon")) + '</span>' : '') +
           '<b>' + esc(title(e)) + '</b><small>' + esc(line.filter(Boolean).join(" · ")) + '</small>';
         if (e.status === "archived") {
           return '<li data-event="' + esc(e.slug) + '"><a class="evcard" href="' + url + '"><span>' + info + '</span></a></li>';
@@ -446,7 +446,8 @@ function renderMap(entries){
       '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
     (unpinned ? '<p class="help" id="mapAfter" style="margin-top:8px">' + esc(unpinned) + ' · ' + esc(jcT("ev_unpinned")) +
       ' — <a href="#" id="seeList">' + esc(jcT("ev_list")) + '</a></p>' : '') +
-    (venue ? '<p class="help venueline" id="mapAfter" dir="auto">📍 <b>' + esc(placeName(ev) || jcT("ev_the_place")) + '</b>' +
+    (venue && !entries.length && ev.coming_soon ? '<p class="help venueline" id="mapAfter">📍 ' + esc(jcT("ev_place_tba")) + '</p>' :
+     venue ? '<p class="help venueline" id="mapAfter" dir="auto">📍 <b>' + esc(placeName(ev) || jcT("ev_the_place")) + '</b>' +
       (entries.length ? ' — <a target="_blank" rel="noopener" href="' + esc(directionsUrl(entries[0])) + '">' + esc(jcT("ev_directions")) + '</a>' : '') +
       '</p>' : '');
   on("seeList", function(e){ e.preventDefault(); el("tab-list").click(); });

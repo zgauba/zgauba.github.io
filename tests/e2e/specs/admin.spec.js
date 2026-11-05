@@ -764,7 +764,8 @@ test("coming soon: a one-place draft with no place goes on the list; opening sig
   await row.locator('[data-act="announce"]').click();
   expect(asked).toContain("Everything saved so far");
   await expect(page.locator("#msg")).toHaveText("On the list as coming soon. Open sign-ups when it's ready.");
-  await expect(row.locator("small")).toContainText("Coming soon — residents see it, sign-ups not open yet");
+  await expect(row.locator("small")).toContainText("Coming Soon — residents see it, sign-ups not open yet");
+  expect(calls.filter((c) => c.name === "jc_admin_event_announce").pop().args).toEqual({ p_event: "99999999-9999-4999-8999-999999999999" });
   await row.locator('[data-act="open"]').click();
   await expect(page.locator("#msg")).toHaveText("Before you can open sign-ups, add: Place name (English), Pin on the map. Tap Edit to finish it.");
   expect(calls.filter((c) => c.name === "jc_admin_event_signups")).toHaveLength(0);
@@ -776,12 +777,22 @@ test("coming soon: a one-place draft with no place goes on the list; opening sig
   await page.locator("#save").click();
   expect(asked2).toContain("It stays coming soon");
   await expect(page.locator("#msg")).toHaveText("Saved — still coming soon. Before you can open sign-ups, add: Place name (English), Pin on the map.");
+  // once the place is there, Open Sign-Ups works and the event is open
+  Object.assign(ab.st.events.find((e) => e.slug === "fair"), { venue_name_en: "Central Park", venue_lat: 24.531, venue_lng: 54.432 });
+  await page.reload();
+  await page.locator('li[data-event="fair"] [data-act="open"]').click();
+  await expect(page.locator("#msg")).toHaveText("Sign-ups are open.");
+  await expect(page.locator('li[data-event="fair"] small')).toContainText("Live · sign-ups open");
 });
 
-test("coming soon: event admins can't announce (organizers only)", async ({ page }) => {
-  const ab = adminBackend({ adminEvents: ["33333333-3333-4333-8333-333333333333"] });
+test("coming soon: event admins can't announce, but can open sign-ups on an announced event", async ({ page }) => {
+  const ab = adminBackend({ adminEvents: ["33333333-3333-4333-8333-333333333333", "44444444-4444-4444-8444-444444444444"] });
+  Object.assign(ab.st.events.find((e) => e.slug === "test-event"), { signups_open: false, coming_soon: true });
   await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await page.goto("admin/");
   await expect(page.locator('li[data-event="national-day-2026"] [data-act="announce"]')).toHaveCount(0);
+  await expect(page.locator('li[data-event="test-event"] [data-act="open"]')).toHaveCount(1);
+  await page.locator('li[data-event="test-event"] [data-act="open"]').click();
+  await expect(page.locator("#msg")).toHaveText("Sign-ups are open.");
 });
