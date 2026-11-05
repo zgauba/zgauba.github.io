@@ -99,9 +99,9 @@ function renderPicker(){
 
 var hubHome = null;      /* the member's home (jc_me_get) — for the greeting */
 function renderHub(){
-  var cfg = cfgFor(hubCommunity);
-  document.title = nameOf(cfg);
-  el("brand").textContent = nameOf(cfg);
+  var cfg = cfgFor(hubCommunity), name = jcCommunityName(cfgs[hubCommunity], hubCommunity);
+  document.title = name;
+  el("brand").textContent = name;
   el("tagline").textContent = hubHome ? jcFmt("hub_hello", { h: jcHomeLabel(hubHome) }) : jcT("tagline");
   var mods = cfg.modules || {};
   /* The Community (map + directory) has no module flag; it lands later in T5 */

@@ -1267,7 +1267,7 @@ function loadHome(){
 
 /* ---------- boot ---------- */
 function paint(){
-  var name = cfg ? (ar() ? (cfg.name_ar || cfg.name_en) : cfg.name_en) : jcT("brand");
+  var name = jcCommunityName(cfg, state && state.me && state.me.community);
   el("homeLink").textContent = name;
   el("langBtn").textContent = jcT("toggle_label");
   document.title = jcT("adm_title") + " — " + name;

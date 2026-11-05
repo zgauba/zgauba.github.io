@@ -729,3 +729,63 @@ test("coming soon: a closed event never shows the badge", async ({ page }) => {
   await page.goto("events/");
   await expect(page.locator(".soon")).toHaveCount(0);
 });
+
+// Zee 2026-11-05: Sign Up label invisible on desktop — `a:visited` (more specific than .btn) painted the
+// label accent-on-accent once the link had been opened. Browsers hide :visited from getComputedStyle,
+// so check the loaded rules: every :visited color rule must be matched by a.btn:visited / a.btn.ghost:visited.
+test("link-buttons keep their label color after the link is visited", async ({ page }) => {
+  const eb = eventsBackend();
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/");
+  await expect(page.locator(".evacts a.btn").first()).toBeVisible();
+  const visited = await page.evaluate(() => {
+    const out = {};
+    for (const sh of document.styleSheets) {
+      let rules; try { rules = sh.cssRules; } catch (e) { continue; }
+      for (const r of rules) {
+        if (!r.selectorText || !r.style.color) continue;
+        r.selectorText.split(",").map((s) => s.trim()).filter((s) => s.includes(":visited"))
+          .forEach((s) => { out[s] = r.style.color.trim(); });
+      }
+    }
+    return out;
+  });
+  expect(visited["a:visited"]).toBeTruthy();                       // the rule that caused it is still there
+  expect(visited["a.btn:visited"]).toBe("var(--jc-accent-ink)");
+  expect(visited["a.btn.ghost:visited"]).toBe("var(--jc-ink)");
+});
+
+// Zee 2026-11-05: every page drew "Jubail Commons" until the config arrived, then the real name
+// ("E2E Test Commons") — a flash of the wrong community. Now: last name seen, else neutral "Commons".
+test("header never flashes another community's name while the config loads", async ({ page }) => {
+  const eb = eventsBackend();
+  const E2E = Object.assign({}, CONFIG, { id: "e2e", name_en: "E2E Test Commons", name_ar: "كومنز التجربة" });
+  let release, gate;
+  const hold = () => { gate = new Promise((r) => { release = r; }); };
+  hold();
+  await stubBackend(page, { rpc: Object.assign({}, eb.rpc, { jc_config_get: () => gate.then(() => ok(E2E)) }) });
+  await signIn(page);
+  await page.evaluate(() => localStorage.removeItem("jc_name"));
+  hold();
+  await page.goto("events/");
+  await expect(page.locator("#homeLink")).toHaveText("Commons");                 // nothing saved yet: neutral
+  await page.waitForTimeout(300);
+  await expect(page.locator("#homeLink")).toHaveText("Commons");                 // …and stays so while loading
+  release();
+  await expect(page.locator("#homeLink")).toHaveText("E2E Test Commons");
+  hold();
+  await page.goto("events/?id=" + LIVE_ID);
+  await expect(page.locator("#homeLink")).toHaveText("E2E Test Commons");        // next page: right name at once
+  release();
+});
+
+test("tab bar is slim (≤ 56px) and each tab is still ≥ 44px to tap", async ({ page }) => {
+  const eb = eventsBackend();
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/");
+  const bar = await page.locator("#tabbar").boundingBox();
+  expect(bar.height).toBeLessThanOrEqual(56);
+  for (const b of await page.locator("#tabbar a").all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
+});

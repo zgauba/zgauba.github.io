@@ -36,6 +36,10 @@ input:focus-visible, button:focus-visible, a:focus-visible{outline:2px solid var
   background:var(--jc-accent); color:var(--jc-accent-ink); cursor:pointer; text-align:center; text-decoration:none}
 .btn[disabled]{opacity:.6; cursor:progress}
 .btn.ghost{background:transparent; color:var(--jc-ink); border:1px solid var(--jc-line)}
+/* link-buttons keep their text color once visited — a:visited above is more specific than .btn and turned
+   the label accent-on-accent (invisible) on any browser that had opened the link (Zee, desktop, 2026-11-05) */
+a.btn, a.btn:visited{color:var(--jc-accent-ink)}
+a.btn.ghost, a.btn.ghost:visited{color:var(--jc-ink)}
 .links{display:flex; flex-direction:column; gap:8px; margin-top:16px; font-size:14px}
 .links button{font:inherit; background:none; border:0; padding:0; color:var(--jc-accent); cursor:pointer;
   text-align:start; text-decoration:underline}
