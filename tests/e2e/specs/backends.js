@@ -197,6 +197,32 @@ function adminEntries() {
   };
 }
 
+// ── T5.2 PR 6: jc_admin_report, shaped like the live function (2026-11-05); minutes are relative to now ──
+function healthReport(over = {}) {
+  const ago = (min) => new Date(Date.now() - min * 60000).toISOString();
+  return Object.assign({
+    generated_at: ago(0),
+    snapshot: { last_at: ago(12), age_minutes: 12, stale: false },
+    cron: { job_present: true, active: true, last_status: "succeeded", last_run_at: ago(12), last_failure: null },
+    failures_since_baseline: { admin_codes: 3, join_codes: 7, baseline_at: "2026-11-04T00:00:00Z", scope: "all communities" },
+    rate_limited_now: { admin_unlock: 0, join_pre_membership: 0 },
+    state_changes_24h: { live_state: 14, report: 3, signup: 2 },
+    notices_open: 2,
+    traffic: { hits_24h: 412, counter_suspect: false },
+    storage: { bytes: 3355443, limit_bytes: 1073741824, pct: 0.3, alert: false, scope: "whole project" },
+    maintenance: {
+      orphan_users: { last_at: ago(600), affected: 0, error: null, stale: false, never_run: false },
+      photo_purge: { last_at: ago(580), affected: 2, error: null, stale: false, never_run: false },
+    },
+  }, over);
+}
+const NOTICES = [
+  { id: 11, kind: "departure", detail: { vacant: true, self_serve: true }, created_at: "2026-11-05T08:00:00Z",
+    home: { id: "h7", village: "ain-al-maha", building: null, number: "7" } },
+  { id: 12, kind: "pin_flag", detail: { user_id: "u-secret-123" }, created_at: "2026-11-04T08:00:00Z",
+    home: { id: "h9", village: "seef-al-jubail", building: "B2", number: "304" } },
+];
+
 function adminBackend(opts = {}) {
   const st = {
     scopes: opts.scopes || [],
@@ -207,6 +233,8 @@ function adminBackend(opts = {}) {
     broadcast: opts.broadcast || "",
     owner: !!opts.owner,                      // T5.3: jc_me_get.is_owner — the feedback inbox
     feedback: opts.feedback || [],
+    report: opts.report || healthReport(),     // T5.2 PR 6
+    notices: (opts.notices || NOTICES).map((n) => Object.assign({}, n)),
     events: [
       { id: ADMIN_DRAFT_ID, slug: "national-day-2026", title_en: "National Day", title_ar: null, description_en: null, description_ar: null,
         starts_at: null, ends_at: null, status: "draft", signups_open: true, features: {}, theme: {},
@@ -345,6 +373,15 @@ function adminBackend(opts = {}) {
         st.broadcast = (a.p_text || "").trim();
         return ok({ broadcast: st.broadcast });
       },
+      // T5.2 PR 6 — community admins only (jc_assert_admin('community'))
+      jc_admin_report: () => (community() ? ok(st.report) : raise("NOT_ADMIN")),
+      jc_admin_notices_list: () => (community() ? ok(st.notices) : raise("NOT_ADMIN")),
+      jc_admin_notice_resolve: (a) => {
+        if (!community()) return raise("NOT_ADMIN");
+        if (!st.notices.some((n) => n.id === a.p_id)) return raise("NOT_FOUND");
+        st.notices = st.notices.filter((n) => n.id !== a.p_id);
+        return ok(st.notices);
+      },
       jc_admin_code_rotate: (a) => (st.scopes.includes("community")
         ? ok({ scope: a.p_scope, code: "NEWCODE" + a.p_scope.toUpperCase(), version: 2 }) : raise("NOT_ADMIN")),
     }, opts.rpc || {}),
@@ -360,5 +397,5 @@ async function signIn(page) {
 }
 
 module.exports = { eventsBackend, adminBackend, signIn, LIVE_ID, PAST_ID, SCHEMA, LIVE, PAST, ENTRIES, STATS,
-  PIN_SCHEMA, home, pinEvent, PINS_ID, HAQ_ID, DAY_ID, dayBackend,
+  PIN_SCHEMA, home, pinEvent, PINS_ID, HAQ_ID, DAY_ID, dayBackend, healthReport, NOTICES,
   ADMIN_DRAFT_ID, ADMIN_LIVE_ID, ADMIN_PAST_ID, ADMIN_MARKET_ID, ADMIN_MARKET };
