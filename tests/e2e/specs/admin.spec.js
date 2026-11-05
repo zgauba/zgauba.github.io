@@ -796,3 +796,31 @@ test("coming soon: event admins can't announce, but can open sign-ups on an anno
   await page.locator('li[data-event="test-event"] [data-act="open"]').click();
   await expect(page.locator("#msg")).toHaveText("Sign-ups are open.");
 });
+
+test("back to coming soon: offered on a published event nobody has joined; refused once homes are in", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["community"], extraEvents: [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", slug: "quiz",
+    title_en: "Quiz Night", status: "live", signups_open: true, features: {}, payload_schema: { fields: {} }, entries: 0 }] });
+  const { calls } = await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await expect(page.locator('li[data-event="test-event"] [data-act="announce"]')).toHaveCount(0);   // 3 homes in
+  const row = page.locator('li[data-event="quiz"]');
+  await expect(row.locator('[data-act="announce"]')).toHaveText("Move to Coming Soon");
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.accept(); });
+  await row.locator('[data-act="announce"]').click();
+  expect(asked).toContain("back to coming soon");
+  await expect(row.locator("small")).toContainText("Coming Soon — residents see it");
+  await expect(row.locator('[data-act="announce"]')).toHaveCount(0);
+  await expect(row.locator('[data-act="open"]')).toHaveCount(1);
+  // someone joined meanwhile (another organizer's screen): the server says why
+  ab.st.events.find((e) => e.slug === "quiz").coming_soon = false;
+  ab.st.events.find((e) => e.slug === "quiz").signups_open = true;
+  await page.reload();
+  await expect(page.locator('li[data-event="quiz"] [data-act="announce"]')).toBeVisible();   // list loaded first
+  ab.st.events.find((e) => e.slug === "quiz").entries = 1;
+  page.once("dialog", (d) => d.accept());
+  await page.locator('li[data-event="quiz"] [data-act="announce"]').click();
+  await expect(page.locator("#msg")).toHaveText("Homes have already signed up, so it can't go back to coming soon. Pause sign-ups instead.");
+  expect(calls.filter((c) => c.name === "jc_admin_event_announce")).toHaveLength(2);
+});

@@ -190,7 +190,8 @@ function adminBackend(opts = {}) {
       // T5.4: draft → coming soon (live, sign-ups closed) — organizers only, no place needed
       jc_admin_event_announce: guard((a) => {
         const e = find(a.p_event);
-        if (e.status !== "draft") return raise("BAD_STATE");
+        if (e.status !== "draft" && e.status !== "live") return raise("BAD_STATE");
+        if (e.status === "live" && e.entries) return raise("HAS_SIGNUPS");   // T5.4b
         Object.assign(e, { status: "live", signups_open: false, coming_soon: true });
         return ok(st.events);
       }),

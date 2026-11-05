@@ -488,6 +488,8 @@ function eventRow(e){
     acts = btn("edit", jcT("adm_edit"), true) +
       btn(e.signups_open ? "pause" : "open", jcT(e.signups_open ? "adm_pause_signups" : "adm_open_signups"), true) +
       btn("close", jcT("adm_close"), true) +
+      /* T5.4b: back to coming soon — organizers, while nobody has signed up (the server checks too) */
+      (isOrganizer() && !e.coming_soon && !e.entries ? btn("announce", jcT("adm_back_to_soon"), true) : '') +
       '<a class="btn ghost small" href="../events/?id=' + esc(e.id) + '">' + esc(jcT("adm_view")) + '</a>';
   }
   if (e.status === "archived") acts = '<a class="btn ghost small" href="../events/?id=' + esc(e.id) + '">' + esc(jcT("adm_numbers")) + '</a>';
@@ -518,7 +520,7 @@ function act(a, id, b){
     return m.scrollIntoView({ block: "nearest" });
   }
   if (a === "publish" && !window.confirm(jcFmt("adm_publish_confirm", { t: title(e) }))) return;
-  if (a === "announce" && !window.confirm(jcFmt("adm_announce_confirm", { t: title(e) }))) return;
+  if (a === "announce" && !window.confirm(jcFmt(e.status === "live" ? "adm_back_soon_confirm" : "adm_announce_confirm", { t: title(e) }))) return;
   var call = a === "publish" ? rpc("jc_admin_event_publish", { p_event: id })
     : a === "announce" ? rpc("jc_admin_event_announce", { p_event: id })
     : rpc("jc_admin_event_signups", { p_event: id, p_open: a === "open" });

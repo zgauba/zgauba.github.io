@@ -82,8 +82,8 @@ begin
   k := k + 2;
 
   -- ---------- C07 refusals ----------
-  v_err := pg_temp.s12_err(format('select jc_admin_event_announce(%L)', ev_v));        -- not a draft any more
-  if v_err is distinct from 'BAD_STATE' then raise exception 'FAIL C07a announce live: %', v_err; end if;
+  v_err := pg_temp.s12_err(format('select jc_admin_event_announce(%L)', ev_v));        -- live, r1 is in (T5.4b)
+  if v_err is distinct from 'HAS_SIGNUPS' then raise exception 'FAIL C07a announce live with a sign-up: %', v_err; end if;
   perform pg_temp.s12_as(r1);
   v_err := pg_temp.s12_err(format('select jc_admin_event_announce(%L)', ev_h));
   if v_err is distinct from 'NOT_ADMIN' then raise exception 'FAIL C07b resident announce: %', v_err; end if;
@@ -102,13 +102,27 @@ begin
   k := k + 1;
   execute 'reset role';
 
+  -- ---------- C11 (T5.4b) back to coming soon: allowed with no sign-ups, refused once anyone is in ----------
+  perform pg_temp.s12_as(c1);
+  v := pg_temp.s12_ev(jc_admin_event_announce(ev_h), 'lights');                 -- open, nobody in
+  if (v ->> 'signups_open')::boolean or not (v ->> 'coming_soon')::boolean then raise exception 'FAIL C11a back to soon: %', v; end if;
+  v_err := pg_temp.s12_err(format('select jc_admin_event_announce(%L)', ev_v));   -- r1 is in (C05)
+  if v_err is distinct from 'HAS_SIGNUPS' then raise exception 'FAIL C11b with a sign-up: %', v_err; end if;
+  perform pg_temp.s12_as(r1); perform jc_entry_withdraw(ev_v);                  -- withdrawn doesn't count
+  perform pg_temp.s12_as(c1);
+  v := pg_temp.s12_ev(jc_admin_event_announce(ev_v), 'picnic');
+  if not (v ->> 'coming_soon')::boolean then raise exception 'FAIL C11c after withdraw: %', v; end if;
+  k := k + 3;
+
   -- ---------- C10 closing a coming-soon event clears the flag ----------
   perform pg_temp.s12_as(c1);
   v := jc_admin_event_save(null, '{"slug": "later", "title_en": "Later"}');
   perform jc_admin_event_announce((pg_temp.s12_ev(v, 'later') ->> 'id')::uuid);
   perform jc_event_close((pg_temp.s12_ev(jc_admin_events_list(), 'later') ->> 'id')::uuid, 'later');
   if (pg_temp.s12_ev(jc_admin_events_list(), 'later') ->> 'coming_soon')::boolean then raise exception 'FAIL C10 closed still coming soon'; end if;
-  k := k + 1;
+  v_err := pg_temp.s12_err(format('select jc_admin_event_announce(%L)', (pg_temp.s12_ev(jc_admin_events_list(), 'later') ->> 'id')));
+  if v_err is distinct from 'BAD_STATE' then raise exception 'FAIL C10b closed back to soon: %', v_err; end if;
+  k := k + 2;
   execute 'reset role';
 
   -- ---------- C09 the table never holds "coming soon" with sign-ups open ----------
