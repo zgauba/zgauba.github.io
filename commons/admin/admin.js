@@ -33,6 +33,7 @@ var su = null;            /* sign-ups view (T5.2 PR 4): { ev, list (jc_admin_ent
 var pm = null;            /* pin move: { x (an entry of su.list) } */
 var owner = false;        /* jc_me_get.is_owner — the platform owner reads feedback (T5.3) */
 var fb = null;            /* jc_feedback_list: { unread, items } */
+var resolving = false;    /* a Mark Resolved is in flight */
 var health = null;        /* T5.2 PR 6: { report | null, reportErr, notices | null, noticesErr, at } */
 
 /* Halloween 2026, as residents knew it (jubail-halloween/): friendly wording and the
@@ -179,32 +180,43 @@ function loadHealth(){
     if (denied) return fail(denied);
     var rep = x[0].d && typeof x[0].d === "object" && !Array.isArray(x[0].d) ? x[0].d : null;
     health = { report: rep, reportErr: x[0].e ? (x[0].e.code || "UNKNOWN") : rep ? null : "UNKNOWN",
-               notices: Array.isArray(x[1].d) ? x[1].d : null, noticesErr: x[1].e ? (x[1].e.code || "UNKNOWN") : Array.isArray(x[1].d) ? null : "UNKNOWN",
+               /* well-formed rows only (a null row would throw while drawing — H4 / H8) */
+               notices: Array.isArray(x[1].d) ? x[1].d.filter(function(n){ return hObj(n) && Number.isSafeInteger(n.id); }) : null, noticesErr: x[1].e ? (x[1].e.code || "UNKNOWN") : Array.isArray(x[1].d) ? null : "UNKNOWN",
                at: new Date() };
+    if (current === "health") VIEWS.health();
+  }).catch(function(){
+    health = { report: null, reportErr: "UNKNOWN", notices: null, noticesErr: "UNKNOWN", at: new Date() };
     if (current === "health") VIEWS.health();
   });
 }
 function hObj(x){ return x && typeof x === "object" && !Array.isArray(x) ? x : null; }
 function hNum(x){ return typeof x === "number" && isFinite(x); }
-/* "12 min ago" / "3 h ago" / "2 days ago" from an ISO time; "" if it isn't one */
+/* "12 min ago" / "3 h ago" / "2 days ago" from an ISO time, measured against the server's own
+   clock (generated_at) so a phone with the wrong time can't make it look fresh; "" if it isn't a
+   time, or is more than 5 min in the future (review H7) */
+var hNow = 0;
 function hAgo(iso){
   var t = Date.parse(iso);
   if (!isFinite(t)) return "";
-  var m = Math.max(0, Math.round((Date.now() - t) / 60000));
+  var m = Math.round(((hNow || Date.now()) - t) / 60000);
+  if (m < -5) return "";
+  m = Math.max(0, m);
   return m < 60 ? jcFmt("adm_h_min", { n: m }) : m < 2880 ? jcFmt("adm_h_hours", { n: Math.round(m / 60) }) : jcFmt("adm_h_days", { n: Math.round(m / 1440) });
 }
 /* "3.2 MB": isolated left-to-right so Arabic text doesn't flip it into "MB 3.2" */
+function hDate(iso){ return isFinite(Date.parse(iso)) ? fmtDate(iso) : "?"; }   /* never "Invalid Date" (H11) */
 function hMB(b){ return "\u2066" + (b >= 1073741824 ? (b / 1073741824).toFixed(1).replace(/\.0$/, "") + " GB" : (b / 1048576).toFixed(1) + " MB") + "\u2069"; }
 
 /* jc_admin_report → rows of { st: ok | warn | bad | unknown | info, label, text, note } */
 function healthChecks(r){
   var rows = [];
+  hNow = isFinite(Date.parse(r.generated_at)) ? Date.parse(r.generated_at) : 0;
   function row(label, st, text, note){ rows.push({ label: jcT(label), st: st, text: text, note: note || "" }); }
   function unknown(label){ row(label, "unknown", jcT("adm_h_unknown")); }
 
   var s = hObj(r.snapshot);
   if (!s) unknown("adm_h_backup");
-  else if (s.last_at == null) row("adm_h_backup", "bad", jcT("adm_h_backup_none"));
+  else if (s.last_at === null && s.stale === true) row("adm_h_backup", "bad", jcT("adm_h_backup_none"));
   else if (s.stale === true && hAgo(s.last_at)) row("adm_h_backup", "bad", jcFmt("adm_h_backup_stale", { t: hAgo(s.last_at) }));
   else if (s.stale === false && hAgo(s.last_at)) row("adm_h_backup", "ok", jcFmt("adm_h_backup_ok", { t: hAgo(s.last_at) }));
   else unknown("adm_h_backup");
@@ -217,7 +229,9 @@ function healthChecks(r){
   else if (c.job_present !== true || c.active !== true) unknown("adm_h_cron");
   else if (c.last_status === "failed") row("adm_h_cron", "bad", jcFmt("adm_h_cron_failed", { t: hAgo(c.last_run_at) || "?" }),
     lf && typeof lf.message === "string" ? lf.message : "");
-  else if (c.last_status === "succeeded" && hAgo(c.last_run_at)) row("adm_h_cron", "ok", jcFmt("adm_h_cron_ok", { t: hAgo(c.last_run_at) }), oldFail);
+  else if (c.last_status === "succeeded" && hAgo(c.last_run_at))   /* hourly: over 3 h since the last run is late (H12) */
+    row("adm_h_cron", (hNow || Date.now()) - Date.parse(c.last_run_at) > 3 * 3600e3 ? "warn" : "ok",
+      jcFmt("adm_h_cron_ok", { t: hAgo(c.last_run_at) }), oldFail);
   else if (c.last_status === "running" || c.last_status === "starting") row("adm_h_cron", "ok", jcT("adm_h_cron_running"), oldFail);
   else if (c.last_status == null) row("adm_h_cron", "warn", jcT("adm_h_cron_never"));
   else unknown("adm_h_cron");
@@ -229,7 +243,8 @@ function healthChecks(r){
     else if (j.error) row(label, "bad", jcFmt("adm_h_job_failed", { t: hAgo(j.last_at) || "?" }), String(j.error));
     else if (j.never_run === true) row(label, "warn", jcT("adm_h_job_never"));
     else if (j.stale === true) row(label, "bad", jcFmt("adm_h_job_stale", { t: hAgo(j.last_at) || "?" }));
-    else if (j.stale === false && hAgo(j.last_at)) row(label, "ok", jcFmt("adm_h_job_ok", { t: hAgo(j.last_at), n: hNum(j.affected) ? j.affected : 0 }));
+    else if (j.stale === false && j.error === null && hNum(j.affected) && hAgo(j.last_at))   /* every field as the server sends it (H2) */
+      row(label, "ok", jcFmt("adm_h_job_ok", { t: hAgo(j.last_at), n: j.affected }));
     else unknown(label);
   });
 
@@ -244,7 +259,8 @@ function healthChecks(r){
   var t = hObj(r.traffic);
   if (!t || !hNum(t.hits_24h)) unknown("adm_h_traffic");
   else if (t.counter_suspect === true) row("adm_h_traffic", "warn", jcT("adm_h_traffic_suspect"));
-  else row("adm_h_traffic", "ok", jcFmt("adm_h_traffic_text", { n: t.hits_24h }));
+  else if (t.counter_suspect === false) row("adm_h_traffic", "ok", jcFmt("adm_h_traffic_text", { n: t.hits_24h }));
+  else unknown("adm_h_traffic");   /* the broken-counter flag missing is not "fine" (H1) */
 
   var rl = hObj(r.rate_limited_now);
   if (!rl || !hNum(rl.admin_unlock) || !hNum(rl.join_pre_membership)) unknown("adm_h_locked");
@@ -254,10 +270,11 @@ function healthChecks(r){
 
   var f = hObj(r.failures_since_baseline);
   if (!f || !hNum(f.admin_codes) || !hNum(f.join_codes)) unknown("adm_h_wrong");
-  else row("adm_h_wrong", "info", jcFmt("adm_h_wrong_text", { a: f.admin_codes, j: f.join_codes, d: fmtDate(f.baseline_at) || "?" }));
+  else row("adm_h_wrong", "info", jcFmt("adm_h_wrong_text", { a: f.admin_codes, j: f.join_codes, d: hDate(f.baseline_at) }));
 
   var sc = hObj(r.state_changes_24h);
-  if (!sc) unknown("adm_h_activity");
+  var scKeys = sc ? Object.keys(sc) : [];
+  if (!sc || (scKeys.length && !scKeys.some(function(k){ return hNum(sc[k]); }))) unknown("adm_h_activity");   /* H9 */
   else {
     var bits = Object.keys(sc).filter(function(k){ return hNum(sc[k]) && sc[k] > 0; })
       .sort(function(a, b){ return sc[b] - sc[a]; })
@@ -269,7 +286,7 @@ function healthChecks(r){
 /* "Villa 12 · Ain Al Maha" — the label only, never the account behind a notice */
 function noticeHome(h){
   h = hObj(h);
-  if (!h) return jcT("adm_h_no_home");
+  if (!h || h.number == null) return jcT("adm_h_no_home");
   return jcHomeLabel({ type: h.building ? "apartment" : "villa", number: h.number, building: h.building }) +
     (h.village ? " · " + jcVillageName(cfg, h.village) : "");
 }
@@ -571,8 +588,9 @@ var VIEWS = {
       return loadHealth();
     }
     var rows = health.report ? healthChecks(health.report) : [];
-    var issues = rows.filter(function(r){ return r.st === "bad" || r.st === "warn" || r.st === "unknown"; }).length;
-    var when = health.report && health.report.generated_at ? fmtDate(health.report.generated_at) : fmtDate(health.at.toISOString());
+    var issues = rows.filter(function(r){ return r.st === "bad" || r.st === "warn" || r.st === "unknown"; }).length +
+      (health.noticesErr ? 1 : 0);   /* notices that didn't load are unchecked, not fine (H3) */
+    var when = health.report && isFinite(Date.parse(health.report.generated_at)) ? fmtDate(health.report.generated_at) : fmtDate(health.at.toISOString());
     html += health.reportErr
       ? '<p class="hsum bad" role="status">' + esc(jcT("adm_h_failed")) + ' ' + esc(jcErrText({ code: health.reportErr })) + '</p>'
       : '<p class="hsum ' + (issues ? 'warn' : 'ok') + '" role="status">' + esc(issues ? jcFmt("adm_h_issues", { n: issues }) : jcT("adm_h_all_good")) + '</p>';
@@ -595,15 +613,23 @@ var VIEWS = {
             '<button class="mini" type="button" data-notice="' + esc(n.id) + '">' + esc(jcT("adm_h_resolve")) + '</button></li>';
         }).join("") + '</ul>');
     el("view").innerHTML = html;
-    on("healthRefresh", function(){ health = null; VIEWS.health(); });
+    on("healthRefresh", function(){ if (resolving) return; health = null; VIEWS.health(); });
     Array.prototype.forEach.call(document.querySelectorAll("[data-notice]"), function(b){
       b.addEventListener("click", function(){
-        b.disabled = true;
+        if (resolving) return;               /* one at a time: answers can't arrive out of order (H6) */
+        resolving = true; b.disabled = true;
+        var h = health;                      /* "Check Again" can't pull it out from under us (H5) */
         rpc("jc_admin_notice_resolve", { p_id: Number(b.dataset.notice) }).then(function(d){
           if (!Array.isArray(d)) throw { code: "UNKNOWN" };
-          health.notices = d;
-          if (current === "health") { VIEWS.health(); showOk(jcT("adm_h_resolved")); }
-        }).catch(function(err){ b.disabled = false; fail(err); });
+          h.notices = d.filter(function(n){ return hObj(n) && Number.isSafeInteger(n.id); });
+          if (current === "health" && health === h) { VIEWS.health(); showOk(jcT("adm_h_resolved")); }
+        }).catch(function(err){
+          b.disabled = false;
+          if (err && err.code === "NOT_FOUND" && current === "health") {   /* already resolved elsewhere: reload */
+            health = null; VIEWS.health(); return;
+          }
+          fail(err);
+        }).finally(function(){ resolving = false; });
       });
     });
   },

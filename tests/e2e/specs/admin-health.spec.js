@@ -86,16 +86,72 @@ test("the report failing says so (no rows, no ✅); the notices still load", asy
 });
 
 test("Mark Resolved removes the notice; Check Again re-runs the report", async ({ page }) => {
-  const { calls } = await openHealth(page);
+  const { ab, calls } = await openHealth(page);
   await page.locator("[data-notice='11']").click();
   await expect(page.locator(".fblist li")).toHaveCount(1);
   await expect(page.locator("h2", { hasText: "Notices" })).toHaveText("Notices (1)");
   await expect(page.locator("#msg")).toHaveText("Marked resolved.");
   expect(calls.filter((c) => c.name === "jc_admin_notice_resolve").map((c) => c.args)).toEqual([{ p_id: 11 }]);
   const n = calls.filter((c) => c.name === "jc_admin_report").length;
+  ab.st.report = healthReport({ traffic: { hits_24h: 0, counter_suspect: true } });   // something changed meanwhile
   await page.locator("#healthRefresh").click();
   await expect.poll(() => calls.filter((c) => c.name === "jc_admin_report").length).toBe(n + 1);
+  await expect(page.locator(".hsum")).toHaveText("⚠️ 1 thing(s) need a look.");
+});
+
+test("a flag the server always sends, missing, is 'couldn't check' — not ✅ (broken counter, job error)", async ({ page }) => {
+  const r = healthReport({ traffic: { hits_24h: 0 } });
+  r.maintenance.orphan_users = { last_at: r.maintenance.orphan_users.last_at, affected: 0, stale: false, never_run: false };   // no `error`
+  await openHealth(page, { report: r });
+  await expect(row(page, "Page views")).toHaveClass(/\bunknown\b/);
+  await expect(row(page, "unused accounts")).toHaveClass(/\bunknown\b/);
+});
+
+test("an empty report: nine 'couldn't check', no ✅ anywhere", async ({ page }) => {
+  await openHealth(page, { report: {} });
+  await expect(page.locator(".hrow.unknown")).toHaveCount(9);
+  await expect(page.locator(".hsum")).toHaveText("⚠️ 9 thing(s) need a look.");
+  await expect(page.locator(".hrow.ok")).toHaveCount(0);
+});
+
+test("a time in the future (wrong clock somewhere) is not 'fresh'", async ({ page }) => {
+  const r = healthReport();
+  r.snapshot = { last_at: new Date(Date.now() + 3 * 3600e3).toISOString(), age_minutes: 0, stale: false };
+  await openHealth(page, { report: r });
+  await expect(row(page, "Hourly backup copy")).toHaveClass(/\bunknown\b/);
+});
+
+test("notices that fail to load: the summary is not 'All good'", async ({ page }) => {
+  await openHealth(page, { rpc: { jc_admin_notices_list: () => raise("UNKNOWN") } });
+  await expect(page.locator(".hsum")).toHaveText("⚠️ 1 thing(s) need a look.");
+  await expect(page.locator("#view")).toContainText("Couldn't load the notices.");
+});
+
+test("a bad row in the notices is skipped, the screen still draws", async ({ page }) => {
+  const { NOTICES } = require("./backends");
+  await openHealth(page, { notices: [null, { kind: "departure" }, NOTICES[0]] });
+  await expect(page.locator(".fblist li")).toHaveCount(1);
   await expect(page.locator(".hsum")).toHaveText("✅ All good.");
+});
+
+test("resolving a notice someone else already resolved reloads the list", async ({ page }) => {
+  const { ab, calls } = await openHealth(page);
+  ab.st.notices = ab.st.notices.filter((n) => n.id !== 11);   // another admin got there first
+  await page.locator("[data-notice='11']").click();
+  await expect(page.locator(".fblist li")).toHaveCount(1);
+  await expect(page.locator("h2", { hasText: "Notices" })).toHaveText("Notices (1)");
+  expect(calls.filter((c) => c.name === "jc_admin_notices_list").length).toBeGreaterThan(1);
+});
+
+test("the grant expired meanwhile (NOT_ADMIN): back to the lock, nothing half-drawn", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["community"] });
+  await stubBackend(page, { rpc: Object.assign({}, ab.rpc, {
+    jc_admin_report: () => { ab.st.scopes = []; return raise("NOT_ADMIN"); } }) });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator("#healthOpen").click();
+  await expect(page.locator("#code")).toBeVisible();
+  await expect(page.locator(".hrow")).toHaveCount(0);
 });
 
 test("only community admins get the button; back returns to Organizer Tools", async ({ page }) => {
