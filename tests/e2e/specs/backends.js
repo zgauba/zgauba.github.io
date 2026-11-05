@@ -109,6 +109,8 @@ function adminBackend(opts = {}) {
     links: [],                                // open grant links: { id, token, event }
     entries: adminEntries(),                  // T5.2 PR 4: jc_admin_entries_list per event
     broadcast: opts.broadcast || "",
+    owner: !!opts.owner,                      // T5.3: jc_me_get.is_owner — the feedback inbox
+    feedback: opts.feedback || [],
     events: [
       { id: ADMIN_DRAFT_ID, slug: "national-day-2026", title_en: "National Day", title_ar: null, description_en: null, description_ar: null,
         starts_at: null, ends_at: null, status: "draft", signups_open: true, features: {}, theme: {},
@@ -132,6 +134,8 @@ function adminBackend(opts = {}) {
   const visible = () => (admin() ? st.events : st.events.filter((e) => st.adminEvents.includes(e.id)));
   const adminsList = () => ok({ admins: st.admins, links: st.links.map((l) => ({ id: l.id, expires_at: "2026-11-07T10:00:00Z" })) });
   const find = (id) => st.events.find((e) => e.id === id);
+  const fbList = () => ({ unread: st.feedback.filter((f) => !f.read).length,
+    items: st.feedback.slice().sort((a, b) => (a.read - b.read) || (a.created_at < b.created_at ? 1 : -1)) });
   // an entry write: the entry's own event decides; returns that event's list (like the server)
   const entryWrite = (id, fn) => {
     const ev = Object.keys(st.entries).find((k) => st.entries[k].some((x) => x.id === id));
@@ -145,7 +149,16 @@ function adminBackend(opts = {}) {
   return {
     st,
     rpc: Object.assign({
-      jc_me_get: (a, c) => (c.signedIn ? ok(Object.assign({}, MEMBER, { admin_scopes: st.scopes, admin_events: st.adminEvents })) : raise("NOT_SIGNED_IN")),
+      jc_me_get: (a, c) => (c.signedIn ? ok(Object.assign({}, MEMBER, { admin_scopes: st.scopes, admin_events: st.adminEvents, is_owner: st.owner })) : raise("NOT_SIGNED_IN")),
+      // T5.3 — the owner's inbox (as the server: unread first, then newest)
+      jc_feedback_list: () => (st.owner ? ok(fbList()) : raise("NOT_OWNER")),
+      jc_feedback_mark_read: (a) => {
+        if (!st.owner) return raise("NOT_OWNER");
+        const f = st.feedback.find((x) => x.id === a.p_id);
+        if (!f) return raise("NOT_FOUND");
+        f.read = a.p_read !== false;
+        return ok(fbList());
+      },
       jc_admin_unlock: (a) => {
         const map = { "EVENTS-CODE-1": ["events"], "COMMUNITY-1": ["community"], "PETS-1": ["pets"] };
         if (!map[a.p_code]) return ok({ error: "BAD_ADMIN" });   // T3: wrong code is a 200 with an error body

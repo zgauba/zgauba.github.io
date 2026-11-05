@@ -108,7 +108,7 @@ async function stubBackend(page, opts = {}) {
       const name = url.pathname.split("/").pop();
       calls.push({ kind: "rpc", name, args, signedIn });
       const h = rpcHandlers[name];
-      res = h ? h(args, { signedIn }) : { status: 404, body: { message: "NO_STUB " + name } };
+      res = h ? await h(args, { signedIn }) : { status: 404, body: { message: "NO_STUB " + name } };   // a handler may answer late (a Promise)
     } else if (url.pathname === "/auth/v1/signup") {
       calls.push({ kind: "auth", name: "signup", args, signedIn });
       res = authHandlers.signup(args);
