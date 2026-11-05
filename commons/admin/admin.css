@@ -109,3 +109,7 @@ label.check span small{display:block; color:var(--jc-muted); font-size:12.5px; f
 .req{color:var(--jc-accent); font-weight:800; margin-inline-start:3px}
 #form .missing, #form input.missing{border-color:var(--jc-danger) !important; box-shadow:0 0 0 1px var(--jc-danger)}
 #form p.missing{color:var(--jc-danger)}
+/* PR 5a: per-choice "allergy-friendly" — the icon shows teal on the map */
+.choice .allergy{flex:0 0 auto; display:inline-flex; align-items:center; gap:4px; cursor:pointer}
+.choice .allergy input{flex:0 0 auto; min-width:auto}
+.tealdot{display:inline-block; width:12px; height:12px; border-radius:50%; background:var(--jc-info)}

@@ -4,7 +4,7 @@
                          see docs/brand.md — replace values, never variable names).
    2. [data-community] — per-community overrides, applied at runtime from the
                          community's config row (brand lives in the DB).
-   3. [data-theme]     — per-event overlays (e.g. haq-al-laila), applied on top.
+   3. [data-look]      — per-event looks (halloween, haq_al_laila, …), applied on top.
    Modules style against variables only — never raw colors.
 
    OVERRIDE GUARDRAIL — layers 2 and 3 may set accent, brand-deep, surfaces,
@@ -57,12 +57,27 @@
   --jc-accent-ink:#fbf7ef;    /* #06231b on deep green is 2.59:1 — light ink required here */
 }
 
-/* Event-theme overlay example (values land with the event module) */
-[data-theme="haq-al-laila"]{
-  --jc-bg:#131129;
-  --jc-surface:#1b1838;
-  --jc-accent:#e8c05a;
+/* Pin rings (T5.2 PR 5a): the question marked "ring" colours each pin's border, one colour
+   per choice in order. Kept clear of the four signals and of the looks' accents. */
+:root{
+  --jc-ring-0:#ffffff; --jc-ring-1:#b388ff; --jc-ring-2:#ff7eb6;
+  --jc-ring-3:#7cc4ff; --jc-ring-4:#c6f36b; --jc-ring-5:#111111;
 }
+
+/* Event looks (T5.2 PR 5a) — layer 3: the event page sets html[data-look] from the
+   event's `look`; an events-list card carries its own data-look. "plain" = no overlay.
+   Same guardrail: never the four signals. */
+[data-look="halloween"]{
+  --jc-bg:#15101c; --jc-surface:#201a2b; --jc-surface-2:#2b2338; --jc-line:#3a3150;
+  --jc-accent:#f28c28; --jc-accent-ink:#1a0d00; --jc-brand-deep:#3a1f4d;
+}
+[data-look="haq_al_laila"]{     /* deep navy + lantern gold (Zee's concept, Oct 2026) */
+  --jc-bg:#131129; --jc-surface:#1b1838; --jc-surface-2:#252148; --jc-line:#36316b;
+  --jc-accent:#e8c05a; --jc-accent-ink:#1a1400; --jc-brand-deep:#2a2560;
+}
+[data-look="gathering"]{ --jc-accent:#e8956a; --jc-accent-ink:#2a1206; }
+[data-look="market"]{ --jc-accent:#d9a441; --jc-accent-ink:#241800; }
+[data-look="yard_sale"]{ --jc-accent:#6fb3e8; --jc-accent-ink:#06192a; }
 
 /* RTL: layout must flow from direction, not from side-specific rules.
    Use margin-inline / padding-inline / inset-inline in all Commons CSS. */

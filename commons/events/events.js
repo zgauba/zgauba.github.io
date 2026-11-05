@@ -76,9 +76,75 @@ function whatsappUrl(){
   return (typeof u === "string" && /^https:\/\/(chat\.whatsapp\.com|wa\.me)\/[A-Za-z0-9_\/+-]+$/.test(u)) ? u : null;
 }
 
+/* ---------- looks + pins (T5.2 PR 5a) ----------
+   Look = a preset the app knows (colours in tokens.css, a mark here); anything else is plain.
+   Pins (Halloween parity): FILL = availability (look colour · dark with a red ? = neighbors say
+   they're out · grey = done), RING = the question marked "ring", ICON = the question marked "glyph";
+   a choice listed in allergy_friendly gets the teal icon. Colour never carries meaning alone:
+   done shows ✕, reported shows ?, and the key under the map names every ring and icon. */
+var LOOK_MARKS = { halloween: "🎃", haq_al_laila: "🏮", gathering: "🤝", market: "🛍️", yard_sale: "🏷️" };
+function lookOf(ev){ return ev && jcOwn(LOOK_MARKS, ev.look) ? ev.look : null; }
+function setLook(look){
+  if (look) document.documentElement.setAttribute("data-look", look);
+  else document.documentElement.removeAttribute("data-look");
+}
+/* the questions that drive the ring and the icon: {key, spec} or null */
+function pinField(ev, which){
+  var fields = (ev.payload_schema && ev.payload_schema.fields) || {};
+  var keys = Object.keys(fields);
+  for (var i = 0; i < keys.length; i++) {
+    var f = fields[keys[i]];
+    if (f && f.type === "enum" && f.pin === which) return { key: keys[i], spec: f };
+  }
+  return null;
+}
+function allergyFriendly(spec, v){
+  return !!spec && Array.isArray(spec.allergy_friendly) && spec.allergy_friendly.indexOf(v) >= 0;
+}
+/* emoji counted as people see them (🛋️ is one, 🍬🎃 two) */
+function glyphCount(g){
+  if (window.Intl && Intl.Segmenter) return Array.from(new Intl.Segmenter().segment(g)).length;
+  return Array.from(g).length;
+}
+/* the icon for one answer — organizer-typed, so escaped; two or more emoji shrink to fit the pin
+   (Halloween's 🍬🎃, review M1) */
+function glyphHtml(spec, v){
+  var g = spec && jcOwn(spec.glyphs, v);
+  return g ? '<span class="gl' + (allergyFriendly(spec, v) ? ' teal' : '') + (glyphCount(g) > 1 ? ' multi' : '') + '">' + esc(g) + '</span>' : '';
+}
+/* "done" | "reported" | null — what the server says about this home tonight */
+function pinState(e){ return e.live_state === "done" ? "done" : e.reported_out ? "reported" : null; }
+function ringClass(f, e){
+  if (!f) return "";
+  var i = (f.spec.values || []).indexOf(e.payload && e.payload[f.key]);
+  return i < 0 ? "" : " r" + (i % 6);
+}
+function pinIcon(e){
+  var ev = data.event, st = pinState(e), gf = pinField(ev, "glyph");
+  var inner = st === "done" ? "✕" : st === "reported" ? "?" : gf ? glyphHtml(gf.spec, e.payload && e.payload[gf.key]) : "";
+  var size = e.mine ? 38 : 30;
+  return L.divIcon({ className: "", iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2],
+    html: '<div class="pin' + (e.mine ? " mine" : "") + (st ? " " + st : "") + ringClass(pinField(ev, "ring"), e) + '">' + inner + '</div>' });
+}
+/* the map key: every icon and ring choice by name, plus the availability states this event uses */
+function legendHtml(ev){
+  var chips = [], gf = pinField(ev, "glyph"), rf = pinField(ev, "ring"), feats = ev.features || {};
+  if (gf) (gf.spec.values || []).forEach(function(v){
+    var g = glyphHtml(gf.spec, v);
+    if (g) chips.push('<span class="chip">' + g + ' ' + esc(valueLabel(gf.spec, v)) + '</span>');
+  });
+  if (rf) (rf.spec.values || []).forEach(function(v, i){
+    chips.push('<span class="chip"><i class="ringdot r' + (i % 6) + '"></i>' + esc(valueLabel(rf.spec, v)) + '</span>');
+  });
+  if (feats.giant_switch) chips.push('<span class="chip"><i class="ringdot st done">✕</i>' + esc(jcT("ev_legend_done")) + '</span>');
+  if (feats.crowd_reports) chips.push('<span class="chip"><i class="ringdot st reported">?</i>' + esc(jcT("ev_legend_reported")) + '</span>');
+  return chips.length ? '<div class="legend" role="note" aria-label="' + esc(jcT("ev_legend")) + '">' + chips.join("") + '</div>' : '';
+}
+
 function show(name){
   if (map) { map.remove(); map = null; }
   current = name;
+  setLook(name === "list" ? null : lookOf(data && data.event));
   jcBack(name === "list" ? null : "./", "ev_back");   /* back to the events list, in the top bar */
   document.body.classList.remove("evfit");
   VIEWS[name]();
@@ -115,11 +181,14 @@ var VIEWS = {
         else if (!soon && !e.signups_open) line.push(jcT("ev_closed"));
         if (e.my_status === "in") line.push(jcT("ev_mine"));
         var info = (soon ? '<span class="soon">' + esc(jcT("coming_soon")) + '</span>' : '') +
-          '<b>' + esc(title(e)) + '</b><small>' + esc(line.filter(Boolean).join(" · ")) + '</small>';
+          '<b>' + (lookOf(e) ? '<span class="mark" aria-hidden="true">' + LOOK_MARKS[lookOf(e)] + '</span> ' : '') + esc(title(e)) +
+          '</b><small>' + esc(line.filter(Boolean).join(" · ")) + '</small>';
+        /* the card wears its event's look (tokens.css [data-look]) */
+        var lk = lookOf(e) ? ' data-look="' + lookOf(e) + '"' : '';
         if (e.status === "archived") {
-          return '<li data-event="' + esc(e.slug) + '"><a class="evcard" href="' + url + '"><span>' + info + '</span></a></li>';
+          return '<li data-event="' + esc(e.slug) + '"><a class="evcard"' + lk + ' href="' + url + '"><span>' + info + '</span></a></li>';
         }
-        return '<li class="evcard" data-event="' + esc(e.slug) + '">' +
+        return '<li class="evcard"' + lk + ' data-event="' + esc(e.slug) + '">' +
           '<div class="evtop"><span>' + info + '</span>' +
             (organizer || runs.indexOf(e.id) >= 0 ? '<a class="badge" href="../admin/?event=' + encodeURIComponent(e.id) + '">' + esc(jcT("ev_admin")) + '</a>' : '') +
           '</div>' +
@@ -146,8 +215,12 @@ var VIEWS = {
     if (tabs.indexOf(tab) < 0) tab = "map";   /* ?tab=list on a one-place event */
     var count = isVenue(ev) ? comingLine(ev.households_in || 0, ev, ev.places_left === 0)
                             : jcFmt("ev_homes_in", { n: entries.length });
+    var look = lookOf(ev);
     el("view").innerHTML =
-      '<div class="evhead"><h1>' + esc(title(ev)) + '</h1>' +
+      '<div class="evhead">' +
+        /* the look's mark; Haq al Laila leads with its Arabic tagline in both languages */
+        (look === "haq_al_laila" ? '<p class="tagline" lang="ar" dir="rtl">' + esc(jcT("look_tagline_haq_al_laila")) + '</p>' : '') +
+        '<h1>' + (look ? '<span class="mark" aria-hidden="true">' + LOOK_MARKS[look] + '</span> ' : '') + esc(title(ev)) + '</h1>' +
         '<p class="sub">' + esc([fmtDate(ev.starts_at), jcT(ev.coming_soon ? "ev_soon" : ev.signups_open ? "ev_open" : "ev_closed"),
                                  ev.coming_soon ? null : count].filter(Boolean).join(" · ")) + '</p>' +
         /* two lines, then "More" — the map stays above the fold (Zee, 2026-11-04) */
@@ -384,10 +457,16 @@ function answers(e){
   });
   return bits;
 }
+/* "Done for the night" / "Neighbors say they're out" — or nothing */
+function stateLine(e){
+  var st = pinState(e);
+  return st ? '<div class="pinstate ' + st + '">' + esc(jcT(st === "done" ? "ev_pin_done" : "ev_pin_reported")) + '</div>' : '';
+}
 /* Popup = HTML, so EVERYTHING resident-typed is escaped (numbers, buildings, notes). */
 function popupHtml(e){
-  var d = dist(e);
-  return '<div class="pop"><b>' + esc(jcHomeLabel(e)) + '</b><div class="meta">' + esc(jcVillageName(cfg, e.village)) + '</div>' +
+  var d = dist(e), gf = pinField(data.event, "glyph");
+  return '<div class="pop"><b>' + (gf ? glyphHtml(gf.spec, e.payload && e.payload[gf.key]) + ' ' : '') + esc(jcHomeLabel(e)) + '</b>' +
+    '<div class="meta">' + esc(jcVillageName(cfg, e.village)) + '</div>' + stateLine(e) +
     (answers(e).length ? '<div>' + esc(answers(e).join(" · ")) + '</div>' : '') +
     (e.note ? '<div class="note">' + esc(e.note) + '</div>' : '') +
     (d !== null ? '<div class="meta">' + esc(jcFmt("ev_dist_from_you", { d: fmtDist(d) })) + '</div>' : '') +
@@ -420,7 +499,8 @@ function fitMap(){
   /* innerHeight follows Safari's toolbar; visualViewport would also shrink on pinch-zoom (review) */
   var vh = window.innerHeight;
   var bar = el("tabbar") ? el("tabbar").getBoundingClientRect().height : 0;
-  var after = el("mapAfter") ? el("mapAfter").getBoundingClientRect().height + 8 : 0;
+  var ah = el("mapAfter") ? el("mapAfter").getBoundingClientRect().height : 0;   /* the key, venue line… (may be empty) */
+  var after = ah ? ah + 8 : 0;
   var top = m.getBoundingClientRect().top + window.scrollY;
   var h = Math.max(260, Math.floor(vh - top - bar - after - 12));
   if (Math.abs(m.offsetHeight - h) < 2) return;
@@ -444,12 +524,14 @@ function renderMap(entries){
     '<div class="evmapwrap"><div class="evmap" id="map"></div>' +
       '<button type="button" class="lang maplayer" id="layerBtn">' + esc(jcT(layer === "sat" ? "pin_street" : "pin_sat")) + '</button>' +
       '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
-    (unpinned ? '<p class="help" id="mapAfter" style="margin-top:8px">' + esc(unpinned) + ' · ' + esc(jcT("ev_unpinned")) +
+    '<div id="mapAfter">' +
+    (venue ? '' : legendHtml(ev)) +
+    (unpinned ? '<p class="help" style="margin-top:8px">' + esc(unpinned) + ' · ' + esc(jcT("ev_unpinned")) +
       ' — <a href="#" id="seeList">' + esc(jcT("ev_list")) + '</a></p>' : '') +
-    (venue && !entries.length && ev.coming_soon ? '<p class="help venueline" id="mapAfter">📍 ' + esc(jcT("ev_place_tba")) + '</p>' :
-     venue ? '<p class="help venueline" id="mapAfter" dir="auto">📍 <b>' + esc(placeName(ev) || jcT("ev_the_place")) + '</b>' +
+    (venue && !entries.length && ev.coming_soon ? '<p class="help venueline">📍 ' + esc(jcT("ev_place_tba")) + '</p>' :
+     venue ? '<p class="help venueline" dir="auto">📍 <b>' + esc(placeName(ev) || jcT("ev_the_place")) + '</b>' +
       (entries.length ? ' — <a target="_blank" rel="noopener" href="' + esc(directionsUrl(entries[0])) + '">' + esc(jcT("ev_directions")) + '</a>' : '') +
-      '</p>' : '');
+      '</p>' : '') + '</div>';
   on("seeList", function(e){ e.preventDefault(); el("tab-list").click(); });
   document.body.classList.add("evfit");     /* the map screen doesn't scroll: no spare padding under it */
   fitMap();                                 /* before Leaflet measures the box… */
@@ -478,9 +560,9 @@ function renderMap(entries){
                                 { permanent: true, direction: "top", offset: [0, -12] }));
       return;
     }
-    var m = L.circleMarker([e.lat, e.lng], {
-      radius: e.mine ? 10 : 7, weight: e.mine ? 3 : 2, color: e.mine ? ink : accent, fillColor: accent, fillOpacity: .85
-    }).addTo(map).bindPopup(function(){ return popupHtml(e); });   /* rebuilt on open: distance stays current */
+    /* your own home on top of its neighbours */
+    var m = L.marker([e.lat, e.lng], { icon: pinIcon(e), zIndexOffset: e.mine ? 1000 : 0, keyboard: true, title: jcHomeLabel(e) })
+      .addTo(map).bindPopup(function(){ return popupHtml(e); });   /* rebuilt on open: distance stays current */
     markers.push(m);
   });
   on("locateBtn", function(){
@@ -527,10 +609,11 @@ function renderList(entries, q){
         var bits = answers(e);
         if (!hasPos(e)) bits.push(jcT("ev_unpinned"));
         var d = dist(e);
-        return '<li class="' + (e.mine ? "mine" : "") + '"><b>' + esc(jcHomeLabel(e)) + '</b>' +
+        var gf = pinField(data.event, "glyph");
+        return '<li class="' + (e.mine ? "mine" : "") + '"><b>' + (gf ? glyphHtml(gf.spec, e.payload && e.payload[gf.key]) + ' ' : '') + esc(jcHomeLabel(e)) + '</b>' +
           (e.mine ? ' <span class="meta">· ' + esc(jcT("ev_mine")) + '</span>' : '') +
           (d !== null ? ' <span class="meta">· ' + esc(fmtDist(d)) + '</span>' : '') +
-          (bits.length ? '<div class="meta">' + esc(bits.join(" · ")) + '</div>' : '') +
+          (bits.length ? '<div class="meta">' + esc(bits.join(" · ")) + '</div>' : '') + stateLine(e) +
           (e.note ? '<div class="note">' + esc(e.note) + '</div>' : '') +
           (hasPos(e) ? '<div class="popacts"><a target="_blank" rel="noopener" href="' + esc(directionsUrl(e)) + '">' +
             esc(jcT("ev_directions")) + '</a></div>' : '') + '</li>';

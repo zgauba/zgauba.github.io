@@ -41,7 +41,7 @@ var HALLOWEEN = { fields: {
     label_en: "What will you hand out?", label_ar: "ماذا ستوزّع؟",
     labels_en: { candy: "Candy only", non_food: "Non-food treats only (allergy-friendly)", both: "Both — candy and non-food" },
     labels_ar: { candy: "حلوى فقط", non_food: "هدايا غير غذائية فقط (مناسبة لمن لديهم حساسية)", both: "الاثنان — حلوى وهدايا غير غذائية" },
-    glyphs: { candy: "🍬", non_food: "🎃", both: "🍬🎃" } },
+    glyphs: { candy: "🍬", non_food: "🎃", both: "🍬🎃" }, allergy_friendly: ["non_food"] },   /* the teal pumpkin */
   handout: { type: "enum", values: ["door", "self_serve"], required: true,
     label_en: "On the night, treats are…", label_ar: "في تلك الليلة، توزَّع الحلوى…",
     labels_en: { door: "Handed out in person", self_serve: "Self-serve — left out for visitors" },
@@ -70,7 +70,7 @@ var TEMPLATES = [
                    both: "Both — a nut-free option alongside the mix" },
       labels_ar: { mix: "حلويات ومكسرات — الخلطة التقليدية", nut_free: "خالٍ من المكسرات فقط — آمن للأطفال المصابين بالحساسية",
                    both: "الاثنان — خيار خالٍ من المكسرات مع الخلطة" },
-      glyphs: { mix: "🥜", nut_free: "🍬", both: "🥜🍬" } },
+      glyphs: { mix: "🥜", nut_free: "🧡", both: "🥜🧡" }, allergy_friendly: ["nut_free"] },   /* 🧡 tints to a clean teal heart (🍬 barely changes) */
     handout: { type: "enum", values: ["door", "self_serve"], required: true,
       label_en: "On the night, treats are…", label_ar: "في تلك الليلة، توزَّع الحلوى…",
       labels_en: { door: "Handed out at the door", self_serve: "Self-serve — help yourselves" },
@@ -971,7 +971,7 @@ function wireBanner(){
 }
 
 /* ---------- questions: schema <-> editable list ---------- */
-function newChoice(){ return { value: null, en: "", ar: "", glyph: "" }; }
+function newChoice(){ return { value: null, en: "", ar: "", glyph: "", allergy: false }; }
 function fromSchema(schema){
   var fields = (schema && schema.fields) || {};
   return Object.keys(fields).map(function(k){
@@ -981,7 +981,8 @@ function fromSchema(schema){
       key: k, label_en: f.label_en || "", label_ar: f.label_ar || "",
       type: f.type === "bool" || f.type === "text" ? f.type : "enum",
       required: !!f.required, pin: f.pin === "ring" || f.pin === "glyph" ? f.pin : "", max: f.max,
-      choices: (f.values || []).map(function(v){ return { value: v, en: jcOwn(len, v) || "", ar: jcOwn(lar, v) || "", glyph: jcOwn(gl, v) || "" }; })
+      choices: (f.values || []).map(function(v){ return { value: v, en: jcOwn(len, v) || "", ar: jcOwn(lar, v) || "", glyph: jcOwn(gl, v) || "",
+        allergy: Array.isArray(f.allergy_friendly) && f.allergy_friendly.indexOf(v) >= 0 }; })
     };
   });
 }
@@ -1013,7 +1014,7 @@ function toSchema(qs){
       if (cs.length < 2) return { err: "Q_CHOICES" };
       if (cs.length > 20) return { err: "Q_CHOICES_MAX" };
       var vals = cs.map(function(c){ return c.value; }).filter(Boolean);
-      var len = {}, lar = {}, gl = {}, anyAr = false, anyGl = false;
+      var len = {}, lar = {}, gl = {}, af = [], anyAr = false, anyGl = false;
       for (var j = 0; j < cs.length; j++) {
         var c = cs[j];
         if (!c.en.trim()) return { err: "Q_CHOICE_LABEL" };
@@ -1021,12 +1022,14 @@ function toSchema(qs){
         len[c.value] = c.en.trim();
         if (c.ar.trim()) { lar[c.value] = c.ar.trim(); anyAr = true; }
         if (q.pin === "glyph" && c.glyph.trim()) { gl[c.value] = c.glyph.trim(); anyGl = true; }
+        if (q.pin === "glyph" && c.allergy) af.push(c.value);   /* PR 5a: its icon shows teal on the map */
       }
       f.values = cs.map(function(c){ return c.value; });
       f.labels_en = len;
       if (anyAr) f.labels_ar = lar;
       if (q.pin) f.pin = q.pin;
       if (anyGl) f.glyphs = gl;
+      if (af.length) f.allergy_friendly = af;
     }
     fields[q.key] = f;
   }
@@ -1072,8 +1075,11 @@ function drawBuilder(){
               (q.pin === "glyph" ? '<input type="text" class="glyph" maxlength="8" data-c-f="glyph" aria-label="' + esc(jcT("ed_q_glyph_in")) + '">' : '') +
               '<input type="text" maxlength="40" data-c-f="en" dir="ltr" placeholder="' + esc(jcT("ed_q_choice_en")) + '" aria-label="' + esc(jcT("ed_q_choice_en")) + '">' +
               '<input type="text" maxlength="40" dir="rtl" data-c-f="ar" placeholder="' + esc(jcT("ed_q_choice_ar")) + '" aria-label="' + esc(jcT("ed_q_choice_ar")) + '">' +
+              (q.pin === "glyph" ? '<label class="check allergy" title="' + esc(jcT("ed_q_allergy")) + '"><input type="checkbox" data-c-allergy' +
+                (c.allergy ? ' checked' : '') + ' aria-label="' + esc(jcT("ed_q_allergy")) + '"><span class="tealdot" aria-hidden="true"></span></label>' : '') +
               '<button type="button" class="mini" data-cact="del" aria-label="' + esc(jcT("ed_q_remove_choice")) + '">✕</button></div>';
           }).join("") +
+          (q.pin === "glyph" ? '<p class="help">' + esc(jcT("ed_q_allergy_help")) + '</p>' : '') +
           '<button type="button" class="btn ghost small" data-qact="addc">' + esc(jcT("ed_q_add_choice")) + '</button></div>'
         : '') +
     '</div>';
@@ -1108,6 +1114,8 @@ function drawBuilder(){
         inp.value = inp.defaultValue = c[inp.dataset.cF] || "";
         inp.addEventListener("input", function(){ c[inp.dataset.cF] = inp.value; });
       });
+      var al = row.querySelector("[data-c-allergy]");
+      if (al) al.addEventListener("change", function(){ c.allergy = al.checked; });
       row.querySelector('[data-cact="del"]').addEventListener("click", function(){
         q.choices.splice(+row.dataset.c, 1); drawBuilder();
       });
@@ -1144,6 +1152,7 @@ function drawPreview(){
     if (f.required) notes.push(jcT("ed_q_required"));
     if (f.pin === "ring") notes.push(jcT("ed_q_ring"));
     if (f.pin === "glyph") notes.push(jcT("ed_q_glyph"));
+    if (f.pin === "glyph" && Array.isArray(f.allergy_friendly) && f.allergy_friendly.length) notes.push(jcT("ed_q_allergy_note"));
     return '<li><b>' + esc(lab) + '</b>' + (notes.length ? ' <small>(' + esc(notes.join(" · ")) + ')</small>' : '') +
       (vals.length ? '<div class="qvals">' + vals.map(function(v){ return '<span>' + esc(v) + '</span>'; }).join("") + '</div>' : '') + '</li>';
   }).join("") + '</ol>' : '<p class="help">' + esc(jcT("ed_q_none")) + '</p>';

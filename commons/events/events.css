@@ -82,3 +82,35 @@ textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-
 /* T5.4: coming soon badge on the events list */
 .soon{display:inline-block; font-size:11px; font-weight:800; letter-spacing:.04em; text-transform:uppercase;
   color:var(--jc-warn); border:1px solid var(--jc-warn); border-radius:var(--jc-radius-pill); padding:2px 9px; margin-bottom:4px}
+/* T5.2 PR 5a — pins (Halloween parity): fill = availability, ring = the "ring" question,
+   icon = the "glyph" question; teal icon = allergy-friendly (the Halloween teal pumpkin) */
+.pin{width:100%; height:100%; box-sizing:border-box; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-size:15px; line-height:1; background:var(--jc-accent); color:var(--jc-accent-ink); border:2.5px solid var(--jc-ink);
+  box-shadow:0 2px 8px rgba(0,0,0,.5); white-space:nowrap}
+.pin.mine{font-size:18px; box-shadow:0 0 0 3px var(--jc-bg), 0 0 0 5px var(--jc-ink), 0 2px 8px rgba(0,0,0,.5)}
+.pin.reported{background:var(--jc-bg); color:var(--jc-danger); font-size:19px; font-weight:900}   /* dark + red ?: far from every look's colour (amber ≈ gold / orange) */
+.pin.done{background:var(--jc-faint); color:var(--jc-bg); font-weight:800; opacity:.8}
+.r0{border-color:var(--jc-ring-0)} .r1{border-color:var(--jc-ring-1)} .r2{border-color:var(--jc-ring-2)}
+.r3{border-color:var(--jc-ring-3)} .r4{border-color:var(--jc-ring-4)} .r5{border-color:var(--jc-ring-5)}
+.gl{display:inline-block; letter-spacing:-2px}
+.pin .gl.multi{font-size:11px}
+.pin.mine .gl.multi{font-size:13px}
+.gl.teal{filter:hue-rotate(145deg) saturate(1.5)}
+#mapAfter > :first-child{margin-top:8px}
+/* the map key: one scrollable row, so the map keeps its height */
+.legend{display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px}
+.legend::-webkit-scrollbar{display:none}
+.legend .chip{flex:0 0 auto; display:inline-flex; align-items:center; gap:5px; font-size:12.5px; color:var(--jc-muted);
+  background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius-pill); padding:4px 10px; white-space:nowrap}
+.ringdot{display:inline-flex; align-items:center; justify-content:center; width:13px; height:13px; border-radius:50%;
+  background:var(--jc-accent); border-width:2.5px; border-style:solid; font-style:normal; font-size:8px; font-weight:800}
+.ringdot.st{border-color:var(--jc-ink)}
+.ringdot.done{background:var(--jc-faint); color:var(--jc-bg)}
+.ringdot.reported{background:var(--jc-bg); color:var(--jc-danger)}
+.pinstate{font-size:12.5px; font-weight:700; margin-top:2px}
+.pinstate.done{color:var(--jc-muted)}
+.pinstate.reported{color:var(--jc-danger)}
+/* looks: the mark beside the title; Haq al Laila's Arabic tagline above it */
+.mark{font-size:.9em}
+.evhead .tagline{margin:0; color:var(--jc-accent); font-size:15px; font-weight:700}
+.evcard[data-look]{border-inline-start:3px solid var(--jc-accent)}
