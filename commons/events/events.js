@@ -6,7 +6,10 @@
    so the form always sends the full set, prefilled from `mine`.
    The event uses the HOME's pin — there is no per-event pin to set here. A home with
    no pin is sent to the pin screen and straight back to this tab (T5.2 plan Q4).
-   Event-day live controls (giant switch, supply, crowd reports) are T5.2 PR 5. */
+   Event-day live controls (giant switch, supply, crowd reports) are T5.2 PR 5.
+   One-place events (kind "venue", T5.2 PR 4b): the map shows the place, residents see HOW
+   MANY households are coming (never which — the server sends no entries), no List tab,
+   no home pin needed to sign up, and "full" / your spot number. */
 
 var params = new URLSearchParams(location.search);
 var EVENT_ID = params.get("id");
@@ -19,6 +22,16 @@ var tab = TABS.indexOf(params.get("tab")) >= 0 ? params.get("tab") : "map";
 var editing = false;      /* My home tab: the sign-up form is open */
 
 /* ---------- helpers ---------- */
+function isVenue(ev){ return !!ev && ev.kind === "venue"; }
+function tabsFor(ev){ return isVenue(ev) ? ["map", "mine"] : TABS; }
+function placeName(ev){ return ar() && ev.venue_name_ar ? ev.venue_name_ar : (ev.venue_name_en || ""); }
+/* "12 households coming · 8 places left" / "Full" — counts only, never which homes */
+function comingLine(n, ev, full){
+  if (full) return jcT("ev_full");
+  var line = jcFmt(n === 1 ? "ev_coming_1" : "ev_coming", { n: n });
+  if (ev.capacity != null && ev.places_left != null) line += " · " + jcFmt(ev.places_left === 1 ? "ev_left_1" : "ev_left", { k: ev.places_left });
+  return line;
+}
 function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
 function showErr(code){ var m = el("msg"); if (!m) return; m.className = "msg err"; m.textContent = jcErrText({ code: code }); }
 function showOk(text){ var m = el("msg"); if (!m) return; m.className = "msg ok"; m.textContent = text; }
@@ -91,7 +104,12 @@ var VIEWS = {
          no status pill — the button says it. Past: the whole card opens the numbers. */
       function row(e){
         var url = "?id=" + encodeURIComponent(e.id);
-        var line = [fmtDate(e.starts_at), jcFmt("ev_homes_in", { n: e.homes_in || 0 })];
+        var line = [fmtDate(e.starts_at), isVenue(e)
+          /* households_in = every "in" household, as the event page counts (homes_in skips hidden ones) */
+          ? (e.status === "archived" ? jcFmt("ev_came", { n: e.homes_in || 0 })
+             : comingLine(e.households_in != null ? e.households_in : (e.homes_in || 0), {}, e.full))
+          : jcFmt("ev_homes_in", { n: e.homes_in || 0 })];
+        if (isVenue(e) && placeName(e)) line.splice(1, 0, jcFmt("ev_at", { v: placeName(e) }));
         if (e.status === "archived") line.push(jcT("ev_see_numbers"));
         else if (!e.signups_open) line.push(jcT("ev_closed"));
         if (e.my_status === "in") line.push(jcT("ev_mine"));
@@ -104,7 +122,7 @@ var VIEWS = {
             (organizer || runs.indexOf(e.id) >= 0 ? '<a class="badge" href="../admin/?event=' + encodeURIComponent(e.id) + '">' + esc(jcT("ev_admin")) + '</a>' : '') +
           '</div>' +
           '<div class="evacts"><a class="btn ghost" href="' + url + '">' + esc(jcT("ev_view")) + '</a>' +
-            (e.signups_open && e.my_status !== "in"
+            (e.signups_open && e.my_status !== "in" && !e.full
               ? '<a class="btn" href="' + url + '&amp;tab=mine">' + esc(jcT("ev_signup_cta")) + '</a>' : '') +
           '</div></li>';
       }
@@ -122,20 +140,23 @@ var VIEWS = {
      MY home's sign-up — no map there: the event uses the home's pin. */
   detail: function(){
     var ev = data.event, entries = data.entries || [];
+    var tabs = tabsFor(ev);
+    if (tabs.indexOf(tab) < 0) tab = "map";   /* ?tab=list on a one-place event */
+    var count = isVenue(ev) ? comingLine(ev.households_in || 0, ev, ev.places_left === 0)
+                            : jcFmt("ev_homes_in", { n: entries.length });
     el("view").innerHTML =
       '<div class="evhead"><h1>' + esc(title(ev)) + '</h1>' +
-        '<p class="sub">' + esc([fmtDate(ev.starts_at), jcT(ev.signups_open ? "ev_open" : "ev_closed"),
-                                 jcFmt("ev_homes_in", { n: entries.length })].join(" · ")) + '</p>' +
+        '<p class="sub">' + esc([fmtDate(ev.starts_at), jcT(ev.signups_open ? "ev_open" : "ev_closed"), count].join(" · ")) + '</p>' +
         /* two lines, then "More" — the map stays above the fold (Zee, 2026-11-04) */
         (desc(ev) ? '<p class="desc" id="desc" dir="auto">' + esc(desc(ev)) + '</p>' +
           '<button type="button" class="more" id="descMore" hidden>' + esc(jcT("ev_more")) + '</button>' : '') + '</div>' +
-      '<div class="subtabs" role="tablist">' + TABS.map(function(t){
+      '<div class="subtabs" role="tablist">' + tabs.map(function(t){
         return '<button type="button" role="tab" id="tab-' + t + '" aria-selected="' + (tab === t) + '">' +
           esc(jcT("ev_tab_" + t)) + '</button>';
       }).join("") + '</div>' +
       msgBox() +
       '<div id="body"></div>';
-    TABS.forEach(function(t){
+    tabs.forEach(function(t){
       on("tab-" + t, function(){
         tab = t; editing = false;
         try { history.replaceState(null, "", "?id=" + encodeURIComponent(ev.id) + "&tab=" + t); } catch(e){}
@@ -152,6 +173,7 @@ var VIEWS = {
   stats: function(){
     var ev = data.event, st = data.stats || {};
     var byVillage = st.by_village || {}, byType = st.by_type || {};
+    var venue = isVenue(ev);                /* one place: totals only — the server keeps no village split */
     var fields = (ev.payload_schema && ev.payload_schema.fields) || {};
     function bars(obj, labelOf){
       var keys = Object.keys(obj).sort(function(a, b){ return obj[b] - obj[a]; });
@@ -163,10 +185,13 @@ var VIEWS = {
     }
     var html = '<h1>' + esc(title(ev)) + '</h1><p class="sub">' + esc(jcT("st_title")) +
         (ev.status === "archived" && ev.ends_at ? ' · ' + esc(fmtDate(ev.ends_at)) : '') + '</p>' + msgBox() +
-      '<div class="big"><div><b>' + esc(st.homes || 0) + '</b><span>' + esc(jcT("st_homes")) + '</span></div>' +
-        '<div><b>' + esc(Object.keys(byVillage).length) + '</b><span>' + esc(jcT("st_villages")) + '</span></div>' +
-        '<div><b>' + esc(st.done || 0) + '</b><span>' + esc(jcT("st_done")) + '</span></div></div>' +
-      '<h2 class="group">' + esc(jcT("st_by_village")) + '</h2>' + bars(byVillage, function(k){ return jcVillageName(cfg, k); }) +
+      (venue
+        ? '<div class="big"><div><b>' + esc(st.homes || 0) + '</b><span>' + esc(jcT("st_households")) + '</span></div></div>' +
+          (placeName(ev) ? '<p class="help">' + esc(jcFmt("ev_at", { v: placeName(ev) })) + '</p>' : '')
+        : '<div class="big"><div><b>' + esc(st.homes || 0) + '</b><span>' + esc(jcT("st_homes")) + '</span></div>' +
+            '<div><b>' + esc(Object.keys(byVillage).length) + '</b><span>' + esc(jcT("st_villages")) + '</span></div>' +
+            '<div><b>' + esc(st.done || 0) + '</b><span>' + esc(jcT("st_done")) + '</span></div></div>' +
+          '<h2 class="group">' + esc(jcT("st_by_village")) + '</h2>' + bars(byVillage, function(k){ return jcVillageName(cfg, k); })) +
       (Object.keys(byType).length ? '<h2 class="group">' + esc(jcT("st_by_type")) + '</h2>' +
         bars(byType, function(k){ return jcT("type_" + k); }) : '');
     Object.keys(st.payload || {}).forEach(function(k){
@@ -196,14 +221,21 @@ function renderMine(){
       return '<li><span>' + esc(fieldLabel(k, fields[k])) + '</span><b>' +
         esc(fields[k].type === "text" ? String(v) : valueLabel(fields[k], v)) + '</b></li>';
     });
-    html += '<p class="status ok">' + esc(jcFmt("ev_signed_up", { h: myLabel() })) + '</p>' +
+    html += '<p class="status ok">' + esc(jcFmt(isVenue(ev) ? "ev_venue_in" : "ev_signed_up", { h: myLabel() })) + '</p>' +
+      (isVenue(ev) && ev.spots
+        ? '<p class="spot">' + (mine.spot ? esc(jcFmt("ev_your_spot", { s: mine.spot })) : esc(jcT("ev_spot_pending"))) + '</p>' : '') +
       (rows.length ? '<ul class="answers">' + rows.join("") + '</ul>' : '') +
       (mine.note ? '<p class="mynote">' + esc(mine.note) + '</p>' : '') +
-      pinLine(h) +
+      (isVenue(ev) ? '' : pinLine(h)) +
       (ev.signups_open ? '<button class="btn" type="button" id="toSignup">' + esc(jcFmt("ev_update_btn", { h: myLabel() })) + '</button>' : '') +
       '<button class="btn ghost" type="button" id="withdraw">' + esc(jcFmt("ev_withdraw", { h: myLabel() })) + '</button>';
   } else if (!ev.signups_open) {
     html += '<p class="help">' + esc(jcT("err_SIGNUPS_CLOSED")) + '</p>';
+  } else if (isVenue(ev) && ev.places_left === 0) {
+    html += '<p class="help">' + esc(jcT("err_FULL")) + '</p>';
+  } else if (isVenue(ev)) {
+    /* one place: the venue is the pin — the home's own pin isn't needed */
+    html += '<button class="btn" type="button" id="toSignup">' + esc(jcFmt("ev_signup_btn", { h: myLabel() })) + '</button>';
   } else if (!hasPos(h)) {
     /* no pin → the pin screen, then straight back here (never a refusal) */
     html += '<p class="help">' + esc(jcFmt("ev_pin_first", { h: myLabel() })) + '</p>' +
@@ -216,7 +248,7 @@ function renderMine(){
   if (wa) html += '<a class="btn ghost" target="_blank" rel="noopener" href="' + esc(wa) + '">' + esc(jcT("ev_whatsapp")) + '</a>';
   el("body").innerHTML = '<div class="cta" id="cta">' + html + '</div>';
   on("toSignup", function(){
-    if (!hasPos(myHome())) return goPin();
+    if (!isVenue(ev) && !hasPos(myHome())) return goPin();
     editing = true; show("detail");
   });
   on("withdraw", function(){
@@ -298,9 +330,14 @@ function renderForm(){
     if (note) payload.note = note;
     busy("go", true);
     rpc("jc_event_signup", { p_event: ev.id, p_payload: payload }).then(function(d){
-      data = d; editing = false; show("detail"); showOk(jcFmt("ev_signed_up", { h: myLabel() }));
+      data = d; editing = false; show("detail"); showOk(jcFmt(isVenue(d.event) ? "ev_venue_in" : "ev_signed_up", { h: myLabel() }));
     }, function(e){
       if (e.code === "NO_PIN") return goPin();   /* server safety net (T5.2 PR 3): same redirect */
+      if (e.code === "FULL") {                   /* the last place went meanwhile: show the new count */
+        return rpc("jc_event_get", { p_event: ev.id }).then(function(d){
+          data = d; editing = false; show("detail"); showErr("FULL");
+        }, function(){ editing = false; show("detail"); showErr("FULL"); });   /* never back into the same form (review) */
+      }
       busy("go", false); showErr(e.code);
     });
   });
@@ -390,13 +427,22 @@ window.addEventListener("resize", fitSoon);
 window.addEventListener("orientationchange", fitSoon);
 
 function renderMap(entries){
-  var unpinned = entries.filter(function(e){ return !hasPos(e); }).length;
+  var ev = data.event, venue = isVenue(ev);
+  /* one place: the venue is the only pin (the server sends no homes for it) */
+  if (venue) {
+    var spot = { venue: true, lat: ev.venue_lat, lng: ev.venue_lng };
+    entries = hasPos(spot) ? [spot] : [];   /* both coordinates, or no pin (review) */
+  }
+  var unpinned = venue ? 0 : entries.filter(function(e){ return !hasPos(e); }).length;
   el("body").innerHTML =
     '<div class="evmapwrap"><div class="evmap" id="map"></div>' +
       '<button type="button" class="lang maplayer" id="layerBtn">' + esc(jcT(layer === "sat" ? "pin_street" : "pin_sat")) + '</button>' +
       '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
     (unpinned ? '<p class="help" id="mapAfter" style="margin-top:8px">' + esc(unpinned) + ' · ' + esc(jcT("ev_unpinned")) +
-      ' — <a href="#" id="seeList">' + esc(jcT("ev_list")) + '</a></p>' : '');
+      ' — <a href="#" id="seeList">' + esc(jcT("ev_list")) + '</a></p>' : '') +
+    (venue ? '<p class="help venueline" id="mapAfter" dir="auto">📍 <b>' + esc(placeName(ev) || jcT("ev_the_place")) + '</b>' +
+      (entries.length ? ' — <a target="_blank" rel="noopener" href="' + esc(directionsUrl(entries[0])) + '">' + esc(jcT("ev_directions")) + '</a>' : '') +
+      '</p>' : '');
   on("seeList", function(e){ e.preventDefault(); el("tab-list").click(); });
   document.body.classList.add("evfit");     /* the map screen doesn't scroll: no spare padding under it */
   fitMap();                                 /* before Leaflet measures the box… */
@@ -418,6 +464,13 @@ function renderMap(entries){
   entries.forEach(function(e){
     if (!hasPos(e)) return;
     pts.push([e.lat, e.lng]);
+    if (e.venue) {
+      markers.push(L.circleMarker([e.lat, e.lng], { radius: 12, weight: 3, color: ink, fillColor: accent, fillOpacity: .9 })
+        /* Leaflet sets string tooltip content as HTML: the organizer-typed name is escaped (review: XSS) */
+        .addTo(map).bindTooltip('<span dir="auto">' + esc(placeName(ev) || jcT("ev_the_place")) + '</span>',
+                                { permanent: true, direction: "top", offset: [0, -12] }));
+      return;
+    }
     var m = L.circleMarker([e.lat, e.lng], {
       radius: e.mine ? 10 : 7, weight: e.mine ? 3 : 2, color: e.mine ? ink : accent, fillColor: accent, fillOpacity: .85
     }).addTo(map).bindPopup(function(){ return popupHtml(e); });   /* rebuilt on open: distance stays current */
