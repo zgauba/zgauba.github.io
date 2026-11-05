@@ -343,15 +343,21 @@ function wireFeedback(){
       Array.prototype.forEach.call(f.querySelectorAll("[data-fbkind]"), function(x){ x.setAttribute("aria-pressed", String(x === b)); });
     });
   });
-  if (location.hash === "#feedback") { el("feedback").scrollIntoView(); t.focus(); }
+  if (location.hash === "#feedback") {
+    el("feedback").scrollIntoView(); t.focus();
+    try { history.replaceState(null, "", location.pathname + location.search); } catch(e){}   /* once, not on every redraw */
+  }
   f.addEventListener("submit", function(e){
     e.preventDefault();
     var body = t.value.trim();
     if (!body) return showErr("FB_EMPTY");
     busy("fbSend", true);
-    rpc("jc_feedback_send", { p_kind: fbKind, p_body: body, p_page: location.pathname.replace(/^.*\/commons/, "").slice(0, 60) || "/" })
+    var sent = t.value;
+    rpc("jc_feedback_send", { p_kind: fbKind, p_body: body, p_page: null })
       .then(function(){
-        fbDraft = ""; t.value = ""; busy("fbSend", false); showOk(jcT("fb_sent"));
+        var t2 = el("fbBody");                 /* the form may have been redrawn meanwhile */
+        if (t2 && t2.value === sent) { t2.value = ""; fbDraft = ""; }   /* keep anything typed while sending */
+        busy("fbSend", false); showOk(jcT("fb_sent"));
       }, function(err){ busy("fbSend", false); showErr(err.code); });
   });
 }

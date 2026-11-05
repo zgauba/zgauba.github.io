@@ -145,7 +145,7 @@ function fail(e){
   rpc("jc_me_get").then(function(me){
     scopes = me.admin_scopes || []; adminEvents = me.admin_events || []; owner = !!me.is_owner;
     if (!canEnter()) { show("lock"); return showErr("NOT_ADMIN"); }
-    return loadHome().then(function(){ showErr("NOT_ADMIN"); });
+    return loadHome().then(function(){ if (!owner || isOrganizer() || isEventAdmin()) showErr("NOT_ADMIN"); });
   }, function(){ scopes = []; adminEvents = []; show("lock"); showErr("NOT_ADMIN"); });
 }
 
@@ -192,7 +192,7 @@ var VIEWS = {
       '<h1>' + esc(jcT("adm_title")) + '</h1>' +
       '<p class="sub">' + esc(scopes.length
         ? jcFmt("adm_scopes", { s: scopes.map(function(s){ return jcT("scope_" + s); }).join(" · ") })
-        : jcT("adm_event_admin_sub")) + '</p>' +
+        : isEventAdmin() ? jcT("adm_event_admin_sub") : jcT("adm_owner_sub")) + '</p>' +
       msgBox() +
       /* T5.3: the platform owner's feedback inbox */
       (owner ? '<div class="panel fbentry"><button class="btn' + (fb && fb.unread ? '' : ' ghost') + '" type="button" id="fbOpen">' +
@@ -247,7 +247,7 @@ var VIEWS = {
       busy("exit", true);
       rpc("jc_admin_exit").then(function(){
         scopes = []; admining = null; adminsData = null;
-        if (isEventAdmin()) return loadHome();        /* still runs their own events */
+        if (isEventAdmin() || owner) return loadHome();   /* still runs their own events / reads feedback */
         events = []; show("lock");
       }, function(e){ busy("exit", false); fail(e); });
     });
@@ -1195,8 +1195,15 @@ function saveEvent(){
   }, function(err){ busy("save", false); fail(err); });
 }
 
+function fbButton(){
+  var b = el("fbOpen");
+  if (!b || !fb) return;
+  b.textContent = jcFmt("adm_fb_open", { n: fb.unread });
+  b.classList.toggle("ghost", !fb.unread);
+}
 function loadHome(){
-  if (owner) rpc("jc_feedback_list").then(function(d){ fb = d; if (current === "home") VIEWS.home(); }, function(){});
+  /* the count arrives after the page: update the button only — a redraw would wipe drafts (review) */
+  if (owner) rpc("jc_feedback_list").then(function(d){ fb = d; fbButton(); }, function(){});
   return rpc("jc_admin_events_list").then(function(list){
     events = list;
     var ev = OPEN_EVENT && events.filter(function(x){ return x.id === OPEN_EVENT; })[0];

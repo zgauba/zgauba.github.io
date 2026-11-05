@@ -46,3 +46,21 @@ size bounded before regex work; rate counter never runs past the limit.
 - SQL dry run (rolls back): **ALL_TESTS_PASSED (608 checks)** — was 564 live; s11 = 44 checks. Nothing
   persisted (tables, functions, cron jobs, constraints, test community/users, Vault, net queue, history row: all absent).
 - Playwright (stubbed): **160 passed ×2** (154 + 6 feedback).
+
+## App code review (code-reviewer, 2026-11-05) — no High, no XSS
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| A1 | Med | Late inbox count re-rendered the whole organizer home → wiped a banner draft / close form / message | **Fixed** — updates only the inbox button (`fbButton`); test with an 800 ms late answer keeps a typed banner |
+| A2 | Med | Owner with a code pressing Exit landed on a lock screen with no way back | **Fixed** — owners return to their home view; test |
+| A3 | Low | `p_page` was always `/home/` | **Fixed** — not sent (column kept for later) |
+| A4 | Low | Owner without a code: event-admin subtitle + a stray NOT_ADMIN | **Fixed** — owner subtitle; no error for an owner; test |
+| A5 | Low | `#feedback` re-scrolled on every redraw | **Fixed** — hash dropped after the first scroll |
+| A6 | Low | Text typed while sending was cleared | **Fixed** — cleared only if unchanged since send |
+| — | Test gaps | late render, Exit, hub link duplication | **Added** (3 tests); stub may now answer late (Promise) |
+
+## After apply (2026-11-05)
+
+- Applied in one transaction with its history row; live suite **608 checks** green; advisors: no new categories.
+- Owner row added by hand (Zee's account; not in the repo). Vault `jc_feedback_to` set; `jc_resend_api_key` pending Zee's Resend account.
+- Playwright: **173 passed ×2** (after merging main / PR 4b).

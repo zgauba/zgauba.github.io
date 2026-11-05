@@ -27,7 +27,7 @@ test("resident: the form says it goes with the home; sends kind + text + page; c
   await page.locator("#fbSend").click();
   await expect(page.locator("#msg")).toHaveText("Thank you — sent.");
   const a = calls.filter((c) => c.name === "jc_feedback_send").pop().args;
-  expect(a).toEqual({ p_kind: "problem", p_body: "The map is slow on my phone", p_page: "/home/" });
+  expect(a).toEqual({ p_kind: "problem", p_body: "The map is slow on my phone", p_page: null });
   await expect(page.locator("#fbBody")).toHaveValue("");
   await page.locator("#fbBody").fill("spam");
   await page.locator("#fbSend").click();
@@ -84,11 +84,45 @@ test("not the owner: no inbox button, even for a community admin", async ({ page
   expect(calls.filter((c) => c.name === "jc_feedback_list")).toHaveLength(0);
 });
 
-test("owner with no organizer code still reaches the inbox", async ({ page }) => {
+test("owner with no organizer code still reaches the inbox — right subtitle, no error", async ({ page }) => {
   const ab = adminBackend({ owner: true, feedback: JSON.parse(JSON.stringify(FB)) });
   await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await page.goto("admin/");
-  await expect(page.locator("#fbOpen")).toBeVisible();
+  await expect(page.locator("#fbOpen")).toHaveText("Feedback inbox · 1 unread");
   await expect(page.locator("#code")).toHaveCount(0);
+  await expect(page.locator(".sub")).toHaveText("You run Commons: feedback from every community comes here.");
+  await expect(page.locator("#msg")).toBeEmpty();
+});
+
+// ── app review fixes ──
+test("the unread count arriving late never wipes a half-typed banner", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"], owner: true, feedback: JSON.parse(JSON.stringify(FB)) });
+  await stubBackend(page, { rpc: Object.assign({}, ab.rpc, {
+    jc_feedback_list: (a, c) => new Promise((r) => setTimeout(() => r(ab.rpc.jc_feedback_list(a, c)), 800)),
+  }) });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator("#bannerText").fill("Typing before the count lands");
+  await expect(page.locator("#fbOpen")).toHaveText("Feedback inbox · 1 unread");
+  await expect(page.locator("#bannerText")).toHaveValue("Typing before the count lands");
+});
+
+test("owner with an organizer code: Exit returns to the home view, not a dead lock screen", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"], owner: true, feedback: JSON.parse(JSON.stringify(FB)) });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator("#exit").click();
+  await expect(page.locator("#fbOpen")).toBeVisible();
+  await expect(page.locator("#newEv")).toHaveCount(0);                            // the code is locked again
+});
+
+test("hub feedback link isn't duplicated by a language switch", async ({ page }) => {
+  await stubBackend(page, {});
+  await signIn(page);
+  await page.locator("#langBtn").click();
+  await page.locator("#langBtn").click();
+  await expect(page.locator("#fbLink")).toHaveCount(1);
+  await expect(page.locator("#fbLink")).toHaveText("Ideas & feedback");
 });
