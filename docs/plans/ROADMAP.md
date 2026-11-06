@@ -5,8 +5,8 @@
 > `docs/qa/SYNTHESIS-2026-11-03.md` (T6 launch gate) and Zee's decisions in session. **When this file and
 > another plan disagree, this file wins; when this file and live infra disagree, live wins — fix this file.**
 > The private Ops Reference still holds community context, contacts and codes (never this repo).
-> Next check: a `/synthesize-audits` pass to fold every "deferred" review finding (`docs/qa/`) and Known Gap
-> into the phases below.
+> Deferred review findings + Known Gaps folded in by `docs/qa/SYNTHESIS-2026-11-06.md` (marked "synthesis" below).
+> Rule from that pass: a deferred finding ships with the phase that already touches its code.
 
 ## The launch rule
 
@@ -30,6 +30,11 @@ Detail: `docs/architecture.md` (Stack Manifest) and the reviews in `docs/qa/`.
 Each phase ships as one or more PRs through `/plan-change` → `/ship-pr` (and `/db-rehearse` when it has a
 migration). "DB" = needs a migration.
 
+### R0 — WebKit test lane (synthesis S1, KG 17)  ·  tests only
+- Add a Playwright `webkit` project to the e2e suite and CI — three shipped bugs were iPhone-Safari-only and
+  Chromium CI passed them. Non-blocking until green twice, then blocking. Flakes beyond one PR → their own
+  test-only PR. Real-iPhone checks stay in R8.
+
 ### R1 — Households (Organizer Tools → Community)  ·  app only
 Community admins have database functions for homes but **no screen** — and invite requests over a
 household's member limit currently have nowhere to go.
@@ -51,6 +56,14 @@ household's member limit currently have nowhere to go.
 - **Holiday lights template** (Zee 2026-11-06: "just another event template") — a homes event: each
   decorated home is a stop; its own look (needs `holiday_lights` added to the `jc_events.look` CHECK — same
   migration) + template questions (e.g. best viewed from: street / garden; lights on until …).
+- **Before planning R2 (synthesis):** run `/qa-feature` on Events (organizer + event-day flows) — the per-module
+  audit the 2026-11-03 synthesis promised never ran; it may add items here.
+- **Free a no-show's place** (synthesis; T5.2 3b #9 / PR 4, deferred by Zee to a DB PR) — organizers / that
+  event's admins withdraw a sign-up; admin-logged. New RPC.
+- **The household is told** (synthesis; 3a) — when an organizer moves its pin or marks it out, My Sign-Up says
+  "adjusted by an organizer" (no organizer named).
+- **Clean event text on write** (synthesis; KG 16) — `jc_clean_text` on event title / description in the save
+  path; stored text left as is.
 
 ### R3 — App shell: your navigation, your start page, "Save as an app"  ·  app only
 - **Settings (My Home → Account):** choose which buttons appear in the bottom bar and their order
@@ -59,6 +72,9 @@ household's member limit currently have nowhere to go.
   across phones. Modules that are off for the community never appear.
 - **"Save as an app":** web manifest + icons + iOS meta. Gotcha: iOS home-screen apps keep separate
   storage from Safari (sign in again once) and bake in the name at install.
+- **Accessibility pass** (synthesis S3) — first a11y audit (`design:accessibility-review`: hub, events, My Home,
+  Organizer Tools); fix the tab rows (role=tab without tabpanel / arrow keys, focus lost on re-render — T5.2
+  polish #6) as part of the nav rebuild, not before it.
 
 ### R4 — Courts: tennis + basketball  ·  DB
 Zee 2026-11-06: **no padel**; households book; **no outside coaches** for now; **community admins add the
@@ -99,6 +115,11 @@ Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas 
 - **Retire the Halloween site** into Commons (`jubail-halloween/` stays at its URL forever — a pointer page).
 - Per-community split of App Health's platform numbers (needed before a second community admin exists).
 - Teardown of `e2e` test data when Zee says testing is done.
+- **Structural audit of the grant model** (synthesis S4, KG 14) — `/structural-audit` over `supabase/commons/`
+  after the last migration (R6), then one hardening migration via `/db-rehearse`.
+- **Free-tier decision** (synthesis S5, KG 8) — Zee: check the Supabase plan's egress line (≈ 0.5 GB per event
+  night measured in 5b) and decide stay free or upgrade (auto-pause, egress); choose the tile provider in the
+  same sitting; set the Resend key; plan for the canary's 60-day auto-disable.
 
 ### R8 — Launch gate (last)
 From `docs/qa/SYNTHESIS-2026-11-03.md` T6, plus items found since:
@@ -111,6 +132,10 @@ From `docs/qa/SYNTHESIS-2026-11-03.md` T6, plus items found since:
   over Jubail unverified).
 - Supabase dashboard: **email confirmation OFF** (drift: still on), **leaked-password protection ON**,
   Auth rate limits raised for the invite burst, Site URL + redirect allowlist for commons.ae.
+- **Manual verification run** (synthesis S6, KG 11 + KG 15) — two-tab concurrency (rate-limit lock, event-admin
+  link cap + accept vs close, capacity at the last place — **this one before the first capacity event**),
+  Storage smoke test with a real sign-in, real-iPhone pass (editor dates, Save as an app), `curl -sI` framing
+  headers on commons.ae, every Arabic string still marked DRAFT reviewed. Each line ticked with date + who.
 - Jubail modules switched on one at a time; invites go out.
 
 ## After launch
