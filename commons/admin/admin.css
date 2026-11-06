@@ -129,3 +129,4 @@ label.check span small{display:block; color:var(--jc-muted); font-size:12.5px; f
 .hrow b{font-size:14px}
 .hrow span{font-size:14px; color:var(--jc-muted)}
 .hrow small{font-size:12px; color:var(--jc-muted); overflow-wrap:anywhere; white-space:pre-wrap}
+.sulist li.focus{border-color:var(--jc-accent); box-shadow:0 0 0 2px var(--jc-accent)}  /* R1: the home a notice opened */

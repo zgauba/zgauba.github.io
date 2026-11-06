@@ -45,6 +45,9 @@ function adminTabs(){
   return t;
 }
 var health = null;        /* T5.2 PR 6: { report | null, reportErr, notices | null, noticesErr, at } */
+var hh = null;            /* R1 households: { data (jc_admin_homes_list) | null, open: {id, what, m (member index)} | null, focus: home id | null } */
+var hlog = null;          /* R1: jc_admin_log_list rows */
+var hhBusy = false;       /* R1: a households write is in flight — one at a time (as H6) */
 
 /* Halloween 2026, as residents knew it (jubail-halloween/): friendly wording and the
    pin hints PR 5 draws (ring = which gate, icon = what's handed out). Arabic: DRAFT. */
@@ -171,7 +174,8 @@ function show(name){
   /* back, in the top bar: sign-ups → the events list; pin move → the sign-ups */
   jcBack(name === "signups" ? leaveSignups
        : name === "pinmove" ? function(){ pm = null; show("signups"); }
-       : name === "feedback" || name === "health" ? function(){ show("home"); } : null, "back");
+       : name === "feedback" || name === "health" || name === "households" ? function(){ show("home"); }
+       : name === "adminlog" ? function(){ show("households"); } : null, "back");
   jcHelp(name === "lock" ? null : "admin");
   VIEWS[name]();
 }
@@ -371,7 +375,9 @@ var VIEWS = {
       /* community: health + notices, the owner's feedback inbox, codes, add another code / lock */
       html +=
         (has("community") ? '<div class="panel fbentry"><button class="btn ghost" type="button" id="healthOpen">' +
-          esc(jcT("adm_h_open")) + '</button></div>' : '') +
+          esc(jcT("adm_h_open")) + '</button></div>' +
+          '<div class="panel fbentry"><button class="btn ghost" type="button" id="hhOpen">' +
+          esc(jcT("adm_hh_open")) + '</button></div>' : '') +
         (owner ? '<div class="panel fbentry"><button class="btn' + (fb && fb.unread ? '' : ' ghost') + '" type="button" id="fbOpen">' +
           esc(fb ? jcFmt("adm_fb_open", { n: fb.unread }) : jcT("adm_fb_title")) + '</button></div>' : '');
       if (has("community")) {
@@ -406,6 +412,7 @@ var VIEWS = {
     on("newEv", function(){ openEditor(null); });
     on("fbOpen", function(){ show("feedback"); });
     on("healthOpen", function(){ health = null; show("health"); });
+    on("hhOpen", function(){ hh = null; show("households"); });
     Array.prototype.forEach.call(document.querySelectorAll("[data-act]"), function(b){
       b.addEventListener("click", function(){ act(b.dataset.act, b.dataset.id, b); });
     });
@@ -651,10 +658,15 @@ var VIEWS = {
           return '<li class="read"><div class="fbhead"><span class="fbkind">' + esc(noticeHome(n.home)) + '</span>' +
             '<small>' + esc(fmtDate(n.created_at)) + '</small></div>' +
             '<p class="fbbody">' + esc(jcT(jcOwn(NOTICE_KINDS, n.kind) ? "adm_h_n_" + n.kind : "adm_h_n_other")) + '</p>' +
-            '<button class="mini" type="button" data-notice="' + esc(n.id) + '">' + esc(jcT("adm_h_resolve")) + '</button></li>';
+            '<div class="acts">' +
+            (hObj(n.home) && n.home.id ? '<button class="mini" type="button" data-nhome="' + esc(n.home.id) + '">' + esc(jcT("adm_hh_open_home")) + '</button>' : '') +
+            '<button class="mini" type="button" data-notice="' + esc(n.id) + '">' + esc(jcT("adm_h_resolve")) + '</button></div></li>';
         }).join("") + '</ul>');
     el("view").innerHTML = html;
     on("healthRefresh", function(){ if (resolving) return; health = null; VIEWS.health(); });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-nhome]"), function(b){
+      b.addEventListener("click", function(){ hh = { data: null, open: null, focus: b.dataset.nhome }; show("households"); });
+    });
     Array.prototype.forEach.call(document.querySelectorAll("[data-notice]"), function(b){
       b.addEventListener("click", function(){
         if (resolving) return;               /* one at a time: answers can't arrive out of order (H6) */
@@ -673,6 +685,72 @@ var VIEWS = {
         }).finally(function(){ resolving = false; });
       });
     });
+  },
+
+  /* R1 — Households (community admins): invites over a household's limit, then every home by
+     village with its members. Names are what the server sends (display name or masked email). */
+  households: function(){
+    var html = '<h1>' + esc(jcT("adm_hh_title")) + '</h1>' + msgBox();
+    if (!hh || !hh.data) {
+      el("view").innerHTML = html + '<p class="help">' + esc(jcT("working")) + '</p>';
+      return loadHouseholds();
+    }
+    var d = hh.data;
+    html += '<p class="sub">' + esc(jcFmt("adm_hh_sub", { h: d.homes.length, m: d.homes.reduce(function(n, h){ return n + h.members.length; }, 0) })) + '</p>' +
+      '<div class="row"><button class="btn ghost" type="button" id="logOpen">' + esc(jcT("adm_log_open")) + '</button></div>';
+    if (d.pending.length) html += '<h2 class="group">' + esc(jcFmt("adm_hh_pending", { n: d.pending.length })) + '</h2>' +
+      '<p class="help">' + esc(jcT("adm_hh_pending_help")) + '</p>' +
+      '<ul class="sulist">' + d.pending.map(function(p){
+        var h = hhHome(p.home_id);
+        return '<li data-invite="' + esc(p.invite_id) + '"><b dir="auto">' + esc(p.requester) + '</b>' +
+          '<div class="meta">' + esc(jcFmt("adm_hh_wants", { h: h ? hhLabel(h) : jcT("adm_h_no_home"), t: hDate(p.created_at) })) + '</div>' +
+          '<div class="acts"><button class="mini" type="button" data-inv="' + esc(p.invite_id) + '" data-yes="1">' + esc(jcT("adm_hh_approve")) + '</button>' +
+          '<button class="mini danger" type="button" data-inv="' + esc(p.invite_id) + '" data-yes="0">' + esc(jcT("adm_hh_decline")) + '</button></div></li>';
+      }).join("") + '</ul>';
+    /* villages in the community's order; a home in a village the config doesn't list still shows */
+    var keys = ((cfg && cfg.villages) || []).map(function(v){ return v.key; });
+    d.homes.forEach(function(h){ if (keys.indexOf(h.village) < 0) keys.push(h.village); });
+    html += keys.map(function(k){
+      var hs = d.homes.filter(function(h){ return h.village === k; });
+      if (!hs.length) return '';
+      var pinned = hs.filter(function(h){ return h.lat != null; }).length;
+      var people = hs.reduce(function(n, h){ return n + h.members.length; }, 0);
+      return '<h2 class="group">' + esc(jcVillageName(cfg, k)) + '</h2>' +
+        '<p class="help">' + esc(jcFmt("adm_hh_counts", { h: hs.length, p: pinned, m: people })) + '</p>' +
+        '<ul class="sulist">' + hs.map(homeCard).join("") + '</ul>';
+    }).join("") || '<p class="help">' + esc(jcT("adm_hh_none")) + '</p>';
+    el("view").innerHTML = html;
+    on("logOpen", function(){ hlog = null; show("adminlog"); });
+    wireHouseholds();
+    if (hh.focus) {                          /* opened from a notice: that home, once */
+      var li = document.querySelector('[data-home="' + CSS.escape(hh.focus) + '"]');
+      hh.focus = null;
+      if (li) { li.classList.add("focus"); if (li.scrollIntoView) li.scrollIntoView({ block: "center" }); }
+      else showErr("HOME_GONE");
+    }
+  },
+
+  /* R1 — the admin log: who did what, newest 100. The stored target holds ids: only a home
+     label is ever drawn from it. No actor = a scheduled job (R2a's auto-close). */
+  adminlog: function(){
+    var html = '<h1>' + esc(jcT("adm_log_title")) + '</h1>' + msgBox();
+    if (!hlog) {
+      el("view").innerHTML = html + '<p class="help">' + esc(jcT("working")) + '</p>';
+      return rpc("jc_admin_log_list").then(function(d){
+        hlog = Array.isArray(d) ? d.filter(hObj) : [];
+        if (current === "adminlog") VIEWS.adminlog();
+      }, fail);
+    }
+    html += '<p class="sub">' + esc(jcT("adm_log_sub")) + '</p>' +
+      (hlog.length ? '<ul class="fblist">' + hlog.map(function(l){
+        var t = hObj(l.target) || {}, h = typeof t.home_id === "string" ? hhHome(t.home_id) : null;
+        var what = jcOwn(LOG_KEYS, l.action) ? jcT("adm_log_" + l.action) : jcFmt("adm_log_other", { k: String(l.action) });
+        var who = typeof l.actor === "string" && l.actor ? l.actor : jcT("adm_log_auto");
+        return '<li class="read"><div class="fbhead"><span class="fbkind">' + esc(what) + '</span>' +
+          '<small>' + esc(hDate(l.at)) + '</small></div>' +
+          '<p class="fbbody" dir="auto">' + esc([who, h ? hhLabel(h) : ""].filter(Boolean).join(" · ")) + '</p></li>';
+      }).join("") + '</ul>' : '<p class="help">' + esc(jcT("adm_log_none")) + '</p>');
+    el("view").innerHTML = html;
   },
 
   /* T5.2 PR 4 — move one sign-up's pin: the home's own pin (everywhere) or this event only */
@@ -696,6 +774,177 @@ var VIEWS = {
     on("pmReset", function(){ movePin("reset"); });
   }
 };
+
+/* ---------- Households (R1) ---------- */
+/* admin-log actions in words; anything else shows its own name */
+var LOG_KEYS = { home_edit: "y", home_pin_set: "y", home_suppress: "y", member_remove: "y", invite_approve: "y",
+  invite_decline: "y", code_rotate: "y", broadcast_set: "y", notice_resolve: "y", event_save: "y", event_publish: "y",
+  event_signups: "y", event_announce: "y", event_close: "y", event_autoclose: "y", entry_moderate: "y", entry_pin_set: "y",
+  entry_spot_set: "y", event_admin_link: "y", event_admin_accept: "y", event_admin_revoke: "y" };
+/* the homes list, well-formed rows only (a null row would throw while drawing) */
+function hhShape(d){
+  if (!hObj(d) || !Array.isArray(d.homes) || !Array.isArray(d.pending)) return null;
+  return { homes: d.homes.filter(function(h){ return hObj(h) && h.id; }).map(function(h){
+             return Object.assign({}, h, { members: Array.isArray(h.members) ? h.members.filter(hObj) : [] });
+           }),
+           pending: d.pending.filter(function(p){ return hObj(p) && p.invite_id; }) };
+}
+function hhHome(id){ return ((hh && hh.data && hh.data.homes) || []).filter(function(h){ return h.id === id; })[0]; }
+function hhLabel(h){ return jcHomeLabel(h) + " · " + jcVillageName(cfg, h.village); }
+function loadHouseholds(){
+  if (!hh) hh = { data: null, open: null, focus: null };
+  var mine = hh;
+  return rpc("jc_admin_homes_list").then(function(d){
+    d = hhShape(d);
+    if (!d) throw { code: "UNKNOWN" };
+    if (hh !== mine) return;
+    hh.data = d;
+    if (current === "households") VIEWS.households();
+  }).catch(function(err){ if (hh === mine && current === "households") fail(err && err.code ? err : { code: "UNKNOWN" }); });
+}
+function homeCard(h){
+  var f = hObj(h.flags) || {}, flags = [];
+  if (h.lat == null) flags.push(jcT("adm_hh_no_pin"));
+  if (f.pin_far) flags.push(jcT("adm_hh_pin_far"));
+  if (f.pin_near) flags.push(jcT("adm_hh_pin_near"));
+  if (h.suppressed) flags.push(jcT("adm_hh_suppressed"));
+  if (!h.members.length) flags.push(jcT("adm_hh_empty"));
+  var open = hh.open && hh.open.id === h.id ? hh.open : null;
+  function b(a, label, cls, m){
+    return '<button class="mini' + (cls ? ' ' + cls : '') + '" type="button" data-hh="' + a + '" data-id="' + esc(h.id) + '"' +
+      (m != null ? ' data-m="' + m + '"' : '') + '>' + esc(label) + '</button>';
+  }
+  /* a member is addressed by position in this list: no account id goes into the page */
+  var members = h.members.length ? '<ul class="adminlist">' + h.members.map(function(m, i){
+    return '<li><span dir="auto">' + esc(m.name) + '<small>' + esc(jcFmt("adm_hh_joined", { t: hDate(m.joined_at) })) + '</small></span>' +
+      b("remove", jcT("adm_hh_remove"), "danger", i) + '</li>';
+  }).join("") + '</ul>' : '';
+  var acts = '<div class="acts">' + b("edit", jcT("adm_hh_edit")) +
+    (h.suppressed ? b("show", jcT("adm_hh_show")) : b("hide", jcT("adm_hh_hide"))) + '</div>';
+  var form = '';
+  if (open && open.what === "edit") {
+    var vs = ((cfg && cfg.villages) || []).filter(function(v){ return v.status === "delivered" || v.key === h.village; });
+    form = '<form class="suform" data-form="edit" data-id="' + esc(h.id) + '" novalidate>' +
+      '<label>' + esc(jcT("claim_village")) + '<select id="hhVillage" data-in>' + vs.map(function(v){
+        return '<option value="' + esc(v.key) + '"' + (v.key === h.village ? ' selected' : '') + '>' + esc(jcVillageName(cfg, v.key)) + '</option>';
+      }).join("") + '</select></label>' +
+      '<label>' + esc(jcT("claim_type")) + '<select id="hhType" data-in>' + ["villa", "townhouse", "apartment"].map(function(t){
+        return '<option value="' + t + '"' + (t === h.type ? ' selected' : '') + '>' + esc(jcT("type_" + t)) + '</option>';
+      }).join("") + '</select></label>' +
+      '<label id="hhBldWrap"' + (h.type === "apartment" ? '' : ' hidden') + '>' + esc(jcT("claim_building")) +
+        '<input id="hhBuilding" type="text" maxlength="20" autocomplete="off" dir="auto" data-in></label>' +
+      '<label>' + esc(jcT("adm_hh_number")) + '<input id="hhNumber" type="text" maxlength="12" autocomplete="off" dir="auto" data-in></label>' +
+      '<div class="row"><button class="btn small" type="submit">' + esc(jcT("ed_save")) + '</button>' +
+      '<button class="btn ghost small" type="button" data-cancel>' + esc(jcT("ev_cancel")) + '</button></div></form>';
+  }
+  if (open && open.what === "remove" && h.members[open.m]) {
+    form = '<form class="suform" data-form="remove" data-id="' + esc(h.id) + '" novalidate>' +
+      '<p class="help">' + esc(jcFmt("adm_hh_remove_q", { n: h.members[open.m].name, h: jcHomeLabel(h) })) + '</p>' +
+      '<label class="check"><input type="checkbox" id="hhDelete"> <span><b>' + esc(jcT("adm_hh_delete")) + '</b>' +
+        '<small>' + esc(jcT("adm_hh_delete_help")) + '</small></span></label>' +
+      '<div class="row"><button class="btn small danger" type="submit">' + esc(jcT("adm_hh_remove_go")) + '</button>' +
+      '<button class="btn ghost small" type="button" data-cancel>' + esc(jcT("ev_cancel")) + '</button></div></form>';
+  }
+  return '<li data-home="' + esc(h.id) + '"><b>' + esc(jcHomeLabel(h)) + '</b>' +
+    (flags.length ? '<div class="flags">' + flags.map(function(t){ return '<span>' + esc(t) + '</span>'; }).join("") + '</div>' : '') +
+    members + acts + form + '</li>';
+}
+/* every write returns the whole homes list → redraw, then say so. One write at a time: a second
+   tap waits (review PR #63). A late answer keeps the data but never pulls the person off another
+   screen. A list that changed under us (already decided, already in a home) is read again. */
+function hhMsg(text){
+  var m = el("msg"); if (!m) return;
+  m.className = "msg err"; m.textContent = text;
+  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
+}
+function hhWrite(name, args, okText){
+  if (hhBusy) return;
+  hhBusy = true;
+  var from = current;
+  function onErr(err){
+    hhBusy = false;
+    Array.prototype.forEach.call(document.querySelectorAll("#view button"), function(n){ n.disabled = false; });
+    err = err && err.code ? err : { code: "UNKNOWN" };
+    /* some resident-worded errors would mislead here ("ask one of them for an invite") */
+    var k = "adm_hh_err_" + err.code;
+    if (err.code === "NOT_ADMIN" || jcT(k) === k) return fail(err);
+    if ((err.code === "NOT_FOUND" || err.code === "ALREADY_HAS_HOME") && hh && current === "households") {
+      hh.data = null; hh.open = null;
+      return loadHouseholds().then(function(){ if (current === "households") hhMsg(jcT(k)); });
+    }
+    hhMsg(jcT(k));
+  }
+  return rpc(name, args).then(function(d){
+    d = hhShape(d);
+    if (!d) return onErr({ code: "UNKNOWN" });
+    hhBusy = false;
+    if (!hh) return;
+    hh.data = d;
+    if (current !== from) return;
+    hh.open = null;
+    show("households");
+    showOk(okText);
+  }, onErr);
+}
+function wireHouseholds(){
+  Array.prototype.forEach.call(document.querySelectorAll("[data-inv]"), function(b){
+    b.addEventListener("click", function(){
+      if (hhBusy) return;
+      var yes = b.dataset.yes === "1";
+      Array.prototype.forEach.call(document.querySelectorAll('[data-inv="' + CSS.escape(b.dataset.inv) + '"]'), function(n){ n.disabled = true; });
+      hhWrite("jc_admin_invite_decide", { p_invite: b.dataset.inv, p_approve: yes }, jcT(yes ? "adm_hh_approved" : "adm_hh_declined"));
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-hh]"), function(b){
+    b.addEventListener("click", function(){
+      var h = hhHome(b.dataset.id), a = b.dataset.hh;
+      if (!h || hhBusy) return;
+      if (a === "edit" || a === "remove") {
+        var m = a === "remove" ? Number(b.dataset.m) : null;
+        var same = hh.open && hh.open.id === h.id && hh.open.what === a && hh.open.m === m;
+        hh.open = same ? null : { id: h.id, what: a, m: m };
+        show("households");
+        if (!same && a === "edit") {
+          el("hhBuilding").value = el("hhBuilding").defaultValue = h.building || "";
+          el("hhNumber").value = el("hhNumber").defaultValue = h.number || "";
+          el("hhNumber").focus();
+        }
+        return;
+      }
+      b.disabled = true;
+      hhWrite("jc_admin_home_suppress", { p_home: h.id, p_on: a === "hide" },
+        jcFmt(a === "hide" ? "adm_hh_hidden_ok" : "adm_hh_shown_ok", { h: jcHomeLabel(h) }));
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-cancel]"), function(b){
+    b.addEventListener("click", function(){ if (hhBusy) return; hh.open = null; show("households"); });
+  });
+  var t = el("hhType");
+  if (t) t.addEventListener("change", function(){ el("hhBldWrap").hidden = t.value !== "apartment"; });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-form]"), function(f){
+    f.addEventListener("submit", function(ev){
+      ev.preventDefault();
+      var h = hhHome(f.dataset.id);
+      if (!h || hhBusy) return;
+      var go = f.querySelector('button[type="submit"]');
+      if (f.dataset.form === "edit") {
+        var type = el("hhType").value;
+        go.disabled = true;
+        return hhWrite("jc_admin_home_edit", { p_home: h.id, p_village: el("hhVillage").value, p_type: type,
+          p_building: type === "apartment" ? el("hhBuilding").value.trim() : null, p_number: el("hhNumber").value.trim() },
+          jcT("adm_hh_saved"));
+      }
+      var m = h.members[hh.open && hh.open.m];
+      if (!m || !m.user_id) return;
+      var del = el("hhDelete").checked;
+      /* deleting the account can't be undone: asked twice, by name */
+      if (del && !window.confirm(jcFmt("adm_hh_delete_confirm", { n: m.name }))) return;
+      go.disabled = true;
+      hhWrite("jc_admin_member_remove", { p_user: m.user_id, p_delete_account: del },
+        jcFmt(del ? "adm_hh_removed_deleted" : "adm_hh_removed", { n: m.name }));
+    });
+  });
+}
 
 function eventRow(e){
   var status = e.status === "draft" ? "adm_status_draft" : e.status === "archived" ? "adm_status_archived"
