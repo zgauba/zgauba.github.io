@@ -366,7 +366,7 @@ function renderMine(){
       (rows.length ? '<ul class="answers">' + rows.join("") + '</ul>' : '') +
       (mine.note ? '<p class="mynote">' + esc(mine.note) + '</p>' : '') +
       /* R2a (U1): an organizer hid this sign-up, or the home is hidden from the directory — say so */
-      (mine.hidden || mine.home_hidden ? '<p class="help notshown" role="note">' + esc(jcT("ev_not_shown")) + '</p>' : '') +
+      (!isVenue(ev) && (mine.hidden || mine.home_hidden) ? '<p class="help notshown" role="note">' + esc(jcT("ev_not_shown")) + '</p>' : '') +
       (isVenue(ev) ? '' : pinLine(h)) +
       (openNow(ev) ? '<button class="btn" type="button" id="toSignup">' + esc(jcFmt("ev_update_btn", { h: myLabel() })) + '</button>' : '') +
       (ended(ev) ? '<p class="help">' + esc(jcT("ev_ended_help")) + '</p>'
@@ -588,6 +588,7 @@ function bannerHtml(){
 }
 /* banner + "Updated 7:42 PM"; returns true when either changed (the map needs refitting) */
 var dayShown = false;               /* was the event-day window open at the last paint */
+var endedShown = false;             /* R2a: had the event ended at the last paint */
 function paintDay(){
   var b = el("banner"), u = el("upd"), changed = false;
   if (b) {
@@ -603,6 +604,7 @@ function paintDay(){
     }
   }
   dayShown = eventDay(data.event);
+  endedShown = ended(data.event);
   if (u) {
     var show = dayShown && !!lastAt;
     var text = show ? jcFmt(stale ? "ev_updated_stale" : "ev_updated", { t: fmtTime(lastAt) }) : "";
@@ -719,7 +721,9 @@ function refresh(){
 /* every ~2 minutes, ±10 % so a street of phones doesn't hit the database in the same second; the
    window opening or closing while the page sits open redraws once (controls appear / go — R7) */
 function tick(){
-  if (current === "detail" && data && !editing && eventDay(data.event) !== dayShown) repaint();
+  /* R2a (D2): so does the end passing — a venue / undated-day event has no event-day window to close */
+  if (current === "detail" && data && !editing
+      && (eventDay(data.event) !== dayShown || ended(data.event) !== endedShown)) repaint();
   refresh();
   setTimeout(tick, REFRESH_MS * (0.9 + 0.2 * Math.random()));
 }

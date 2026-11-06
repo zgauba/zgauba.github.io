@@ -114,8 +114,11 @@ begin
   select count(*) into n from pg_proc pr join pg_namespace ns on ns.oid = pr.pronamespace
    where ns.nspname = 'jc_private'
      and (has_function_privilege('anon', pr.oid, 'execute') or not pr.prosecdef
+          -- R2a (security review S-L1): members run only the storage-policy checks
+          or (has_function_privilege('authenticated', pr.oid, 'execute')
+              and pr.proname not in ('pet_photo_can_read', 'pet_photo_can_write'))
           or not exists (select 1 from unnest(coalesce(pr.proconfig, '{}')) c where c like 'search_path=%'));
-  if n <> 0 then raise exception 'FAIL G13 % jc_private functions anon-callable or not definer/pinned', n; end if;
+  if n <> 0 then raise exception 'FAIL G13 % jc_private functions anon/member-callable or not definer/pinned', n; end if;
   if has_schema_privilege('anon', 'jc_private', 'usage') then raise exception 'FAIL G14 anon can use jc_private'; end if;
   -- T4: pg_cron's functions carry PUBLIC execute; schema usage is what keeps them out of reach
   if has_schema_privilege('anon', 'cron', 'usage') or has_schema_privilege('authenticated', 'cron', 'usage') then

@@ -16,7 +16,7 @@ declare
   v jsonb; k int := 0; n int; tok text; h1 uuid; h3 uuid;
   ev_h uuid; ev_h2 uuid; ev_v uuid; ev_old uuid; ev_past uuid; ev_ended uuid; ev_noend uuid; ev_noend5 uuid;
   ev_undated uuid; ev_draft uuid; ev_soon uuid; ev_fail uuid; ev_x uuid; en uuid;
-  en_h1 uuid; en_h2 uuid; en_v1 uuid; en_h3 uuid;
+  en_h1 uuid; en_h2 uuid; en_v1 uuid; en_h3 uuid; ev_s1 uuid; ev_s2 uuid; v_nid bigint;
 begin
   execute $f$create function pg_temp.s14_as(u uuid) returns void language sql as
     $b$ select set_config('request.jwt.claims', json_build_object('sub', u, 'role', 'authenticated')::text, true) $b$$f$;
@@ -195,19 +195,29 @@ begin
 
   -- ---------- A07 D2: the hourly job ----------
   execute 'reset role';
+  -- two identical events (same household, same answers): one closes by the job, one by the button
+  insert into jc_events (community_id, slug, title_en, status, signups_open, payload_schema, starts_at, ends_at) values
+    ('testville14', 'stats-auto', 'Stats auto', 'live', true, '{"fields": {}}', now() - interval '40 hours', now() - interval '36 hours')
+    returning id into ev_s1;
+  insert into jc_events (community_id, slug, title_en, status, signups_open, payload_schema, starts_at, ends_at) values
+    ('testville14', 'stats-button', 'Stats button', 'live', true, '{"fields": {}}', now() + interval '5 days', now() + interval '5 days 3 hours')
+    returning id into ev_s2;
+  insert into jc_event_entries (event_id, community_id, home_id, live_state, supply_level) values
+    (ev_s1, 'testville14', h3, 'done', 2), (ev_s2, 'testville14', h3, 'done', 2);
   -- one event's close fails (a trigger that refuses its stats row): the rest must still close
   execute format($f$create function pg_temp.s14_refuse() returns trigger language plpgsql as
     $b$ begin if new.event_id = %L then raise exception 'BOOM'; end if; return new; end $b$$f$, ev_fail);
   create trigger s14_refuse before insert on jc_event_stats for each row execute function pg_temp.s14_refuse();
-  n := jc_private.events_autoclose();
-  if n <> 2 then raise exception 'FAIL A07a closed % events, expected 2 (last-week, never-opened)', n; end if;
+  perform jc_private.events_autoclose();
+  n := (select count(*) from jc_admin_log where community_id = 'testville14' and action = 'event_autoclose');
+  if n <> 3 then raise exception 'FAIL A07a closed % events, expected 3 (last-week, never-opened, stats-auto)', n; end if;
   if (select status from jc_events where id = ev_past) <> 'archived'
      or not exists (select 1 from jc_event_stats where event_id = ev_past) then
     raise exception 'FAIL A07b overdue event not closed with its stats'; end if;
   if (select status from jc_events where id = ev_soon) <> 'archived' then raise exception 'FAIL A07c past coming-soon event not closed'; end if;
   if (select status from jc_events where id = ev_fail) <> 'live' then raise exception 'FAIL A07d the failing event half-closed'; end if;
   if not exists (select 1 from jc_admin_notices where community_id = 'testville14' and kind = 'autoclose_failed'
-                  and detail ->> 'event_id' = ev_fail::text and detail ->> 'error' like '%BOOM%' and resolved_at is null) then
+                  and detail ->> 'event_id' = ev_fail::text and detail ->> 'error' = 'P0001' and resolved_at is null) then   -- the error code, never its text
     raise exception 'FAIL A07e no notice for the failed close'; end if;
   if exists (select 1 from jc_events where id in (ev_ended, ev_noend, ev_undated, ev_h) and status <> 'live')
      or (select status from jc_events where id = ev_draft) <> 'draft' then
@@ -229,17 +239,37 @@ begin
                   where x ->> 'kind' = 'event_ended' and x -> 'detail' ->> 'event_id' = ev_ended::text and x -> 'home' = 'null') then
     raise exception 'FAIL A07j ended notice not listed'; end if;
   execute 'reset role';
+  -- the button's close of an identical event keeps the same numbers as the job's
+  execute 'set local role authenticated';
+  perform pg_temp.s14_as(c1); perform jc_event_close(ev_s2, 'stats-button');
+  execute 'reset role';
+  if (select snapshot - 'taken_at' from jc_event_stats where event_id = ev_s1)
+     is distinct from (select snapshot - 'taken_at' from jc_event_stats where event_id = ev_s2)
+     or (select snapshot ->> 'homes' from jc_event_stats where event_id = ev_s1) <> '1' then
+    raise exception 'FAIL A07q job vs button stats differ: % / %', (select snapshot from jc_event_stats where event_id = ev_s1),
+      (select snapshot from jc_event_stats where event_id = ev_s2); end if;
   -- a second run: nothing new, nothing duplicated
-  n := jc_private.events_autoclose();
-  if n <> 0 then raise exception 'FAIL A07k second run closed % events', n; end if;
+  perform jc_private.events_autoclose();
+  if (select count(*) from jc_admin_log where community_id = 'testville14' and action = 'event_autoclose') <> 3 then
+    raise exception 'FAIL A07k second run closed more events'; end if;
   if (select count(*) from jc_admin_notices where kind in ('event_ended', 'autoclose_failed') and community_id = 'testville14'
        and resolved_at is null) <> 3 then   -- tonight + no-end (ended) and will-fail (failed: overdue, so no "ended" notice)
     raise exception 'FAIL A07l notices duplicated: %', (select count(*) from jc_admin_notices where community_id = 'testville14' and resolved_at is null); end if;
   drop trigger s14_refuse on jc_event_stats;
-  n := jc_private.events_autoclose();
-  if n <> 1 or (select status from jc_events where id = ev_fail) <> 'archived'
+  perform jc_private.events_autoclose();
+  if (select count(*) from jc_admin_log where community_id = 'testville14' and action = 'event_autoclose') <> 4
+     or (select status from jc_events where id = ev_fail) <> 'archived'
      or exists (select 1 from jc_admin_notices where detail ->> 'event_id' = ev_fail::text and resolved_at is null) then
     raise exception 'FAIL A07m the failed event didn''t close (and clear its notices) once fixed'; end if;
+  -- an organizer who dismisses the "ended" notice isn't asked again every hour (same close time)
+  select id into v_nid from jc_admin_notices
+   where kind = 'event_ended' and detail ->> 'event_id' = ev_noend::text and resolved_at is null;
+  execute 'set local role authenticated';
+  perform pg_temp.s14_as(c1); perform jc_admin_notice_resolve(v_nid);
+  execute 'reset role';
+  perform jc_private.events_autoclose();
+  if exists (select 1 from jc_admin_notices where kind = 'event_ended' and detail ->> 'event_id' = ev_noend::text and resolved_at is null) then
+    raise exception 'FAIL A07r a dismissed ended notice came back on the next run'; end if;
   -- an end time moved later takes its "ended" notice down
   update jc_events set ends_at = now() + interval '3 hours' where id = ev_ended;
   perform jc_private.events_autoclose();
@@ -251,7 +281,7 @@ begin
     raise exception 'FAIL A07o jc_private close functions callable by members'; end if;
   if not exists (select 1 from cron.job where jobname = 'jc-event-autoclose' and command = 'select jc_private.events_autoclose()') then
     raise exception 'FAIL A07p cron job missing'; end if;
-  k := k + 16;
+  k := k + 18;
 
   -- ---------- A08 the Close button: same close, refuses an already-closed event ----------
   execute 'set local role authenticated';

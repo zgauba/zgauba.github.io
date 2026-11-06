@@ -336,9 +336,10 @@ begin
              'kind', ev.kind, 'look', ev.look, 'venue_name_en', ev.venue_name_en,
              'venue_name_ar', ev.venue_name_ar, 'venue_lat', ev.venue_lat, 'venue_lng', ev.venue_lng,
              'capacity', ev.capacity, 'spots', ev.spots, 'coming_soon', ev.coming_soon,   -- T5.4
-             -- R2a (D2): Organizer Tools says "ended — closes automatically at …"
+             -- R2a (D2): Organizer Tools says "ended — closes automatically at …" (the job's own rule)
              'ends_effective', jc_private.event_ends(ev.starts_at, ev.ends_at),
              'ended', coalesce(jc_private.event_ends(ev.starts_at, ev.ends_at) < now(), false),
+             'closes_at', case when ev.status = 'live' then jc_private.event_ends(ev.starts_at, ev.ends_at) + interval '24 hours' end,
              'entries', (select count(*) from jc_event_entries en where en.event_id = ev.id and en.status = 'in'))
            order by ev.created_at desc)
       from jc_events ev
@@ -657,9 +658,10 @@ language plpgsql security definer set search_path = public, pg_temp as $$
 declare v_comm text; v_r jsonb;
 begin
   v_comm := jc_assert_admin('events');                 -- organizer only, as jc_admin_event_publish
-  if p_event is not null and not exists (select 1 from jc_events
-       where id = p_event and community_id = v_comm and status = 'live') then
-    raise exception 'NOT_FOUND';
+  if p_event is not null then
+    -- FOR SHARE: a close running now (FOR UPDATE) finishes first, so a tie can't land on an archived event
+    perform 1 from jc_events where id = p_event and community_id = v_comm and status = 'live' for share;
+    if not found then raise exception 'NOT_FOUND'; end if;
   end if;
   v_r := jc_admin_broadcast_set(p_text);               -- same cleaning, caps and log
   update jc_communities set broadcast_event = case when broadcast = '' then null else p_event end
@@ -695,8 +697,12 @@ begin
                                          'title', r.title_en, 'closes_at', r.closes_at)
      where community_id = r.community_id and kind = 'event_ended' and resolved_at is null
        and detail ->> 'event_id' = r.id::text and (detail ->> 'closes_at')::timestamptz is distinct from r.closes_at;
+    -- once per event and close time: an organizer who dismissed it (resolved_by set) isn't asked again
+    -- until the close time changes; the job's own "end moved later" resolutions (resolved_by null) don't count
     if not exists (select 1 from jc_admin_notices where community_id = r.community_id and kind = 'event_ended'
-                    and detail ->> 'event_id' = r.id::text and resolved_at is null) then
+                    and detail ->> 'event_id' = r.id::text
+                    and (resolved_at is null
+                         or (resolved_by is not null and (detail ->> 'closes_at')::timestamptz = r.closes_at))) then
       insert into jc_admin_notices (community_id, kind, detail)
       values (r.community_id, 'event_ended', jsonb_build_object('event_id', r.id, 'slug', r.slug,
                                                                 'title', r.title_en, 'closes_at', r.closes_at));
@@ -719,12 +725,17 @@ begin
               jsonb_build_object('event_id', r.id, 'slug', r.slug, 'homes', v_snap -> 'homes'));
       n := n + 1;
     exception when others then
-      if not exists (select 1 from jc_admin_notices where community_id = r.community_id and kind = 'autoclose_failed'
-                      and detail ->> 'event_id' = r.id::text and resolved_at is null) then
-        insert into jc_admin_notices (community_id, kind, detail)
-        values (r.community_id, 'autoclose_failed',
-                jsonb_build_object('event_id', r.id, 'slug', r.slug, 'error', left(sqlerrm, 200)));
-      end if;
+      -- the error code only (message text can carry values); the notice itself can't abort the run
+      begin
+        if not exists (select 1 from jc_admin_notices where community_id = r.community_id and kind = 'autoclose_failed'
+                        and detail ->> 'event_id' = r.id::text and resolved_at is null) then
+          insert into jc_admin_notices (community_id, kind, detail)
+          values (r.community_id, 'autoclose_failed',
+                  jsonb_build_object('event_id', r.id, 'slug', r.slug, 'error', sqlstate));
+        end if;
+      exception when others then
+        raise warning 'jc_private.events_autoclose: no notice for event % (%)', r.id, sqlstate;
+      end;
     end;
   end loop;
   return n;

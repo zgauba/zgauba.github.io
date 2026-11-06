@@ -218,3 +218,98 @@ test("admin log: tying the banner reads in words", async ({ page }) => {
   await page.locator("#logOpen").click();
   await expect(page.locator(".fblist li").first()).toContainText("Tied the banner to an event");
 });
+
+// ── review fixes (code review C-M1 / C-M2 / C-L1 / C-L2, design D-M4) ──
+for (const kind of ["homes", "venue"]) test(`a page left open across the end drops Withdraw without a reload (${kind} event)`, async ({ page }) => {
+  const t0 = new Date("2026-12-24T18:00:00Z");
+  await page.clock.install({ time: t0 });
+  await page.addInitScript(() => { window.JC_REFRESH_MS = 1000; });
+  const venue = kind === "venue" ? { kind: "venue", venue_name_en: "The square", venue_lat: 24.531, venue_lng: 54.431,
+    households_in: 3, capacity: null, places_left: null } : {};
+  const eb = eventsBackend({ mine: { id: "m", status: "in", payload: { treats: "candy", handout: "door" }, note: null } });
+  const base = eb.rpc.jc_event_get;
+  await stubBackend(page, { rpc: Object.assign({}, eb.rpc, {
+    jc_event_get: async (a) => {
+      const r = await base(a);
+      // no event-day window (a far-off start), so only the end passing can redraw the page
+      r.body.event = Object.assign({}, r.body.event, venue, { starts_at: "2026-12-30T14:00:00Z", ended: false,
+        ends_effective: new Date(t0.getTime() + 2 * 60e3).toISOString() });
+      return r;
+    } }) });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
+  await expect(page.locator("#withdraw")).toBeVisible();
+  await page.clock.fastForward("03:00");
+  await expect(page.locator("#withdraw")).toHaveCount(0);
+  await expect(page.locator("#cta")).toContainText("This event has ended — sign-ups are closed.");
+});
+
+test("an older server (no ended / ends_effective keys): event day still runs, nothing reads NaN", async ({ page }) => {
+  const db = dayBackend();            // the pre-R2a payload shape
+  expect(db.event.ends_effective).toBeUndefined();
+  await stubBackend(page, { rpc: db.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + DAY_ID + "&tab=mine");
+  await expect(page.locator("#live .tog button")).toHaveCount(2);
+  await expect(page.locator("#withdraw")).toBeVisible();
+  await expect(page.locator("#view")).not.toContainText("NaN");
+  await expect(page.locator("#evsub")).not.toContainText("ended");
+});
+
+test("a one-place event never says 'your home isn't shown on the map'", async ({ page }) => {
+  const eb = eventsBackend({ mine: { id: "m", status: "in", payload: { treats: "candy", handout: "door" }, note: null, hidden: true } });
+  const base = eb.rpc.jc_event_get;
+  await stubBackend(page, { rpc: Object.assign({}, eb.rpc, {
+    jc_event_get: async (a) => {
+      const r = await base(a);
+      r.body.event = Object.assign({}, r.body.event, { kind: "venue", venue_name_en: "The square", venue_lat: 24.531,
+        venue_lng: 54.431, households_in: 3 });
+      return r;
+    } }) });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
+  await expect(page.locator("#withdraw")).toBeVisible();
+  await expect(page.locator("#cta .notshown")).toHaveCount(0);
+});
+
+test("Organizer Tools uses the server's close time when it sends one", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  Object.assign(ab.st.events.find((e) => e.id === ADMIN_LIVE_ID),
+    { ended: true, ends_effective: "2026-11-06T06:50:00Z", closes_at: "2026-11-08T09:00:00Z" });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await expect(page.locator('li[data-event="test-event"] small')).toContainText(/closes automatically 8 Nov\D+13:00/);
+});
+
+test("publishing with a start but no end warns what that means; clearing a live event's end asks first", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  const { calls } = await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  const asked = [];
+  page.once("dialog", (d) => { asked.push(d.message()); d.dismiss(); });
+  await page.locator('li[data-event="national-day-2026"] [data-act="publish"]').click();
+  await expect.poll(() => asked.length).toBe(1);
+  expect(asked[0]).toContain("No end time — sign-ups stop 6 hours after the start and the event closes a day after that.");
+  await page.locator('li[data-event="test-event"] [data-act="edit"]').click();
+  await page.locator("#ends_at").fill("");
+  page.once("dialog", (d) => { asked.push(d.message()); d.dismiss(); });
+  await page.locator("#save").click();
+  await expect.poll(() => asked.length).toBe(2);
+  expect(asked[1]).toBe("No end time — sign-ups stop 6 hours after the start and the event closes a day after that.");
+  expect(calls.some((c) => c.name === "jc_admin_event_save")).toBe(false);   // dismissed: nothing sent
+});
+
+test("the no-end warning in Arabic", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator("#langBtn").click();
+  const asked = [];
+  page.once("dialog", (d) => { asked.push(d.message()); d.dismiss(); });
+  await page.locator('li[data-event="national-day-2026"] [data-act="publish"]').click();
+  await expect.poll(() => asked.length).toBe(1);
+  expect(asked[0]).toContain("لا يوجد وقت انتهاء — يتوقف التسجيل بعد 6 ساعات من البداية، وتُغلق الفعالية بعد ذلك بيوم.");
+});

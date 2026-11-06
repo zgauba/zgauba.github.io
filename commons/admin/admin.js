@@ -963,7 +963,11 @@ function wireHouseholds(){
 }
 
 /* R2a (D2): the hourly job closes an event 24 h after its end */
-function closesAt(e){ return e.ends_effective ? new Date(Date.parse(e.ends_effective) + 864e5).toISOString() : null; }
+function closesAt(e){
+  return e.closes_at || (e.ends_effective ? new Date(Date.parse(e.ends_effective) + 864e5).toISOString() : null);
+}
+/* R2a (D-M4): a start with no end means "sign-ups stop 6 h after the start, it closes a day later" — say so */
+function noEndWarn(start, end){ return start && !end ? "\n\n" + jcT("adm_no_end_warn") : ""; }
 function eventRow(e){
   var status = e.status === "draft" ? "adm_status_draft" : e.status === "archived" ? "adm_status_archived"
     : e.ended === true ? null                                                                          /* R2a (D2) */
@@ -1022,7 +1026,8 @@ function act(a, id, b){
     md.textContent = jcFmt(a === "open" ? "adm_open_missing" : "adm_publish_missing", { list: jcT("ed_starts") });
     return md.scrollIntoView({ block: "nearest" });
   }
-  if (a === "publish" && !window.confirm(jcFmt("adm_publish_confirm", { t: title(e) }))) return;
+  if (a === "publish" && !window.confirm(jcFmt("adm_publish_confirm", { t: title(e) }) + noEndWarn(e.starts_at, e.ends_at))) return;
+  if (a === "open" && e.coming_soon && e.starts_at && !e.ends_at && !window.confirm(jcT("adm_no_end_warn"))) return;
   if (a === "announce" && !window.confirm(jcFmt(e.status === "live" ? "adm_back_soon_confirm" : "adm_announce_confirm", { t: title(e) }))) return;
   var call = a === "publish" ? rpc("jc_admin_event_publish", { p_event: id })
     : a === "announce" ? rpc("jc_admin_event_announce", { p_event: id })
@@ -1776,6 +1781,9 @@ function saveEvent(){
     if (JSON.stringify(built.schema) !== JSON.stringify(was)) f.payload_schema = built.schema;
   }
   if (ev && !Object.keys(f).length) return showOk(jcT("adm_nothing"));
+  /* R2a (D-M4): an open event whose dates change to "start, no end" */
+  if (!draft && !orig.coming_soon && ("starts_at" in f || "ends_at" in f) && s && !en
+      && !window.confirm(jcT("adm_no_end_warn"))) return;
   busy("save", true);
   rpc("jc_admin_event_save", { p_event: ev ? ev.id : null, p_fields: f }).then(function(list){
     events = list; ed = null; show("home");
