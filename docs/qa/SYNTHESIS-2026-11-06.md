@@ -122,6 +122,10 @@ one hardening migration through `/db-rehearse`. Include `jc_assert_admin`'s comm
 *Cost*: workflow-scale. Size it before running (explicit opt-in).
 
 ### S5 — Free-tier envelope (decision in R7, done by R8)
+> **Corrected 2026-11-06 (Supabase pricing, same day):** egress is *not* a constraint — Free includes 5 GB
+> (+ 5 GB cached), ≈ 10 event nights. The deciding gap is **no automatic backups on Free**; leaked-password
+> protection is Pro-only. Recommendation: Pro at R8 ($25/month; $35 if SignalPost stays in the org), spend cap on.
+> Original text below.
 **Pattern:** five separate items all hinge on free-tier limits: 7-day auto-pause (KG8), event-night egress
 (≈ 0.5 GB/night estimated in 5b, allowance unverified), OSM tiles with no SLA, the canary's 60-day
 auto-disable, and the Resend key still unset (feedback email inactive). **Shape:** Zee checks the Supabase
@@ -163,5 +167,5 @@ KG7 → R8 (privacy policy; never silent) · KG8 → S5 · KG11 → S6 · KG13 �
 KG15 → S6 · KG16 → S2 · KG17 → S1 · KG1, KG3 → deliberately open.
 
 **Confidence 0.8.** Coverage is complete (all 33 files read; deferrals checked against code). The main
-uncertainty is the egress number. It's an estimate from one payload measurement, and the plan allowance is
-unverified.
+uncertainty was the egress number. The plan allowance has since been checked (5 GB on Free) and egress is not
+a constraint; the per-night figure is still an estimate from one payload measurement.

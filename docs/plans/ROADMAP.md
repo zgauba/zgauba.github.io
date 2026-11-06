@@ -117,9 +117,11 @@ Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas 
 - Teardown of `e2e` test data when Zee says testing is done.
 - **Structural audit of the grant model** (synthesis S4, KG 14) — `/structural-audit` over `supabase/commons/`
   after the last migration (R6), then one hardening migration via `/db-rehearse`.
-- **Free-tier decision** (synthesis S5, KG 8) — Zee: check the Supabase plan's egress line (≈ 0.5 GB per event
-  night measured in 5b) and decide stay free or upgrade (auto-pause, egress); choose the tile provider in the
-  same sitting; set the Resend key; plan for the canary's 60-day auto-disable.
+- **Free-tier decision** (synthesis S5, KG 8) — pricing checked 2026-11-06: egress is fine on Free (5 GB vs
+  ≈ 0.5 GB per event night); the reasons to upgrade are **no automatic backups on Free**, Pro-only leaked-password
+  protection, and the 1-week auto-pause. Plan: **Pro at R8** ($25/month, spend cap on) — retire or move SignalPost
+  out of the org first, or it adds $10/month. Same sitting: choose the tile provider, set the Resend key, plan for
+  the canary's 60-day auto-disable.
 
 ### R8 — Launch gate (last)
 From `docs/qa/SYNTHESIS-2026-11-03.md` T6, plus items found since:
@@ -130,7 +132,9 @@ From `docs/qa/SYNTHESIS-2026-11-03.md` T6, plus items found since:
 - Free-tier auto-pause resolved.
 - **Map tile provider** chosen for event-night load (OSM's volunteer tiles have no SLA; Esri imagery date
   over Jubail unverified).
-- Supabase dashboard: **email confirmation OFF** (drift: still on), **leaked-password protection ON**,
+- **Upgrade JubailCommons to Supabase Pro** (backups; KG 8) before any resident data, spend cap on.
+- Supabase dashboard: **email confirmation OFF** (drift: still on), **leaked-password protection ON** (Pro-only —
+  after the upgrade),
   Auth rate limits raised for the invite burst, Site URL + redirect allowlist for commons.ae.
 - **Manual verification run** (synthesis S6, KG 11 + KG 15) — two-tab concurrency (rate-limit lock, event-admin
   link cap + accept vs close, capacity at the last place — **this one before the first capacity event**),
