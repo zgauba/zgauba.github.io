@@ -182,15 +182,15 @@ Each must fail on today's live code.
 **Post-apply:** full suite against live, `get_advisors` shows no new category, and an e2e-community smoke
 test (an organizer marks a test home out, the household view shows the line).
 
-## Open questions for Zee (each with a recommendation)
+## Decisions (Zee, 2026-11-06: agreed all three recommendations; plan approved)
 
 1. **After an event ends (the 24 h before it closes itself), may organizers still mark a home out, set or
-   clear supply, or withdraw a no-show?** *Recommendation: yes, until it closes.* This window is where
+   clear supply, or withdraw a no-show?** **Decided: yes, until it closes.** This window is where
    no-shows become obvious, and fixing them makes the saved report true. Households stay blocked from
    withdrawing after the end (R2a). Every organizer change is logged and the household is told.
-2. **Undo for "withdraw a no-show"?** *Recommendation: no Undo button.* Use a confirm that names the home.
+2. **Undo for "withdraw a no-show"?** **Decided: no Undo button.** Use a confirm that names the home.
    Before the end, the household can sign up again. An Undo would need a "restore" RPC that re-checks
    capacity, which is more server surface for a rare mistake.
-3. **Should organizers also get "Clear supply"?** *Recommendation: yes.* It's the same button pattern as
+3. **Should organizers also get "Clear supply"?** **Decided: yes.** It's the same button pattern as
    residents' and costs one argument on the new RPC. Without it, an organizer who sets the wrong level can
    only overwrite it, never remove it.
