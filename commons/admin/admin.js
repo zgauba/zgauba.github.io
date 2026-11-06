@@ -33,6 +33,8 @@ var su = null;            /* sign-ups view (T5.2 PR 4): { ev, list (jc_admin_ent
 var pm = null;            /* pin move: { x (an entry of su.list) } */
 var owner = false;        /* jc_me_get.is_owner — the platform owner reads feedback (T5.3) */
 var fb = null;            /* jc_feedback_list: { unread, items } */
+var resolving = false;    /* a Mark Resolved is in flight */
+var health = null;        /* T5.2 PR 6: { report | null, reportErr, notices | null, noticesErr, at } */
 
 /* Halloween 2026, as residents knew it (jubail-halloween/): friendly wording and the
    pin hints PR 5 draws (ring = which gate, icon = what's handed out). Arabic: DRAFT. */
@@ -159,8 +161,134 @@ function show(name){
   /* back, in the top bar: sign-ups → the events list; pin move → the sign-ups */
   jcBack(name === "signups" ? leaveSignups
        : name === "pinmove" ? function(){ pm = null; show("signups"); }
-       : name === "feedback" ? function(){ show("home"); } : null, "back");
+       : name === "feedback" || name === "health" ? function(){ show("home"); } : null, "back");
   VIEWS[name]();
+}
+
+/* ---------- App health (T5.2 PR 6) ---------- */
+var HEALTH_ICON = { ok: "✅", warn: "⚠️", bad: "❌", unknown: "❔", info: "📊" };
+/* known keys → string key (jcOwn: own string values only) */
+var NOTICE_KINDS = { departure: "y", pin_flag: "y", over_cap: "y" };
+/* the state log's fields, in words; anything new shows as its own name */
+var CHANGE_KEYS = { signup: "y", live_state: "y", supply_level: "y", report: "y", reports_cleared: "y", status: "y", starts_at: "y",
+  booking: "y", booking_cancel: "y", missing: "y", pet_missing: "y", pet_archive: "y" };
+
+function loadHealth(){
+  function settle(p){ return p.then(function(d){ return { d: d }; }, function(e){ return { e: e }; }); }
+  return Promise.all([settle(rpc("jc_admin_report")), settle(rpc("jc_admin_notices_list"))]).then(function(x){
+    var denied = [x[0].e, x[1].e].filter(function(e){ return e && e.code === "NOT_ADMIN"; })[0];
+    if (denied) return fail(denied);
+    var rep = x[0].d && typeof x[0].d === "object" && !Array.isArray(x[0].d) ? x[0].d : null;
+    health = { report: rep, reportErr: x[0].e ? (x[0].e.code || "UNKNOWN") : rep ? null : "UNKNOWN",
+               /* well-formed rows only (a null row would throw while drawing — H4 / H8) */
+               notices: Array.isArray(x[1].d) ? x[1].d.filter(function(n){ return hObj(n) && Number.isSafeInteger(n.id); }) : null, noticesErr: x[1].e ? (x[1].e.code || "UNKNOWN") : Array.isArray(x[1].d) ? null : "UNKNOWN",
+               at: new Date() };
+    if (current === "health") VIEWS.health();
+  }).catch(function(){
+    health = { report: null, reportErr: "UNKNOWN", notices: null, noticesErr: "UNKNOWN", at: new Date() };
+    if (current === "health") VIEWS.health();
+  });
+}
+function hObj(x){ return x && typeof x === "object" && !Array.isArray(x) ? x : null; }
+function hNum(x){ return typeof x === "number" && isFinite(x); }
+/* "12 min ago" / "3 h ago" / "2 days ago" from an ISO time, measured against the server's own
+   clock (generated_at) so a phone with the wrong time can't make it look fresh; "" if it isn't a
+   time, or is more than 5 min in the future (review H7) */
+var hNow = 0;
+function hAgo(iso){
+  var t = Date.parse(iso);
+  if (!isFinite(t)) return "";
+  var m = Math.round(((hNow || Date.now()) - t) / 60000);
+  if (m < -5) return "";
+  m = Math.max(0, m);
+  return m < 60 ? jcFmt("adm_h_min", { n: m }) : m < 2880 ? jcFmt("adm_h_hours", { n: Math.round(m / 60) }) : jcFmt("adm_h_days", { n: Math.round(m / 1440) });
+}
+/* "3.2 MB": isolated left-to-right so Arabic text doesn't flip it into "MB 3.2" */
+function hDate(iso){ return isFinite(Date.parse(iso)) ? fmtDate(iso) : "?"; }   /* never "Invalid Date" (H11) */
+function hMB(b){ return "\u2066" + (b >= 1073741824 ? (b / 1073741824).toFixed(1).replace(/\.0$/, "") + " GB" : (b / 1048576).toFixed(1) + " MB") + "\u2069"; }
+
+/* jc_admin_report → rows of { st: ok | warn | bad | unknown | info, label, text, note } */
+function healthChecks(r){
+  var rows = [];
+  hNow = isFinite(Date.parse(r.generated_at)) ? Date.parse(r.generated_at) : 0;
+  function row(label, st, text, note){ rows.push({ label: jcT(label), st: st, text: text, note: note || "" }); }
+  function unknown(label){ row(label, "unknown", jcT("adm_h_unknown")); }
+
+  var s = hObj(r.snapshot);
+  if (!s) unknown("adm_h_backup");
+  else if (s.last_at === null && s.stale === true) row("adm_h_backup", "bad", jcT("adm_h_backup_none"));
+  else if (s.stale === true && hAgo(s.last_at)) row("adm_h_backup", "bad", jcFmt("adm_h_backup_stale", { t: hAgo(s.last_at) }));
+  else if (s.stale === false && hAgo(s.last_at)) row("adm_h_backup", "ok", jcFmt("adm_h_backup_ok", { t: hAgo(s.last_at) }));
+  else unknown("adm_h_backup");
+
+  var c = hObj(r.cron), lf = c && hObj(c.last_failure);
+  var oldFail = lf && hAgo(lf.at) ? jcFmt("adm_h_cron_last_fail", { t: hAgo(lf.at) }) : "";
+  if (!c) unknown("adm_h_cron");
+  else if (c.job_present === false) row("adm_h_cron", "bad", jcT("adm_h_cron_missing"));
+  else if (c.active === false) row("adm_h_cron", "bad", jcT("adm_h_cron_paused"));
+  else if (c.job_present !== true || c.active !== true) unknown("adm_h_cron");
+  else if (c.last_status === "failed") row("adm_h_cron", "bad", jcFmt("adm_h_cron_failed", { t: hAgo(c.last_run_at) || "?" }),
+    lf && typeof lf.message === "string" ? lf.message : "");
+  else if (c.last_status === "succeeded" && hAgo(c.last_run_at))   /* hourly: over 3 h since the last run is late (H12) */
+    row("adm_h_cron", (hNow || Date.now()) - Date.parse(c.last_run_at) > 3 * 3600e3 ? "warn" : "ok",
+      jcFmt("adm_h_cron_ok", { t: hAgo(c.last_run_at) }), oldFail);
+  else if (c.last_status === "running" || c.last_status === "starting") row("adm_h_cron", "ok", jcT("adm_h_cron_running"), oldFail);
+  else if (c.last_status == null) row("adm_h_cron", "warn", jcT("adm_h_cron_never"));
+  else unknown("adm_h_cron");
+
+  var m = hObj(r.maintenance);
+  ["orphan_users", "photo_purge"].forEach(function(job){
+    var j = m && hObj(m[job]), label = "adm_h_job_" + job;
+    if (!j) unknown(label);
+    else if (j.error) row(label, "bad", jcFmt("adm_h_job_failed", { t: hAgo(j.last_at) || "?" }), String(j.error));
+    else if (j.never_run === true) row(label, "warn", jcT("adm_h_job_never"));
+    else if (j.stale === true) row(label, "bad", jcFmt("adm_h_job_stale", { t: hAgo(j.last_at) || "?" }));
+    else if (j.stale === false && j.error === null && hNum(j.affected) && hAgo(j.last_at))   /* every field as the server sends it (H2) */
+      row(label, "ok", jcFmt("adm_h_job_ok", { t: hAgo(j.last_at), n: j.affected }));
+    else unknown(label);
+  });
+
+  var st = hObj(r.storage);
+  if (!st || !hNum(st.bytes) || !hNum(st.limit_bytes) || st.limit_bytes <= 0) unknown("adm_h_storage");
+  else {
+    var pct = Math.round(st.bytes * 1000 / st.limit_bytes) / 10;
+    row("adm_h_storage", pct >= 100 ? "bad" : st.alert === true || pct >= 80 ? "warn" : "ok",
+      jcFmt("adm_h_storage_text", { u: hMB(st.bytes), l: hMB(st.limit_bytes), p: pct }));
+  }
+
+  var t = hObj(r.traffic);
+  if (!t || !hNum(t.hits_24h)) unknown("adm_h_traffic");
+  else if (t.counter_suspect === true) row("adm_h_traffic", "warn", jcT("adm_h_traffic_suspect"));
+  else if (t.counter_suspect === false) row("adm_h_traffic", "ok", jcFmt("adm_h_traffic_text", { n: t.hits_24h }));
+  else unknown("adm_h_traffic");   /* the broken-counter flag missing is not "fine" (H1) */
+
+  var rl = hObj(r.rate_limited_now);
+  if (!rl || !hNum(rl.admin_unlock) || !hNum(rl.join_pre_membership)) unknown("adm_h_locked");
+  else if (rl.admin_unlock + rl.join_pre_membership > 0)
+    row("adm_h_locked", "warn", jcFmt("adm_h_locked_text", { a: rl.admin_unlock, j: rl.join_pre_membership }));
+  else row("adm_h_locked", "ok", jcT("adm_h_locked_none"));
+
+  var f = hObj(r.failures_since_baseline);
+  if (!f || !hNum(f.admin_codes) || !hNum(f.join_codes)) unknown("adm_h_wrong");
+  else row("adm_h_wrong", "info", jcFmt("adm_h_wrong_text", { a: f.admin_codes, j: f.join_codes, d: hDate(f.baseline_at) }));
+
+  var sc = hObj(r.state_changes_24h);
+  var scKeys = sc ? Object.keys(sc) : [];
+  if (!sc || (scKeys.length && !scKeys.some(function(k){ return hNum(sc[k]); }))) unknown("adm_h_activity");   /* H9 */
+  else {
+    var bits = Object.keys(sc).filter(function(k){ return hNum(sc[k]) && sc[k] > 0; })
+      .sort(function(a, b){ return sc[b] - sc[a]; })
+      .map(function(k){ return jcFmt(jcOwn(CHANGE_KEYS, k) ? "adm_h_ch_" + k : "adm_h_ch_other", { n: sc[k], k: k }); });
+    row("adm_h_activity", "info", bits.length ? bits.join(" · ") : jcT("adm_h_activity_none"));
+  }
+  return rows;
+}
+/* "Villa 12 · Ain Al Maha" — the label only, never the account behind a notice */
+function noticeHome(h){
+  h = hObj(h);
+  if (!h || h.number == null) return jcT("adm_h_no_home");
+  return jcHomeLabel({ type: h.building ? "apartment" : "villa", number: h.number, building: h.building }) +
+    (h.village ? " · " + jcVillageName(cfg, h.village) : "");
 }
 
 /* ---------- views ---------- */
@@ -199,6 +327,9 @@ var VIEWS = {
       /* T5.3: the platform owner's feedback inbox */
       (owner ? '<div class="panel fbentry"><button class="btn' + (fb && fb.unread ? '' : ' ghost') + '" type="button" id="fbOpen">' +
         esc(fb ? jcFmt("adm_fb_open", { n: fb.unread }) : jcT("adm_fb_title")) + '</button></div>' : '') +
+      /* T5.2 PR 6: app health + notices — community admins (the server checks: jc_assert_admin('community')) */
+      (has("community") ? '<div class="panel fbentry"><button class="btn ghost" type="button" id="healthOpen">' +
+        esc(jcT("adm_h_open")) + '</button></div>' : '') +
       /* creating events is the community's step (T5.2 D2) */
       (isOrganizer() ? '<div class="row"><button class="btn" type="button" id="newEv">' + esc(jcT("adm_new")) + '</button></div>' : '') +
       '<h2 class="group">' + esc(jcT("adm_events")) + '</h2>' +
@@ -233,6 +364,7 @@ var VIEWS = {
 
     on("newEv", function(){ openEditor(null); });
     on("fbOpen", function(){ show("feedback"); });
+    on("healthOpen", function(){ health = null; show("health"); });
     Array.prototype.forEach.call(document.querySelectorAll("[data-act]"), function(b){
       b.addEventListener("click", function(){ act(b.dataset.act, b.dataset.id, b); });
     });
@@ -443,6 +575,61 @@ var VIEWS = {
         rpc("jc_feedback_mark_read", { p_id: b.dataset.fb, p_read: b.dataset.read === "1" }).then(function(d){
           fb = d; if (current === "feedback") VIEWS.feedback();
         }, function(err){ b.disabled = false; fail(err); });
+      });
+    });
+  },
+
+  /* T5.2 PR 6 — App health: jc_admin_report in plain words, then the open notices.
+     Every check starts as "couldn't check": a missing or unexpected value never shows ✅. */
+  health: function(){
+    var html = '<h1>' + esc(jcT("adm_h_title")) + '</h1>' + msgBox();
+    if (!health) {
+      el("view").innerHTML = html + '<p class="help">' + esc(jcT("working")) + '</p>';
+      return loadHealth();
+    }
+    var rows = health.report ? healthChecks(health.report) : [];
+    var issues = rows.filter(function(r){ return r.st === "bad" || r.st === "warn" || r.st === "unknown"; }).length +
+      (health.noticesErr ? 1 : 0);   /* notices that didn't load are unchecked, not fine (H3) */
+    var when = health.report && isFinite(Date.parse(health.report.generated_at)) ? fmtDate(health.report.generated_at) : fmtDate(health.at.toISOString());
+    html += health.reportErr
+      ? '<p class="hsum bad" role="status">' + esc(jcT("adm_h_failed")) + ' ' + esc(jcErrText({ code: health.reportErr })) + '</p>'
+      : '<p class="hsum ' + (issues ? 'warn' : 'ok') + '" role="status">' + esc(issues ? jcFmt("adm_h_issues", { n: issues }) : jcT("adm_h_all_good")) + '</p>';
+    html += '<p class="sub">' + esc(jcFmt("adm_h_checked", { t: when })) + '</p>' +
+      '<div class="row"><button class="btn ghost" type="button" id="healthRefresh">' + esc(jcT("adm_h_again")) + '</button></div>';
+    if (rows.length) html += '<ul class="hlist">' + rows.map(function(r){
+      return '<li class="hrow ' + r.st + '"><span class="hic" role="img" aria-label="' + esc(jcT("adm_h_st_" + r.st)) + '">' + HEALTH_ICON[r.st] + '</span>' +
+        '<div><b>' + esc(r.label) + '</b><span>' + esc(r.text) + '</span>' +
+        (r.note ? '<small dir="auto">' + esc(r.note) + '</small>' : '') + '</div></li>';
+    }).join("") + '</ul>';
+    /* notices: departures (rotate the code?), pins far from their village, invites over the cap */
+    var ns = health.notices;
+    html += '<h2 class="group">' + esc(jcFmt("adm_h_notices", { n: ns ? ns.length : "?" })) + '</h2>' +
+      (health.noticesErr ? '<p class="help">' + esc(jcT("adm_h_notices_failed")) + ' ' + esc(jcErrText({ code: health.noticesErr })) + '</p>'
+       : !ns.length ? '<p class="help">' + esc(jcT("adm_h_notices_none")) + '</p>'
+       : '<ul class="fblist">' + ns.map(function(n){
+          return '<li class="read"><div class="fbhead"><span class="fbkind">' + esc(noticeHome(n.home)) + '</span>' +
+            '<small>' + esc(fmtDate(n.created_at)) + '</small></div>' +
+            '<p class="fbbody">' + esc(jcT(jcOwn(NOTICE_KINDS, n.kind) ? "adm_h_n_" + n.kind : "adm_h_n_other")) + '</p>' +
+            '<button class="mini" type="button" data-notice="' + esc(n.id) + '">' + esc(jcT("adm_h_resolve")) + '</button></li>';
+        }).join("") + '</ul>');
+    el("view").innerHTML = html;
+    on("healthRefresh", function(){ if (resolving) return; health = null; VIEWS.health(); });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-notice]"), function(b){
+      b.addEventListener("click", function(){
+        if (resolving) return;               /* one at a time: answers can't arrive out of order (H6) */
+        resolving = true; b.disabled = true;
+        var h = health;                      /* "Check Again" can't pull it out from under us (H5) */
+        rpc("jc_admin_notice_resolve", { p_id: Number(b.dataset.notice) }).then(function(d){
+          if (!Array.isArray(d)) throw { code: "UNKNOWN" };
+          h.notices = d.filter(function(n){ return hObj(n) && Number.isSafeInteger(n.id); });
+          if (current === "health" && health === h) { VIEWS.health(); showOk(jcT("adm_h_resolved")); }
+        }).catch(function(err){
+          b.disabled = false;
+          if (err && err.code === "NOT_FOUND" && current === "health") {   /* already resolved elsewhere: reload */
+            health = null; VIEWS.health(); return;
+          }
+          fail(err);
+        }).finally(function(){ resolving = false; });
       });
     });
   },

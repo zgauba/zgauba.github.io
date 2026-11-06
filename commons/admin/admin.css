@@ -114,3 +114,16 @@ label.check span small{display:block; color:var(--jc-muted); font-size:12.5px; f
 .choice .allergy input{flex:0 0 auto; min-width:auto}
 .tealdot{display:inline-block; width:12px; height:12px; border-radius:50%; background:var(--jc-info)}
 .splitdot{display:inline-block; width:12px; height:12px; border-radius:50%; border:3px solid; border-color:var(--jc-ring-0) var(--jc-ring-1) var(--jc-ring-1) var(--jc-ring-0)}
+
+/* App health (T5.2 PR 6): one line per check — icon, what, what it found */
+.hsum{margin:4px 0; font-size:17px; font-weight:800}
+.hsum.ok{color:var(--jc-good)} .hsum.warn{color:var(--jc-warn)} .hsum.bad{color:var(--jc-danger)}
+.hlist{list-style:none; margin:10px 0 0; padding:0; display:flex; flex-direction:column; gap:6px}
+.hrow{display:flex; gap:10px; align-items:flex-start; background:var(--jc-surface); border:1px solid var(--jc-line);
+  border-radius:var(--jc-radius); padding:10px 12px}
+.hrow.bad{border-color:var(--jc-danger)} .hrow.warn, .hrow.unknown{border-color:var(--jc-warn)}
+.hrow .hic{font-size:18px; line-height:1.3}
+.hrow div{display:flex; flex-direction:column; gap:2px; min-width:0}
+.hrow b{font-size:14px}
+.hrow span{font-size:14px; color:var(--jc-muted)}
+.hrow small{font-size:12px; color:var(--jc-muted); overflow-wrap:anywhere; white-space:pre-wrap}
