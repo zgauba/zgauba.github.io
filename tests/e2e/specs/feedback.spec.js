@@ -56,7 +56,7 @@ test("owner: inbox shows unread first, text as text, marks read / unread", async
   const ab = adminBackend({ scopes: ["community"], owner: true, feedback: JSON.parse(JSON.stringify(FB)) });
   const { calls } = await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
-  await page.goto("admin/");
+  await page.goto("admin/?tab=community");
   await expect(page.locator("#fbOpen")).toHaveText("Feedback Inbox · 1 Unread");
   await page.locator("#fbOpen").click();
   await expect(page.locator("h1")).toHaveText("Feedback Inbox");
@@ -102,17 +102,19 @@ test("the unread count arriving late never wipes a half-typed banner", async ({ 
     jc_feedback_list: (a, c) => new Promise((r) => setTimeout(() => r(ab.rpc.jc_feedback_list(a, c)), 800)),
   }) });
   await signIn(page);
-  await page.goto("admin/");
+  await page.goto("admin/?tab=banner");                                           // banner + inbox are separate tabs now
   await page.locator("#bannerText").fill("Typing before the count lands");
-  await expect(page.locator("#fbOpen")).toHaveText("Feedback Inbox · 1 Unread");
+  await page.waitForTimeout(1200);                                                 // the late count has landed
   await expect(page.locator("#bannerText")).toHaveValue("Typing before the count lands");
+  await page.locator("#atab-community").click();
+  await expect(page.locator("#fbOpen")).toHaveText("Feedback Inbox · 1 Unread");
 });
 
 test("owner with an organizer code: Exit returns to the home view, not a dead lock screen", async ({ page }) => {
   const ab = adminBackend({ scopes: ["events"], owner: true, feedback: JSON.parse(JSON.stringify(FB)) });
   await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
-  await page.goto("admin/");
+  await page.goto("admin/?tab=community");
   await page.locator("#exit").click();
   await expect(page.locator("#fbOpen")).toBeVisible();
   await expect(page.locator("#newEv")).toHaveCount(0);                            // the code is locked again

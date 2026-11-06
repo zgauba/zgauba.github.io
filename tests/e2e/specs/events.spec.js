@@ -789,3 +789,26 @@ test("tab bar is slim (≤ 56px) and each tab is still ≥ 44px to tap", async (
   expect(bar.height).toBeLessThanOrEqual(56);
   for (const b of await page.locator("#tabbar a").all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
 });
+
+test("event page: an Admin button under the language button for organizers and this event's admins only", async ({ page, browser }) => {
+  const { adminBackend: ab0 } = require("./backends");
+  const eb = eventsBackend();
+  const admin = ab0({ scopes: ["community"] });
+  await stubBackend(page, { rpc: Object.assign({}, eb.rpc, { jc_me_get: admin.rpc.jc_me_get }) });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  const btn = page.locator("#evAdmin");
+  await expect(btn).toHaveText("Admin");
+  await expect(btn).toHaveAttribute("href", "../admin/?event=" + LIVE_ID);
+  const [b, lang] = [await btn.boundingBox(), await page.locator("#langBtn").boundingBox()];
+  expect(b.y).toBeGreaterThan(lang.y + lang.height - 2);                    // below the language button
+  expect(Math.abs((b.x + b.width) - (lang.x + lang.width))).toBeLessThan(4); // right-aligned with it
+  // a resident: no button
+  const p2 = await browser.newPage({ ...test.info().project.use });
+  await stubBackend(p2, { rpc: eventsBackend().rpc });
+  await signIn(p2);
+  await p2.goto("events/?id=" + LIVE_ID);
+  await expect(p2.locator("h1")).toBeVisible();
+  await expect(p2.locator("#evAdmin")).toHaveCount(0);
+  await p2.close();
+});

@@ -242,7 +242,7 @@ test("banner: organizer posts after a confirm; it shows on admin, events and My 
   const ab = adminBackend({ scopes: ["events"] });
   const { calls } = await stubBackend(page, { rpc: withBanner(ab) });
   await signIn(page);
-  await page.goto("admin/");
+  await page.goto("admin/?tab=banner");
   await page.locator("#bannerText").fill("  Road closed near Seef — use the north gate  ");
   page.once("dialog", (d) => d.dismiss());
   await page.locator("#bannerSave").click();
@@ -260,7 +260,7 @@ test("banner: organizer posts after a confirm; it shows on admin, events and My 
   await page.goto("./");                                                          // the hub keeps its own banner, no second one
   await expect(page.locator("#bcast")).toHaveText("⚠️ Road closed near Seef — use the north gate");
   await expect(page.locator("#jcBanner")).toHaveCount(0);
-  await page.goto("admin/");
+  await page.goto("admin/?tab=banner");
   await page.locator("#bannerClear").click();
   await expect(page.locator("#msg")).toHaveText("Banner removed.");
   expect(lastCall(calls, "jc_admin_broadcast_set").args).toEqual({ p_text: "" });
@@ -271,7 +271,7 @@ test("banner: empty post refused on the phone; event admin without a live event 
   const ab = adminBackend({ scopes: ["events"] });
   const { calls } = await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
-  await page.goto("admin/");
+  await page.goto("admin/?tab=banner");
   await page.locator("#bannerSave").click();
   await expect(page.locator("#msg")).toHaveText("Write the banner first — or tap Remove banner.");
   expect(calls.filter((c) => c.name === "jc_admin_broadcast_set")).toHaveLength(0);
@@ -279,9 +279,10 @@ test("banner: empty post refused on the phone; event admin without a live event 
   const ab2 = adminBackend({ adminEvents: [PAST_ID] });
   const page2 = await page.context().newPage();
   await stubBackend(page2, { rpc: ab2.rpc });
-  await page2.goto("admin/");
+  await page2.goto("admin/?tab=banner");
   await expect(page2.locator("h1")).toBeVisible();
   await expect(page2.locator("#bannerForm")).toHaveCount(0);
+  await expect(page2.locator("#atab-banner")).toHaveCount(0);                     // no Banner tab at all
 });
 
 // ── review fixes (PR 4 code review) ──
@@ -361,7 +362,7 @@ test("switching language keeps a half-typed banner", async ({ page }) => {
   const ab = adminBackend({ scopes: ["events"] });
   await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
-  await page.goto("admin/");
+  await page.goto("admin/?tab=banner");
   await page.locator("#bannerText").fill("Half typed");
   await page.locator("#langBtn").click();
   await expect(page.locator("#bannerText")).toHaveValue("Half typed");

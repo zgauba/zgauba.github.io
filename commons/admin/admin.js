@@ -34,6 +34,15 @@ var pm = null;            /* pin move: { x (an entry of su.list) } */
 var owner = false;        /* jc_me_get.is_owner — the platform owner reads feedback (T5.3) */
 var fb = null;            /* jc_feedback_list: { unread, items } */
 var resolving = false;    /* a Mark Resolved is in flight */
+/* the organizer home's sub-menu (?tab=); which tabs a person sees: adminTabs() */
+var admTab = new URLSearchParams(location.search).get("tab") || "events";
+function adminTabs(){
+  var t = [];
+  if (isOrganizer() || isEventAdmin()) t.push("events");
+  if (isOrganizer() || events.some(function(e){ return e.status === "live"; })) t.push("banner");
+  t.push("community");
+  return t;
+}
 var health = null;        /* T5.2 PR 6: { report | null, reportErr, notices | null, noticesErr, at } */
 
 /* Halloween 2026, as residents knew it (jubail-halloween/): friendly wording and the
@@ -325,49 +334,64 @@ var VIEWS = {
   },
 
   home: function(){
+    /* T5.2 (Zee, 2026-11-06): a sub-menu like My Home — Events · Banner · Community */
+    var tabs = adminTabs();
+    if (tabs.indexOf(admTab) < 0) admTab = tabs[0];
     var html =
       '<h1>' + esc(jcT("adm_title")) + '</h1>' +
       '<p class="sub">' + esc(scopes.length
         ? jcFmt("adm_scopes", { s: scopes.map(function(s){ return jcT("scope_" + s); }).join(" · ") })
         : isEventAdmin() ? jcT("adm_event_admin_sub") : jcT("adm_owner_sub")) + '</p>' +
-      msgBox() +
-      /* T5.3: the platform owner's feedback inbox */
-      (owner ? '<div class="panel fbentry"><button class="btn' + (fb && fb.unread ? '' : ' ghost') + '" type="button" id="fbOpen">' +
-        esc(fb ? jcFmt("adm_fb_open", { n: fb.unread }) : jcT("adm_fb_title")) + '</button></div>' : '') +
-      /* T5.2 PR 6: app health + notices — community admins (the server checks: jc_assert_admin('community')) */
-      (has("community") ? '<div class="panel fbentry"><button class="btn ghost" type="button" id="healthOpen">' +
-        esc(jcT("adm_h_open")) + '</button></div>' : '') +
+      (tabs.length > 1 ? '<div class="subtabs" role="tablist">' + tabs.map(function(t){
+        return '<button type="button" role="tab" id="atab-' + t + '" aria-selected="' + (admTab === t) + '">' +
+          esc(jcT("adm_tab_" + t)) + '</button>';
+      }).join("") + '</div>' : '') +
+      msgBox();
+    if (admTab === "events") {
       /* creating events is the community's step (T5.2 D2) */
-      (isOrganizer() ? '<div class="row"><button class="btn" type="button" id="newEv">' + esc(jcT("adm_new")) + '</button></div>' : '') +
-      '<h2 class="group">' + esc(jcT("adm_events")) + '</h2>' +
-      (events.length ? '<ul class="aevents">' + events.map(eventRow).join("") + '</ul>'
-                     : '<p class="help">' + esc(jcT("adm_none")) + '</p>');
-    /* the banner (T5.2 PR 4): organizers any time; an event admin while an event they run is live */
-    if (isOrganizer() || events.some(function(e){ return e.status === "live"; })) {
-      html += '<h2 class="group">' + esc(jcT("adm_banner")) + '</h2>' +
-        '<form class="panel" id="bannerForm" novalidate><p class="help">' + esc(jcT("adm_banner_help")) + '</p>' +
+      html += (isOrganizer() ? '<div class="row"><button class="btn" type="button" id="newEv">' + esc(jcT("adm_new")) + '</button></div>' : '') +
+        '<h2 class="group">' + esc(jcT("adm_events")) + '</h2>' +
+        (events.length ? '<ul class="aevents">' + events.map(eventRow).join("") + '</ul>'
+                       : '<p class="help">' + esc(jcT("adm_none")) + '</p>');
+    } else if (admTab === "banner") {
+      /* the banner (T5.2 PR 4): organizers any time; an event admin while an event they run is live */
+      html += '<form class="panel" id="bannerForm" novalidate><p class="help">' + esc(jcT("adm_banner_help")) + '</p>' +
         '<textarea id="bannerText" maxlength="280" dir="auto" aria-label="' + esc(jcT("adm_banner")) + '"></textarea>' +
         '<div class="row"><button class="btn" id="bannerSave" type="submit">' + esc(jcT("adm_banner_post")) + '</button>' +
         '<button class="btn ghost" id="bannerClear" type="button">' + esc(jcT("adm_banner_clear")) + '</button></div></form>';
+    } else {
+      /* community: health + notices, the owner's feedback inbox, codes, add another code / lock */
+      html +=
+        (has("community") ? '<div class="panel fbentry"><button class="btn ghost" type="button" id="healthOpen">' +
+          esc(jcT("adm_h_open")) + '</button></div>' : '') +
+        (owner ? '<div class="panel fbentry"><button class="btn' + (fb && fb.unread ? '' : ' ghost') + '" type="button" id="fbOpen">' +
+          esc(fb ? jcFmt("adm_fb_open", { n: fb.unread }) : jcT("adm_fb_title")) + '</button></div>' : '');
+      if (has("community")) {
+        html += '<h2 class="group">' + esc(jcT("adm_codes")) + '</h2><div class="panel"><p class="help">' + esc(jcT("adm_codes_help")) + '</p>' +
+          ["join", "community", "events"].map(function(s){
+            return '<div class="coderow"><span>' + esc(jcT("adm_code_" + s)) + '</span>' +
+              '<button class="btn ghost" type="button" data-rotate="' + s + '">' + esc(jcT("adm_rotate")) + '</button></div>' +
+              (newCode && newCode.scope === s
+                ? '<div class="codebox" role="status"><span>' + esc(jcFmt("adm_new_code", { s: jcT("adm_code_" + s) })) + '</span>' +
+                  '<b id="newCode">' + esc(newCode.code) + '</b>' +
+                  '<button class="btn ghost" type="button" id="copyCode">' + esc(jcT("adm_copy")) + '</button></div>' : '');
+          }).join("") + '</div>';
+      }
+      /* lock = drop CODE unlocks; event-admin grants are named and stay (a community admin removes them) */
+      html += '<div class="section"><div class="panel">' +
+        '<button class="btn ghost" type="button" id="addCode">' + esc(jcT("adm_add_code")) + '</button>' +
+        (scopes.length ? '<button class="btn ghost" type="button" id="exit">' + esc(jcT("adm_exit")) + '</button>' +
+          '<p class="help">' + esc(jcT("adm_exit_help")) + '</p>' : '') +
+        '</div></div>';
     }
-    if (has("community")) {
-      html += '<h2 class="group">' + esc(jcT("adm_codes")) + '</h2><div class="panel"><p class="help">' + esc(jcT("adm_codes_help")) + '</p>' +
-        ["join", "community", "events"].map(function(s){
-          return '<div class="coderow"><span>' + esc(jcT("adm_code_" + s)) + '</span>' +
-            '<button class="btn ghost" type="button" data-rotate="' + s + '">' + esc(jcT("adm_rotate")) + '</button></div>' +
-            (newCode && newCode.scope === s
-              ? '<div class="codebox" role="status"><span>' + esc(jcFmt("adm_new_code", { s: jcT("adm_code_" + s) })) + '</span>' +
-                '<b id="newCode">' + esc(newCode.code) + '</b>' +
-                '<button class="btn ghost" type="button" id="copyCode">' + esc(jcT("adm_copy")) + '</button></div>' : '');
-        }).join("") + '</div>';
-    }
-    /* lock = drop CODE unlocks; event-admin grants are named and stay (a community admin removes them) */
-    html += '<div class="section"><div class="panel">' +
-      '<button class="btn ghost" type="button" id="addCode">' + esc(jcT("adm_add_code")) + '</button>' +
-      (scopes.length ? '<button class="btn ghost" type="button" id="exit">' + esc(jcT("adm_exit")) + '</button>' +
-        '<p class="help">' + esc(jcT("adm_exit_help")) + '</p>' : '') +
-      '</div></div>';
     el("view").innerHTML = html;
+    tabs.forEach(function(t){
+      on("atab-" + t, function(){
+        admTab = t;
+        try { history.replaceState(null, "", "?tab=" + t); } catch(e){}
+        show("home");
+      });
+    });
 
     on("newEv", function(){ openEditor(null); });
     on("fbOpen", function(){ show("feedback"); });

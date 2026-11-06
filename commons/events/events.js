@@ -264,7 +264,13 @@ var VIEWS = {
     var tabs = tabsFor(ev);
     if (tabs.indexOf(tab) < 0) tab = "map";   /* ?tab=list on a one-place event */
     var look = lookOf(ev);
+    /* Admin, under the language button: community admins / organizers, and this event's own admins (Zee, 2026-11-06) */
+    var sc = (state.me && state.me.admin_scopes) || [];
+    var canAdmin = sc.indexOf("community") >= 0 || sc.indexOf("events") >= 0 ||
+                   ((state.me && state.me.admin_events) || []).indexOf(ev.id) >= 0;
     el("view").innerHTML =
+      (canAdmin ? '<div class="evadminrow"><a class="lang" id="evAdmin" href="../admin/?event=' + encodeURIComponent(ev.id) + '">' +
+        esc(jcT("ev_admin")) + '</a></div>' : '') +
       '<div class="evhead">' +
         /* the look's mark; Haq al Laila leads with its Arabic tagline in both languages */
         (look === "haq_al_laila" ? '<p class="tagline" lang="ar" dir="rtl">' + esc(jcT("look_tagline_haq_al_laila")) + '</p>' : '') +

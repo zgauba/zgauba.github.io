@@ -150,3 +150,7 @@ textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-
 /* "They're Out of Treats": a text link like Directions / Google Maps (red = it tells a neighbor something) */
 .pop .rep{font:inherit; font-weight:700; color:var(--jc-danger); background:none; border:0; padding:4px 0; cursor:pointer; text-decoration:underline}
 .pop .rep:disabled{opacity:.5; cursor:progress}
+
+/* the event's Admin button, right under the language button (2026-11-06) */
+.evadminrow{display:flex; justify-content:flex-end; margin:-8px 0 6px}
+.evadminrow a, .evadminrow a:visited{text-decoration:none; color:var(--jc-ink)}
