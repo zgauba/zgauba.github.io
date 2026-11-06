@@ -5,8 +5,8 @@
 > `docs/qa/SYNTHESIS-2026-11-03.md` (T6 launch gate) and Zee's decisions in session. **When this file and
 > another plan disagree, this file wins; when this file and live infra disagree, live wins — fix this file.**
 > The private Ops Reference still holds community context, contacts and codes (never this repo).
-> Next check: a `/synthesize-audits` pass to fold every "deferred" review finding (`docs/qa/`) and Known Gap
-> into the phases below.
+> Deferred review findings + Known Gaps folded in by `docs/qa/SYNTHESIS-2026-11-06.md` (marked "synthesis" below).
+> Rule from that pass: a deferred finding ships with the phase that already touches its code.
 
 ## The launch rule
 
@@ -30,6 +30,11 @@ Detail: `docs/architecture.md` (Stack Manifest) and the reviews in `docs/qa/`.
 Each phase ships as one or more PRs through `/plan-change` → `/ship-pr` (and `/db-rehearse` when it has a
 migration). "DB" = needs a migration.
 
+### R0 — WebKit test lane (synthesis S1, KG 17)  ·  tests only
+- Add a Playwright `webkit` project to the e2e suite and CI — three shipped bugs were iPhone-Safari-only and
+  Chromium CI passed them. Non-blocking until green twice, then blocking. Flakes beyond one PR → their own
+  test-only PR. Real-iPhone checks stay in R8.
+
 ### R1 — Households (Organizer Tools → Community)  ·  app only
 Community admins have database functions for homes but **no screen** — and invite requests over a
 household's member limit currently have nowhere to go.
@@ -41,7 +46,20 @@ household's member limit currently have nowhere to go.
 - Admin log (`jc_admin_log_list`); links from App Health notices ("household left", "pin far away") to the home.
 - Verify each RPC's live shape before building (they date from S1, never exercised by a screen).
 
-### R2 — Event-night extras  ·  DB (one small migration)
+### R2 — Event-night extras + Events audit fixes  ·  DB (two PRs: R2a fixes, then R2b extras)
+**R2a — Events audit fixes** (`docs/qa/events-qa-2026-11-06.md`; Zee 2026-11-06: fix all of them). Ships first:
+it changes existing behaviour, and R2b builds on the same functions.
+- **D1 + L1** — when a household leaves a home, its sign-ups lose the organizer's "hidden" flag and their spot,
+  so the next family starts clean. The same household withdrawing + re-joining stays hidden.
+- **D2** — at an event's end time sign-ups stop and the event moves to Past; a scheduled job closes it
+  24 h after the end time, so its stats snapshot is always taken. Undated events are exempt. Needs a
+  test that fails today (the live `e2e/halloween-test` row is the example).
+- **F1** — the Halloween + Haq al Laila templates turn on switch, supply and crowd reports.
+- **F2** — publishing a homes event asks for a start date (event day needs one).
+- **U1** — a hidden or directory-hidden household sees "Your home isn't shown on the map" on My Sign-Up.
+- **U3** — closing an event clears any banner about it; revoking an event admin clears their banner.
+
+**R2b — Event-night extras**
 - **Organizer marks a home out** (Zee 2026-11-06: yes) — organizers + that event's admins set a home's
   live state / supply on event night; admin-logged; the household sees it on My Sign-Up. New RPC (never
   change `jc_entry_live_set`'s signature).
@@ -51,6 +69,12 @@ household's member limit currently have nowhere to go.
 - **Holiday lights template** (Zee 2026-11-06: "just another event template") — a homes event: each
   decorated home is a stop; its own look (needs `holiday_lights` added to the `jc_events.look` CHECK — same
   migration) + template questions (e.g. best viewed from: street / garden; lights on until …).
+- **Free a no-show's place** (synthesis; T5.2 3b #9 / PR 4, deferred by Zee to a DB PR) — organizers / that
+  event's admins withdraw a sign-up; admin-logged. New RPC.
+- **The household is told** (synthesis; 3a) — when an organizer moves its pin or marks it out, My Sign-Up says
+  "adjusted by an organizer" (no organizer named).
+- **Clean event text on write** (synthesis; KG 16) — `jc_clean_text` on event title / description in the save
+  path; stored text left as is.
 
 ### R3 — App shell: your navigation, your start page, "Save as an app"  ·  app only
 - **Settings (My Home → Account):** choose which buttons appear in the bottom bar and their order
@@ -59,6 +83,9 @@ household's member limit currently have nowhere to go.
   across phones. Modules that are off for the community never appear.
 - **"Save as an app":** web manifest + icons + iOS meta. Gotcha: iOS home-screen apps keep separate
   storage from Safari (sign in again once) and bake in the name at install.
+- **Accessibility pass** (synthesis S3) — first a11y audit (`design:accessibility-review`: hub, events, My Home,
+  Organizer Tools); fix the tab rows (role=tab without tabpanel / arrow keys, focus lost on re-render — T5.2
+  polish #6) as part of the nav rebuild, not before it.
 
 ### R4 — Courts: tennis + basketball  ·  DB
 Zee 2026-11-06: **no padel**; households book; **no outside coaches** for now; **community admins add the
@@ -99,6 +126,13 @@ Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas 
 - **Retire the Halloween site** into Commons (`jubail-halloween/` stays at its URL forever — a pointer page).
 - Per-community split of App Health's platform numbers (needed before a second community admin exists).
 - Teardown of `e2e` test data when Zee says testing is done.
+- **Structural audit of the grant model** (synthesis S4, KG 14) — `/structural-audit` over `supabase/commons/`
+  after the last migration (R6), then one hardening migration via `/db-rehearse`.
+- **Free-tier decision** (synthesis S5, KG 8) — pricing checked 2026-11-06: egress is fine on Free (5 GB vs
+  ≈ 0.5 GB per event night); the reasons to upgrade are **no automatic backups on Free**, Pro-only leaked-password
+  protection, and the 1-week auto-pause. Plan: **Pro at R8** ($25/month, spend cap on) — retire or move SignalPost
+  out of the org first, or it adds $10/month. Same sitting: choose the tile provider, set the Resend key, plan for
+  the canary's 60-day auto-disable.
 
 ### R8 — Launch gate (last)
 From `docs/qa/SYNTHESIS-2026-11-03.md` T6, plus items found since:
@@ -109,8 +143,14 @@ From `docs/qa/SYNTHESIS-2026-11-03.md` T6, plus items found since:
 - Free-tier auto-pause resolved.
 - **Map tile provider** chosen for event-night load (OSM's volunteer tiles have no SLA; Esri imagery date
   over Jubail unverified).
-- Supabase dashboard: **email confirmation OFF** (drift: still on), **leaked-password protection ON**,
+- **Upgrade JubailCommons to Supabase Pro** (backups; KG 8) before any resident data, spend cap on.
+- Supabase dashboard: **email confirmation OFF** (drift: still on), **leaked-password protection ON** (Pro-only —
+  after the upgrade),
   Auth rate limits raised for the invite burst, Site URL + redirect allowlist for commons.ae.
+- **Manual verification run** (synthesis S6, KG 11 + KG 15) — two-tab concurrency (rate-limit lock, event-admin
+  link cap + accept vs close, capacity at the last place — **this one before the first capacity event**),
+  Storage smoke test with a real sign-in, real-iPhone pass (editor dates, Save as an app), `curl -sI` framing
+  headers on commons.ae, every Arabic string still marked DRAFT reviewed. Each line ticked with date + who.
 - Jubail modules switched on one at a time; invites go out.
 
 ## After launch
@@ -144,6 +184,10 @@ of its wording + design (R8) and the event itself need to be ready by early Janu
   to Commons.
 - Haq al Laila runs on the launched Commons — dev done well before 23 Jan 2027.
 - Pet sightings (stored vs WhatsApp-only): discuss at the start of R5.
+- Events audit (all four answered yes): treat-night templates turn on supply + crowd reports; events stop
+  sign-ups at their end time and auto-close 24 h later; hidden households are told; the hidden flag resets
+  when a new family moves in. Every audit finding is fixed in R2a.
+- Order: R0 → R1 → R2 as listed; R2 is planned (`/plan-change`) while R1 is built, and built after R1 merges.
 
 ## Superseded ideas (from the Oct–Nov planning conversations)
 
