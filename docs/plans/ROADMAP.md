@@ -48,6 +48,9 @@ household's member limit currently have nowhere to go.
 - **Per-event safety block** — community security number + agreed lost-child meeting point, set in the
   editor (`jc_events.safety` + the `safety` feature flag already exist); shown on the event page.
   Stores nothing about people; children are never named or matched to homes.
+- **Holiday lights template** (Zee 2026-11-06: "just another event template") — a homes event: each
+  decorated home is a stop; its own look (needs `holiday_lights` added to the `jc_events.look` CHECK — same
+  migration) + template questions (e.g. best viewed from: street / garden; lights on until …).
 
 ### R3 — App shell: your navigation, your start page, "Save as an app"  ·  app only
 - **Settings (My Home → Account):** choose which buttons appear in the bottom bar and their order
@@ -81,9 +84,9 @@ Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas 
   "viewing passcode" idea).
 - **Missing** toggle: card turns red, tops the list.
 - Never collects money.
-- **Decide before building:** the ideas say "report a sighting only pre-fills a WhatsApp message — nothing
-  stored", but the schema **stores** sightings (`jc_pet_sightings`: reporter, note, location). Keep the
-  stored version (useful for a missing pet's trail; reporter never shown) or drop to WhatsApp-only?
+- **Discuss in detail at the start of R5 (Zee 2026-11-06):** the ideas say "report a sighting only
+  pre-fills a WhatsApp message — nothing stored", but the schema **stores** sightings (`jc_pet_sightings`:
+  reporter, note, location).
 - Carer-group access: "one shared link" in the ideas → in Commons terms a per-group admin grant (like
   per-event admins). Confirm.
 
@@ -116,17 +119,15 @@ From `docs/qa/SYNTHESIS-2026-11-03.md` T6, plus items found since:
   right controls for her. See "Recommendations: where the data lives" below.
 - **Suggested walking route** (nearest-neighbor + 2-opt loop over stocked homes; `route` flag off) and
   **kilometers walked** (on-device only, "at least X km", nothing sent).
-- December **holiday-lights map** (a homes event with its own look).
 - **Second community / B2B** — trigger: a second community asks. Needs the platform console + per-community
   numbers (R7).
 - **Print maps** — parked on community privacy consensus; never re-enable without Zee.
 
-## Event calendar vs the launch rule — DECISION NEEDED
+## Event calendar
 
-**Haq al Laila ≈ Sat 23 Jan 2027** (15 Sha'ban 1448, ±1 day on moon sighting). If the full app isn't
-launched by then, either (a) run Haq al Laila on Commons as a **single-module early opening** (Events only),
-(b) run it outside Commons (as Halloween was), or (c) skip it this year. Needs Zee's call by early
-December so the event + native review can be prepared.
+**Haq al Laila ≈ Sat 23 Jan 2027** (15 Sha'ban 1448, ±1 day on moon sighting) — **Zee 2026-11-06: dev work
+will be done well before then**, so it runs on the launched Commons. Working back: the Emirati native review
+of its wording + design (R8) and the event itself need to be ready by early January.
 
 ## Decisions (2026-11-06)
 
@@ -138,6 +139,11 @@ December so the event + native review can be prepared.
 - Courts: tennis + basketball, no padel; households book; no outside coaches; community admins add courts
   + locations.
 - Navigation: users choose bottom-bar buttons + start page (R3).
+- Holiday lights = an event template (R2), not a separate feature.
+- Recommendations directory (after launch): Google Sheet + an "Update Commons" Apps Script menu that pushes
+  to Commons.
+- Haq al Laila runs on the launched Commons — dev done well before 23 Jan 2027.
+- Pet sightings (stored vs WhatsApp-only): discuss at the start of R5.
 
 ## Superseded ideas (from the Oct–Nov planning conversations)
 
@@ -166,5 +172,16 @@ Zee's question: could the database be a Google Sheet she edits?
 | D. Wix stays the source, Commons mirrors it | No change for her | Needs her content in a Wix CMS collection + API access on her plan (unverified); the access problems residents have today stay |
 
 **Recommendation:** start with **A** (her comfort, Commons controls what residents see), keep the table
-shape compatible with **C** so it can become an in-app editor later. Zero-PII: no "which resident
+shape compatible with **C** so it can become an in-app editor later.
+
+**Zee 2026-11-06 — the trigger is hers:** a Google Apps Script on the Sheet adds an **"Update Commons"**
+menu; choosing it sends the rows to Commons. Shape (to plan when this phase starts):
+- A dedicated endpoint (an Edge Function or a narrow RPC) that does exactly one thing: **replace the
+  directory's rows** in one transaction — validated (lengths, https-only links, no HTML), never touching
+  anything else.
+- Authenticated by a **scoped, rotatable token** kept in the script's Script Properties (not in a cell);
+  rotating it is a Community-tab action. Rate-limited; every update logged (when, how many rows) and the
+  previous version kept so a bad update can be undone.
+- The menu shows the result ("Updated: 42 listings" / what was rejected and why), so she never wonders.
+- Members-only on the Commons side; the Sheet's own sharing stays hers. Zero-PII: no "which resident
 recommended this" column unless deliberately opted in; vendor business contacts are fine.
