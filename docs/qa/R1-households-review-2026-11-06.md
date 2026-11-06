@@ -35,3 +35,32 @@
 
 `npx playwright test` twice: **287 passed** both runs (273 existing + 14 new in `admin-households.spec.js`). Chromium
 mobile project only (R0's WebKit lane is separate).
+
+## Independent code review (code-reviewer, 2026-11-06)
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| C1 | Medium | `hhWrite` allowed concurrent writes. A second tap while one was in flight sent a second RPC, and answers could redraw out of order. | **Fixed.** Module-level `hhBusy` (the H6 `resolving` pattern). Every households control returns early while a write is in flight. Cleared on both answer paths before redrawing. Test: delayed `jc_admin_invite_decide` plus taps on two other controls → exactly one write. Fails on the pre-fix code. |
+| C2 | Medium | After `NOT_FOUND` / `ALREADY_HAS_HOME` the list stayed stale, e.g. an invite another admin had already decided. | **Fixed.** `hh.data = null`, `hh.open = null`, `loadHouseholds()`, then the message. NOT_FOUND wording now says the list is up to date (EN + AR). Test: the homes list is read twice and the stale request is gone. Fails on the pre-fix code. |
+| C3 | Low | `.then().catch()` reported a render exception as an API error. | **Fixed.** `.then(onOk, onErr)`. A malformed answer goes to `onErr` explicitly. |
+| C4 | Low | Number / building were sent untrimmed. | **Fixed.** `.trim()` before sending (the server also trims the number). |
+| C5 | Low | If `jc_admin_homes_list` fails, the screen keeps "Working…" with no retry. | **Accepted, deferred.** The error message shows and Back works. A retry button can come with the R3 app-shell pass. |
+
+## Independent security review (security-reviewer, 2026-11-06)
+
+No High or Critical findings. The coordinator verified these live on JubailCommons:
+- `jc_admin_member_remove` matches S1: admin assert, `USE_ACCOUNT_DELETE` self-check, and a same-community `jc_accounts` check.
+- `auth.users` foreign keys: `jc_accounts`, `jc_entry_reports` (reporter), `jc_rate` and `jc_platform_owners` CASCADE; every other key is SET NULL. Deleting an account drops no other member's data. A deleted user's open crowd reports disappear, which is acceptable.
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| S1 | Low | A community admin can delete another admin's account. | **Deferred to the R7 structural audit** (server change, KG 14 area: `jc_assert_admin` / admin-on-admin rules). |
+| S2 | Low | `member_remove` for an account with no home logs `home_id: null`. | **Accepted.** The log row still records the action. The screen shows no home label. |
+| S3 | Low | The admin log keeps a deleted user's uuid in `target`. | **Accepted.** Opaque, never rendered (the screen draws only a home label; a test checks this). |
+| S4 | Info | The masked email reveals the domain. | **Accepted.** Sanctioned by ROADMAP R1 ("display name or masked email"). |
+| S5 | Info | Members are addressed by list index, which could go stale. | **No change.** The index is read from the same data the form was drawn from, and any write closes the form and redraws. |
+
+## Tests after fixes
+
+`npx playwright test` twice: **289 passed** both runs (273 existing + 16 in `admin-households.spec.js`). The two new
+tests were run against the pre-fix `admin.js` and both failed.

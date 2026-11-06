@@ -105,6 +105,32 @@ test("decline sends p_approve false", async ({ page }) => {
   expect(writes(calls, "jc_admin_invite_decide")).toEqual([{ p_invite: "inv-1", p_approve: false }]);
 });
 
+test("one write at a time: a tap while a decision is in flight sends nothing", async ({ page }) => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { calls } = await openHouseholds(page, { wrap: (rpc) => ({ rpc: Object.assign({}, rpc, {
+    jc_admin_invite_decide: async (a) => { await gate; return rpc.jc_admin_invite_decide(a); },
+  }) }) });
+  await page.locator('[data-inv="inv-1"][data-yes="1"]').click();
+  await expect.poll(() => writes(calls, "jc_admin_invite_decide").length).toBe(1);
+  await card(page, "h7").locator('[data-hh="hide"]').click();
+  await card(page, "h8").locator('[data-hh="show"]').click();
+  release();
+  await expect(page.locator("#msg")).toHaveText("Approved. They're now a member of that home.");
+  expect(writes(calls, "jc_admin_home_suppress")).toEqual([]);
+  expect(writes(calls, "jc_admin_invite_decide")).toHaveLength(1);
+});
+
+test("an invite already decided elsewhere: the list is read again and the stale request is gone", async ({ page }) => {
+  const { hb, calls } = await openHouseholds(page, { wrap: (rpc) => ({ rpc: Object.assign({}, rpc, {
+    jc_admin_invite_decide: () => { hb.st.pending = []; return raise("NOT_FOUND"); },
+  }) }) });
+  await page.locator('[data-inv="inv-1"][data-yes="1"]').click();
+  await expect(page.locator("#msg")).toHaveText("That changed in the meantime. The list below is up to date.");
+  expect(writes(calls, "jc_admin_homes_list")).toHaveLength(2);
+  await expect(page.locator("[data-invite]")).toHaveCount(0);
+});
+
 test("fix an address: starts from the home's values, delivered villages only, exact arguments", async ({ page }) => {
   const { calls } = await openHouseholds(page);
   await card(page, "h10").locator('[data-hh="edit"]').click();

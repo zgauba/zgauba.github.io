@@ -47,6 +47,7 @@ function adminTabs(){
 var health = null;        /* T5.2 PR 6: { report | null, reportErr, notices | null, noticesErr, at } */
 var hh = null;            /* R1 households: { data (jc_admin_homes_list) | null, open: {id, what, m (member index)} | null, focus: home id | null } */
 var hlog = null;          /* R1: jc_admin_log_list rows */
+var hhBusy = false;       /* R1: a households write is in flight — one at a time (as H6) */
 
 /* Halloween 2026, as residents knew it (jubail-halloween/): friendly wording and the
    pin hints PR 5 draws (ring = which gate, icon = what's handed out). Arabic: DRAFT. */
@@ -848,35 +849,47 @@ function homeCard(h){
     (flags.length ? '<div class="flags">' + flags.map(function(t){ return '<span>' + esc(t) + '</span>'; }).join("") + '</div>' : '') +
     members + acts + form + '</li>';
 }
-/* every write returns the whole homes list → redraw, then say so. A late answer keeps the data
-   but never pulls the person off another screen. */
+/* every write returns the whole homes list → redraw, then say so. One write at a time: a second
+   tap waits (review PR #63). A late answer keeps the data but never pulls the person off another
+   screen. A list that changed under us (already decided, already in a home) is read again. */
+function hhMsg(text){
+  var m = el("msg"); if (!m) return;
+  m.className = "msg err"; m.textContent = text;
+  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
+}
 function hhWrite(name, args, okText){
+  if (hhBusy) return;
+  hhBusy = true;
   var from = current;
+  function onErr(err){
+    hhBusy = false;
+    Array.prototype.forEach.call(document.querySelectorAll("#view button"), function(n){ n.disabled = false; });
+    err = err && err.code ? err : { code: "UNKNOWN" };
+    /* some resident-worded errors would mislead here ("ask one of them for an invite") */
+    var k = "adm_hh_err_" + err.code;
+    if (err.code === "NOT_ADMIN" || jcT(k) === k) return fail(err);
+    if ((err.code === "NOT_FOUND" || err.code === "ALREADY_HAS_HOME") && hh && current === "households") {
+      hh.data = null; hh.open = null;
+      return loadHouseholds().then(function(){ if (current === "households") hhMsg(jcT(k)); });
+    }
+    hhMsg(jcT(k));
+  }
   return rpc(name, args).then(function(d){
     d = hhShape(d);
-    if (!d) throw { code: "UNKNOWN" };
+    if (!d) return onErr({ code: "UNKNOWN" });
+    hhBusy = false;
     if (!hh) return;
     hh.data = d;
     if (current !== from) return;
     hh.open = null;
     show("households");
     showOk(okText);
-  }).catch(function(err){
-    Array.prototype.forEach.call(document.querySelectorAll("#view button"), function(n){ n.disabled = false; });
-    err = err && err.code ? err : { code: "UNKNOWN" };
-    /* some resident-worded errors would mislead here ("ask one of them for an invite") */
-    var k = "adm_hh_err_" + err.code, m = el("msg");
-    if (err.code !== "NOT_ADMIN" && jcT(k) !== k && m) {
-      m.className = "msg err"; m.textContent = jcT(k);
-      if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
-      return;
-    }
-    fail(err);
-  });
+  }, onErr);
 }
 function wireHouseholds(){
   Array.prototype.forEach.call(document.querySelectorAll("[data-inv]"), function(b){
     b.addEventListener("click", function(){
+      if (hhBusy) return;
       var yes = b.dataset.yes === "1";
       Array.prototype.forEach.call(document.querySelectorAll('[data-inv="' + CSS.escape(b.dataset.inv) + '"]'), function(n){ n.disabled = true; });
       hhWrite("jc_admin_invite_decide", { p_invite: b.dataset.inv, p_approve: yes }, jcT(yes ? "adm_hh_approved" : "adm_hh_declined"));
@@ -885,7 +898,7 @@ function wireHouseholds(){
   Array.prototype.forEach.call(document.querySelectorAll("[data-hh]"), function(b){
     b.addEventListener("click", function(){
       var h = hhHome(b.dataset.id), a = b.dataset.hh;
-      if (!h) return;
+      if (!h || hhBusy) return;
       if (a === "edit" || a === "remove") {
         var m = a === "remove" ? Number(b.dataset.m) : null;
         var same = hh.open && hh.open.id === h.id && hh.open.what === a && hh.open.m === m;
@@ -904,7 +917,7 @@ function wireHouseholds(){
     });
   });
   Array.prototype.forEach.call(document.querySelectorAll("[data-cancel]"), function(b){
-    b.addEventListener("click", function(){ hh.open = null; show("households"); });
+    b.addEventListener("click", function(){ if (hhBusy) return; hh.open = null; show("households"); });
   });
   var t = el("hhType");
   if (t) t.addEventListener("change", function(){ el("hhBldWrap").hidden = t.value !== "apartment"; });
@@ -912,13 +925,13 @@ function wireHouseholds(){
     f.addEventListener("submit", function(ev){
       ev.preventDefault();
       var h = hhHome(f.dataset.id);
-      if (!h) return;
+      if (!h || hhBusy) return;
       var go = f.querySelector('button[type="submit"]');
       if (f.dataset.form === "edit") {
         var type = el("hhType").value;
         go.disabled = true;
         return hhWrite("jc_admin_home_edit", { p_home: h.id, p_village: el("hhVillage").value, p_type: type,
-          p_building: type === "apartment" ? el("hhBuilding").value : null, p_number: el("hhNumber").value },
+          p_building: type === "apartment" ? el("hhBuilding").value.trim() : null, p_number: el("hhNumber").value.trim() },
           jcT("adm_hh_saved"));
       }
       var m = h.members[hh.open && hh.open.m];
