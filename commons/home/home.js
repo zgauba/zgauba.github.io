@@ -142,7 +142,9 @@ var VIEWS = {
     } else if (mhTab === "account") {
       /* organizers: their own button above the account box; anyone else: a quiet link at the
          bottom, so a newly given code still has a way in (Zee, 2026-11-06) */
-      var organizer = (m.admin_scopes || []).length > 0 || (m.admin_events || []).length > 0 || m.is_owner === true;
+      /* the same rule as Organizer Tools' own door (admin.js canEnter): a pets-only code doesn't open it (review R1) */
+      var sc = m.admin_scopes || [];
+      var organizer = sc.indexOf("events") >= 0 || sc.indexOf("community") >= 0 || (m.admin_events || []).length > 0 || m.is_owner === true;
       body =
         (organizer ? '<a class="btn" id="toAdmin" href="../admin/">' + esc(jcT("mh_organizer")) + '</a>' : '') +
         '<div class="panel">' +
@@ -423,7 +425,8 @@ function paint(){
   el("homeLink").textContent = name;
   el("langBtn").textContent = jcT("toggle_label");
   document.title = jcT("mh_title") + " — " + name;
-  if (state && state.status === "member") { jcTabBar("../", "home", cfg); jcHelp("home"); }
+  if (state && state.status === "member") jcTabBar("../", "home", cfg);
+  jcHelp("home");                          /* also while claiming a home — that's what it explains (R3) */
 }
 
 el("langBtn").addEventListener("click", function(){

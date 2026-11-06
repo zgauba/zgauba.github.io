@@ -308,6 +308,7 @@ var JC_STRINGS = {
     mh_organizer: "Organizer Tools",
     /* page help "?" (2026-11-06) */
     help: "Help",
+    close: "Close",
     mh_have_code: "Have an organizer code?",
     adm_h_locked_here: "{a} after wrong organizer codes.",
     help_events_title: "Events",
@@ -980,6 +981,7 @@ var JC_STRINGS = {
     mh_organizer: "أدوات المنظمين",
     /* مساعدة الصفحة "؟" */
     help: "مساعدة",
+    close: "إغلاق",
     mh_have_code: "لديك رمز منظمين؟",
     adm_h_locked_here: "{a} بعد رموز منظمين خاطئة.",
     help_events_title: "الفعاليات",

@@ -57,3 +57,29 @@ test("Organizer Tools help mentions who sees the platform numbers; none on the l
   await expect(h.locator("h2")).toHaveText("Organizer Tools");
   await expect(h).toContainText("Platform-wide numbers show only to the person who runs Commons.");
 });
+
+test("one '?' only, after a language switch and moving between pages of the app; label follows the language", async ({ page }) => {
+  const eb = eventsBackend();
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await page.locator("#langBtn").click();
+  await expect(page.locator("#jcHelpBtn")).toHaveCount(1);
+  await expect(page.locator("#jcHelpBtn")).toHaveAttribute("aria-label", "مساعدة");
+  await page.locator("#jcBackBtn").click();
+  await expect(page.locator("h1")).toBeVisible();
+  await expect(page.locator("#jcHelpBtn")).toHaveCount(1);
+});
+
+test("narrow phone (320 px): back arrow, name, '?' and language all stay on screen", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  const eb = eventsBackend();
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  for (const sel of ["#jcBackBtn", "#jcHelpBtn", "#langBtn"]) {
+    const b = await page.locator(sel).boundingBox();
+    expect(b.x).toBeGreaterThanOrEqual(0);
+    expect(b.x + b.width).toBeLessThanOrEqual(320);
+  }
+});

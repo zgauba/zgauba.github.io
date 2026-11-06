@@ -862,3 +862,14 @@ test("My Home → Account: a resident sees 'Have an organizer code?' at the bott
   await expect(page.locator("#toAdmin")).toHaveText("Have an organizer code?");
   await expect(page.locator("a#toAdmin.btn")).toHaveCount(0);
 });
+
+test("My Home → Account: a pets-only code doesn't get the Organizer Tools button; the platform owner does", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["pets"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("home/?tab=account");
+  await expect(page.locator("#toAdmin")).toHaveText("Have an organizer code?");
+  ab.st.scopes = []; ab.st.owner = true;
+  await page.reload();
+  await expect(page.locator("a#toAdmin.btn")).toHaveText("Organizer Tools");
+});

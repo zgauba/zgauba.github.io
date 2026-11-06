@@ -87,6 +87,9 @@ function jcHelp(key){
     b.setAttribute("aria-haspopup", "dialog");
     bar.insertBefore(b, el("langBtn"));
     b.addEventListener("click", function(){ jcHelpOpen(b.dataset.key); });
+    /* pages can switch language without re-rendering (a half-filled form): keep the label current (R4) */
+    var lb = el("langBtn");
+    if (lb) lb.addEventListener("click", function(){ setTimeout(function(){ b.setAttribute("aria-label", jcT("help")); }, 0); });
   }
   b.dataset.key = key;
   b.setAttribute("aria-label", jcT("help"));
@@ -111,7 +114,7 @@ function jcHelpOpen(key){
   }
   d.setAttribute("aria-label", jcT("help_" + key + "_title"));
   d.innerHTML = '<div class="sheethead"><h2>' + esc(jcT("help_" + key + "_title")) + '</h2>' +
-    '<button type="button" class="lang" id="jcHelpClose">' + esc(jcT("ev_labels_close")) + '</button></div>' +
+    '<button type="button" class="lang" id="jcHelpClose">' + esc(jcT("close")) + '</button></div>' +
     '<ul class="helplist">' + items.join("") + '</ul>';
   el("jcHelpClose").addEventListener("click", function(){ jcHelpClose(d); });
   if (d.showModal) d.showModal(); else d.setAttribute("open", "");
