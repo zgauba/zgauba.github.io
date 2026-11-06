@@ -812,10 +812,11 @@ function renderMap(entries){
   var unpinned = venue ? 0 : entries.filter(function(e){ return !hasPos(e); }).length;
   el("body").innerHTML =
     '<div class="evmapwrap"><div class="evmap" id="map"></div>' +
-      '<button type="button" class="lang maplayer" id="layerBtn">' + esc(jcT(layer === "sat" ? "pin_street" : "pin_sat")) + '</button>' +
-      '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button>' +
-      (venue || !legendHtml(ev) ? '' : '<button type="button" class="lang maplabels" id="labelsBtn" aria-haspopup="dialog">' +
-        '<span aria-hidden="true">?</span> ' + esc(jcT("ev_labels")) + '</button>') + '</div>' +
+      /* top right, one row: Map Labels · Street; Find Me bottom right (Zee, 2026-11-06) */
+      '<div class="mapbtns">' +
+        (venue || !legendHtml(ev) ? '' : '<button type="button" class="lang" id="labelsBtn" aria-haspopup="dialog">' + esc(jcT("ev_labels")) + '</button>') +
+        '<button type="button" class="lang" id="layerBtn">' + esc(jcT(layer === "sat" ? "pin_street" : "pin_sat")) + '</button></div>' +
+      '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
     '<dialog class="sheet" id="labels" aria-label="' + esc(jcT("ev_labels")) + '"></dialog>' +
     '<div id="mapAfter">' +
     (unpinned ? '<p class="help" style="margin-top:8px">' + esc(unpinned) + ' · ' + esc(jcT("ev_unpinned")) +

@@ -824,3 +824,20 @@ test("back to coming soon: offered on a published event nobody has joined; refus
   await expect(page.locator("#msg")).toHaveText("Homes have already signed up, so it can't go back to coming soon. Pause sign-ups instead.");
   expect(calls.filter((c) => c.name === "jc_admin_event_announce")).toHaveLength(2);
 });
+
+test("event editor: the date fields fit the phone screen (no spilling past the right edge)", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator("#newEv").click();
+  await page.locator('[data-tpl="halloween"]').click();
+  await page.locator("#starts_at").fill("2026-11-05T20:50");
+  const vw = page.viewportSize().width;
+  for (const id of ["#starts_at", "#ends_at"]) {
+    const b = await page.locator(id).boundingBox();
+    const panel = await page.locator(id).evaluate((n) => n.closest(".panel, form, main").getBoundingClientRect().right);
+    expect(b.x + b.width).toBeLessThanOrEqual(Math.min(vw, panel) + 0.5);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(vw);
+});
