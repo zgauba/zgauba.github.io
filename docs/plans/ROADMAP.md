@@ -46,7 +46,20 @@ household's member limit currently have nowhere to go.
 - Admin log (`jc_admin_log_list`); links from App Health notices ("household left", "pin far away") to the home.
 - Verify each RPC's live shape before building (they date from S1, never exercised by a screen).
 
-### R2 — Event-night extras  ·  DB (one small migration)
+### R2 — Event-night extras + Events audit fixes  ·  DB (two PRs: R2a fixes, then R2b extras)
+**R2a — Events audit fixes** (`docs/qa/events-qa-2026-11-06.md`; Zee 2026-11-06: fix all of them). Ships first:
+it changes existing behaviour, and R2b builds on the same functions.
+- **D1 + L1** — when a household leaves a home, its sign-ups lose the organizer's "hidden" flag and their spot,
+  so the next family starts clean. The same household withdrawing + re-joining stays hidden.
+- **D2** — at an event's end time sign-ups stop and the event moves to Past; a scheduled job closes it
+  24 h after the end time, so its stats snapshot is always taken. Undated events are exempt. Needs a
+  test that fails today (the live `e2e/halloween-test` row is the example).
+- **F1** — the Halloween + Haq al Laila templates turn on switch, supply and crowd reports.
+- **F2** — publishing a homes event asks for a start date (event day needs one).
+- **U1** — a hidden or directory-hidden household sees "Your home isn't shown on the map" on My Sign-Up.
+- **U3** — closing an event clears any banner about it; revoking an event admin clears their banner.
+
+**R2b — Event-night extras**
 - **Organizer marks a home out** (Zee 2026-11-06: yes) — organizers + that event's admins set a home's
   live state / supply on event night; admin-logged; the household sees it on My Sign-Up. New RPC (never
   change `jc_entry_live_set`'s signature).
@@ -56,8 +69,6 @@ household's member limit currently have nowhere to go.
 - **Holiday lights template** (Zee 2026-11-06: "just another event template") — a homes event: each
   decorated home is a stop; its own look (needs `holiday_lights` added to the `jc_events.look` CHECK — same
   migration) + template questions (e.g. best viewed from: street / garden; lights on until …).
-- **Before planning R2 (synthesis):** run `/qa-feature` on Events (organizer + event-day flows) — the per-module
-  audit the 2026-11-03 synthesis promised never ran; it may add items here.
 - **Free a no-show's place** (synthesis; T5.2 3b #9 / PR 4, deferred by Zee to a DB PR) — organizers / that
   event's admins withdraw a sign-up; admin-logged. New RPC.
 - **The household is told** (synthesis; 3a) — when an organizer moves its pin or marks it out, My Sign-Up says
@@ -173,6 +184,10 @@ of its wording + design (R8) and the event itself need to be ready by early Janu
   to Commons.
 - Haq al Laila runs on the launched Commons — dev done well before 23 Jan 2027.
 - Pet sightings (stored vs WhatsApp-only): discuss at the start of R5.
+- Events audit (all four answered yes): treat-night templates turn on supply + crowd reports; events stop
+  sign-ups at their end time and auto-close 24 h later; hidden households are told; the hidden flag resets
+  when a new family moves in. Every audit finding is fixed in R2a.
+- Order: R0 → R1 → R2 as listed; R2 is planned (`/plan-change`) while R1 is built, and built after R1 merges.
 
 ## Superseded ideas (from the Oct–Nov planning conversations)
 
