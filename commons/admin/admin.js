@@ -48,6 +48,7 @@ var health = null;        /* T5.2 PR 6: { report | null, reportErr, notices | nu
 var hh = null;            /* R1 households: { data (jc_admin_homes_list) | null, open: {id, what, m (member index)} | null, focus: home id | null } */
 var hlog = null;          /* R1: jc_admin_log_list rows */
 var hhBusy = false;       /* R1: a households write is in flight — one at a time (as H6) */
+var hhPin = null;         /* R1.1: { id (home) } — the households pin fix (hhpin view) */
 
 /* Halloween 2026, as residents knew it (jubail-halloween/): friendly wording and the
    pin hints PR 5 draws (ring = which gate, icon = what's handed out). Arabic: DRAFT. */
@@ -177,7 +178,8 @@ function show(name){
   jcBack(name === "signups" ? leaveSignups
        : name === "pinmove" ? function(){ pm = null; show("signups"); }
        : name === "feedback" || name === "health" || name === "households" ? function(){ show("home"); }
-       : name === "adminlog" ? function(){ show("households"); } : null, "back");
+       : name === "adminlog" ? function(){ show("households"); }
+       : name === "hhpin" ? function(){ if (hhBusy) return; hhPin = null; show("households"); } : null, "back");
   jcHelp(name === "lock" ? null : "admin");
   VIEWS[name]();
 }
@@ -740,9 +742,37 @@ var VIEWS = {
     if (hh.focus) {                          /* opened from a notice: that home, once */
       var li = document.querySelector('[data-home="' + CSS.escape(hh.focus) + '"]');
       hh.focus = null;
-      if (li) { li.classList.add("focus"); if (li.scrollIntoView) li.scrollIntoView({ block: "center" }); }
+      if (li) {
+        li.classList.add("focus");
+        if (li.scrollIntoView) li.scrollIntoView({ block: "center" });
+        /* a pin notice lands one tap from the fix (R1.1) */
+        var pb = li.querySelector('[data-hh="pin"]');
+        if (pb && pinFlagged(hhHome(li.dataset.home))) pb.focus();
+      }
       else showErr("HOME_GONE");
     }
+  },
+
+  /* R1.1 — fix a home's own pin from Households (the sign-ups pin move's map, ring and confirm) */
+  hhpin: function(){
+    var h = hhHome(hhPin && hhPin.id);
+    if (!h) { hhPin = null; return show("households"); }
+    var flags = pinFlags(h);
+    el("view").innerHTML =
+      '<h1>' + esc(jcT(h.lat != null ? "adm_hh_pin_fix" : "adm_hh_pin_set")) + '</h1>' +
+      '<p class="sub">' + esc(hhLabel(h)) + '</p>' +
+      '<div class="panel"><p class="help">' + esc(jcT(h.lat != null ? "adm_pm_now_home" : "adm_pm_now_none")) + ' ' +
+        esc(jcT("adm_hh_pin_help")) + '</p>' +
+        (flags.length ? '<div class="flags">' + flags.map(function(t){ return '<span>' + esc(t) + '</span>'; }).join("") + '</div>' : '') +
+        pinMapHtml() +
+        msgBox() +
+        '<button class="btn" type="button" id="hhPinGo">' + esc(jcT("adm_hh_pin_go")) + '</button>' +
+        '<button class="btn ghost" type="button" id="hhPinCancel">' + esc(jcT("ev_cancel")) + '</button>' +
+      '</div>';
+    vmap = initPinMap(h.lat != null && h.lng != null ? [h.lat, h.lng] : null);
+    on("hhPinGo", hhPinSave);
+    on("hhPinCancel", function(){ if (hhBusy) return; hhPin = null; show("households"); });
+    if (hhBusy) ["hhPinGo", "hhPinCancel"].forEach(function(b){ el(b).disabled = true; });   /* redrawn mid-save (language) */
   },
 
   /* R1 — the admin log: who did what, newest 100. The stored target holds ids: only a home
@@ -818,11 +848,17 @@ function loadHouseholds(){
     if (current === "households") VIEWS.households();
   }).catch(function(err){ if (hh === mine && current === "households") fail(err && err.code ? err : { code: "UNKNOWN" }); });
 }
-function homeCard(h){
+/* the pin's own flags, in words (the card and the pin fix show the same ones) */
+function pinFlags(h){
   var f = hObj(h.flags) || {}, flags = [];
   if (h.lat == null) flags.push(jcT("adm_hh_no_pin"));
   if (f.pin_far) flags.push(jcT("adm_hh_pin_far"));
   if (f.pin_near) flags.push(jcT("adm_hh_pin_near"));
+  return flags;
+}
+function pinFlagged(h){ return !!h && pinFlags(h).length > 0; }
+function homeCard(h){
+  var flags = pinFlags(h);
   if (h.suppressed) flags.push(jcT("adm_hh_suppressed"));
   if (!h.members.length) flags.push(jcT("adm_hh_empty"));
   var open = hh.open && hh.open.id === h.id ? hh.open : null;
@@ -836,6 +872,7 @@ function homeCard(h){
       b("remove", jcT("adm_hh_remove"), "danger", i) + '</li>';
   }).join("") + '</ul>' : '';
   var acts = '<div class="acts">' + b("edit", jcT("adm_hh_edit")) +
+    b("pin", jcT(h.lat != null ? "adm_hh_pin_fix" : "adm_hh_pin_set")) +
     (h.suppressed ? b("show", jcT("adm_hh_show")) : b("hide", jcT("adm_hh_hide"))) + '</div>';
   var form = '';
   if (open && open.what === "edit") {
@@ -915,6 +952,7 @@ function wireHouseholds(){
     b.addEventListener("click", function(){
       var h = hhHome(b.dataset.id), a = b.dataset.hh;
       if (!h || hhBusy) return;
+      if (a === "pin") { hh.open = null; hhPin = { id: h.id }; return show("hhpin"); }
       if (a === "edit" || a === "remove") {
         var m = a === "remove" ? Number(b.dataset.m) : null;
         var same = hh.open && hh.open.id === h.id && hh.open.what === a && hh.open.m === m;
@@ -968,6 +1006,55 @@ function closesAt(e){
 }
 /* R2a (D-M4): a start with no end means "sign-ups stop 6 h after the start, it closes a day later" — say so */
 function noEndWarn(start, end){ return start && !end ? "\n\n" + jcT("adm_no_end_warn") : ""; }
+
+/* R1.1 — the pin fix. The write answers with the pin (not the homes list): the list is read again,
+   then Households shows the result. Undo puts the old spot back — a home with no pin before has none
+   to put back. A refused spot (BAD_PIN: outside the community) keeps the map open. hhBusy stays on
+   until the list is read again: a tap in between would be thrown away by the redraw. */
+function hhReread(then){
+  return rpc("jc_admin_homes_list").then(function(d){
+    d = hhShape(d);
+    if (d && hh) { hh.data = d; hh.open = null; }
+  }, function(){}).then(function(){             /* the pin DID move: say so even if the re-read fails */
+    hhBusy = false;
+    if (current !== "hhpin" && current !== "households") return;   /* never pull them off another screen */
+    hhPin = null; show("households"); then();
+  });
+}
+function hhAfterPin(text, undo){ return hhReread(function(){ okUndo(text, undo); }); }
+/* Undo is on Households (no map): undo=true words a refused old spot for that, other failures plainly */
+function hhPinErr(err, undo){
+  err = err && err.code ? err : { code: "UNKNOWN" };
+  var k = "adm_hh_err_" + err.code;
+  if (err.code === "NOT_FOUND" && hh) return hhReread(function(){ hhMsg(jcT(k)); });   /* the home went away */
+  hhBusy = false;
+  Array.prototype.forEach.call(document.querySelectorAll("#view button"), function(n){ n.disabled = false; });
+  if (err.code === "NOT_ADMIN") return fail(err);
+  if (undo) return hhMsg(jcT(err.code === "BAD_PIN" ? "adm_hh_pin_undo_bad" : "err_UNKNOWN"));
+  if (jcT(k) === k) return fail(err);
+  hhMsg(jcT(k));
+}
+function hhPinSave(){
+  var h = hhHome(hhPin && hhPin.id);
+  if (!h || hhBusy) return;
+  if (!vmap) return hhMsg(jcT("adm_hh_pin_nomap"));          /* no map (Leaflet didn't load) = no new spot */
+  var p = centerOf(vmap), label = jcHomeLabel(h), id = h.id;
+  if (!window.confirm(jcFmt("adm_hh_pin_confirm", { h: label }))) return;
+  hhBusy = true;
+  ["hhPinGo", "hhPinCancel"].forEach(function(b){ if (el(b)) el(b).disabled = true; });
+  rpc("jc_admin_home_pin_set", { p_home: id, p_lat: p.lat, p_lng: p.lng }).then(function(r){
+    var from = r && Array.isArray(r.from) && r.from.length === 2 ? r.from : null;
+    var undo = from ? function(){
+      if (hhBusy) return false;                  /* okUndo keeps the button live */
+      hhBusy = true;
+      rpc("jc_admin_home_pin_set", { p_home: id, p_lat: from[0], p_lng: from[1] }).then(function(){
+        return hhAfterPin(jcT("adm_undone"), null);
+      }, function(err){ hhPinErr(err, true); });
+    } : null;
+    return hhAfterPin(jcFmt(from ? "adm_hh_pin_ok" : "adm_hh_pin_ok_new", { h: label }), undo);
+  }, function(err){ hhPinErr(err, false); });
+}
+
 function eventRow(e){
   var status = e.status === "draft" ? "adm_status_draft" : e.status === "archived" ? "adm_status_archived"
     : e.ended === true ? null                                                                          /* R2a (D2) */
@@ -1334,7 +1421,7 @@ function okUndo(text, undo){
   var u = document.createElement("button");
   u.type = "button"; u.className = "mini"; u.id = "undo"; u.textContent = jcT("adm_undo");
   u.style.marginInlineStart = "10px";
-  u.addEventListener("click", function(){ u.disabled = true; undo(); });
+  u.addEventListener("click", function(){ u.disabled = true; if (undo() === false) u.disabled = false; });   /* false = not started */
   el("msg").appendChild(u);
 }
 
