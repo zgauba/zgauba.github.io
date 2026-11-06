@@ -140,15 +140,17 @@ test("community admin: change a code — shown once, gone after navigating", asy
   const ab = adminBackend({ scopes: ["community"] });
   const { calls } = await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
-  await page.goto("admin/");
+  await page.goto("admin/?tab=community");                                 // codes live under Community (2026-11-06)
   await expect(page.locator("[data-rotate]")).toHaveCount(3);
   page.once("dialog", (d) => d.accept());
   await page.locator('[data-rotate="join"]').click();
   await expect(page.locator("#newCode")).toHaveText("NEWCODEJOIN");
   expect(lastCall(calls, "jc_admin_code_rotate").args).toEqual({ p_scope: "join" });
   // any later action drops it (review PR #26): pausing sign-ups re-renders the page
+  await page.locator("#atab-events").click();
   await page.locator('li[data-event="test-event"] [data-act="pause"]').click();
   await expect(page.locator("#msg")).toHaveText("Sign-ups are paused.");
+  await page.locator("#atab-community").click();
   await expect(page.locator("#newCode")).toHaveCount(0);
   // declining the confirm sends nothing
   page.once("dialog", (d) => d.dismiss());
@@ -172,7 +174,7 @@ test("lock organizer tools: exit ends the unlock", async ({ page }) => {
   const ab = adminBackend({ scopes: ["events"] });
   const { calls } = await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
-  await page.goto("admin/");
+  await page.goto("admin/?tab=community");
   await page.locator("#exit").click();
   await expect(page.locator("#code")).toBeVisible();
   expect(calls.some((c) => c.name === "jc_admin_exit")).toBe(true);
@@ -207,7 +209,7 @@ test("copying a new code that the browser blocks says so (never a silent failure
   const ab = adminBackend({ scopes: ["community"] });
   await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
-  await page.goto("admin/");
+  await page.goto("admin/?tab=community");
   await page.evaluate(() => { Object.defineProperty(navigator, "clipboard", { value: { writeText: () => Promise.reject(new Error("blocked")) } }); });
   page.once("dialog", (d) => d.accept());
   await page.locator('[data-rotate="events"]').click();
@@ -399,7 +401,10 @@ test("event admin (no code): straight to their events — no New event, Publish,
   await expect(page.locator('[data-act="admins"]')).toHaveCount(0);     // appointing is the community's
   await expect(page.locator("#exit")).toHaveCount(0);                   // nothing to lock: no code
   await expect(page.locator("h2.group").filter({ hasText: /codes/i })).toHaveCount(0);
+  await page.locator("#atab-community").click();
   await expect(page.locator("#addCode")).toBeVisible();
+  await expect(page.locator("#exit, [data-rotate], #healthOpen")).toHaveCount(0);
+  await page.locator("#atab-events").click();
   await page.locator('[data-act="pause"]').click();                    // runs their own event
   await expect(page.locator("#msg")).toHaveText(/paused/i);
   expect(lastCall(calls, "jc_admin_event_signups").args).toEqual({ p_event: LIVE_ID, p_open: false });
@@ -501,14 +506,18 @@ test("already in: 'Enter Another Code' opens the code box with Back; a community
   const ab = adminBackend({ adminEvents: [LIVE_ID] });
   await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
-  await page.goto("admin/");
+  await page.goto("admin/?tab=community");
   await page.locator("#addCode").click();
   await expect(page.locator("#code")).toBeVisible();
   await page.locator("#back").click();
+  await page.locator("#atab-events").click();
   await expect(page.locator(".aevents li")).toHaveCount(1);
+  await page.locator("#atab-community").click();
   await page.locator("#addCode").click();
   await unlock(page, "COMMUNITY-1");
+  await page.locator("#atab-events").click();
   await expect(page.locator(".aevents li")).toHaveCount(3);                 // community admin: every event
+  await page.locator("#atab-community").click();
   await expect(page.locator("h2.group").filter({ hasText: /codes/i })).toBeVisible();
 });
 
@@ -518,7 +527,9 @@ test("code holder who is also an event admin: Lock drops the code, keeps their o
   await signIn(page);
   await page.goto("admin/");
   await expect(page.locator(".aevents li")).toHaveCount(3);
+  await page.locator("#atab-community").click();
   await page.locator("#exit").click();
+  await page.locator("#atab-events").click();
   await expect(page.locator(".aevents li")).toHaveCount(1);              // still runs Test Event
   await expect(page.locator(".aevents li")).toContainText("Test Event");
   await expect(page.locator("#exit")).toHaveCount(0);
@@ -872,4 +883,58 @@ test("My Home → Account: a pets-only code doesn't get the Organizer Tools butt
   ab.st.scopes = []; ab.st.owner = true;
   await page.reload();
   await expect(page.locator("a#toAdmin.btn")).toHaveText("Organizer Tools");
+});
+
+test("Organizer Tools sub-menu: Events · Banner · Community, each with its own part; ?tab= remembered", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["community"], owner: true });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await expect(page.locator(".subtabs [role=tab]")).toHaveText(["Events", "Banner", "Community"]);
+  await expect(page.locator("#newEv")).toBeVisible();
+  await expect(page.locator("#bannerForm, [data-rotate], #healthOpen")).toHaveCount(0);
+  await page.locator("#atab-banner").click();
+  await expect(page.locator("#bannerForm")).toBeVisible();
+  await expect(page.locator("#newEv")).toHaveCount(0);
+  await page.locator("#atab-community").click();
+  await expect(page).toHaveURL(/tab=community/);
+  await expect(page.locator("#healthOpen")).toBeVisible();
+  await expect(page.locator("#fbOpen")).toBeVisible();
+  await expect(page.locator("[data-rotate]")).toHaveCount(3);
+  await expect(page.locator("#addCode")).toBeVisible();
+  await page.reload();
+  await expect(page.locator("#atab-community")).toHaveAttribute("aria-selected", "true");
+});
+
+test("Organizer Tools sub-menu: an events organizer gets no codes / health; Community keeps Add code + Lock", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/?tab=community");
+  await expect(page.locator("#healthOpen, [data-rotate], #fbOpen")).toHaveCount(0);
+  await expect(page.locator("#addCode")).toBeVisible();
+  await expect(page.locator("#exit")).toBeVisible();
+});
+
+test("Organizer Tools ?tab=: an unknown or not-allowed tab falls back to one the person has", async ({ page }) => {
+  const ab = adminBackend({ adminEvents: [PAST_ID] });                    // event admin, no live event: no Banner tab
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/?tab=banner");
+  await expect(page.locator("#atab-events")).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".aevents")).toBeVisible();
+  await page.goto("admin/?tab=zzz");
+  await expect(page.locator("#atab-events")).toHaveAttribute("aria-selected", "true");
+});
+
+test("Organizer Tools: a half-typed banner survives switching tabs; focus stays on the tapped tab", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/?tab=banner");
+  await page.locator("#bannerText").fill("Half way through");
+  await page.locator("#atab-events").click();
+  await expect(page.locator("#atab-events")).toBeFocused();
+  await page.locator("#atab-banner").click();
+  await expect(page.locator("#bannerText")).toHaveValue("Half way through");
 });

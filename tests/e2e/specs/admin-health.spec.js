@@ -8,7 +8,7 @@ async function openHealth(page, opts = {}) {
   const ab = adminBackend(Object.assign({ scopes: ["community"], owner: true }, opts));   // the owner sees every row
   const sb = await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
-  await page.goto("admin/");
+  await page.goto("admin/?tab=community");
   await page.locator("#healthOpen").click();
   await expect(page.locator("h1")).toHaveText("App Health");
   await expect(page.locator(".hsum")).toBeVisible();
@@ -148,7 +148,7 @@ test("the grant expired meanwhile (NOT_ADMIN): back to the lock, nothing half-dr
   await stubBackend(page, { rpc: Object.assign({}, ab.rpc, {
     jc_admin_report: () => { ab.st.scopes = []; return raise("NOT_ADMIN"); } }) });
   await signIn(page);
-  await page.goto("admin/");
+  await page.goto("admin/?tab=community");
   await page.locator("#healthOpen").click();
   await expect(page.locator("#code")).toBeVisible();
   await expect(page.locator(".hrow")).toHaveCount(0);

@@ -543,6 +543,9 @@ var JC_STRINGS = {
     adm_fb_none: "No feedback yet.",
     /* T5.2 PR 6 — App health (community admins) */
     adm_h_open: "App Health & Notices",
+    adm_tab_events: "Events",
+    adm_tab_banner: "Banner",
+    adm_tab_community: "Community",
     adm_h_title: "App Health",
     adm_h_all_good: "✅ All good.",
     adm_h_issues: "⚠️ {n} thing(s) need a look.",
@@ -1216,6 +1219,9 @@ var JC_STRINGS = {
     adm_fb_none: "لا ملاحظات بعد.",
     /* T5.2 PR 6 — صحة التطبيق */
     adm_h_open: "صحة التطبيق والتنبيهات",
+    adm_tab_events: "الفعاليات",
+    adm_tab_banner: "الإعلان",
+    adm_tab_community: "المجتمع",
     adm_h_title: "صحة التطبيق",
     adm_h_all_good: "✅ كل شيء على ما يرام.",
     adm_h_issues: "⚠️ {n} أمر يحتاج إلى نظرة.",
