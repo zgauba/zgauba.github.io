@@ -45,7 +45,7 @@ function adminTabs(){
   return t;
 }
 var health = null;        /* T5.2 PR 6: { report | null, reportErr, notices | null, noticesErr, at } */
-var hh = null;            /* R1 households: { data (jc_admin_homes_list) | null, open: {id, what, user} | null, focus: home id | null } */
+var hh = null;            /* R1 households: { data (jc_admin_homes_list) | null, open: {id, what, m (member index)} | null, focus: home id | null } */
 var hlog = null;          /* R1: jc_admin_log_list rows */
 
 /* Halloween 2026, as residents knew it (jubail-halloween/): friendly wording and the
