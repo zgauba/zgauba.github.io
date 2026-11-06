@@ -73,3 +73,47 @@ function jcBack(target, labelKey){
     b.onclick = function(e){ e.preventDefault(); target(); };
   } else { b.href = target; b.onclick = null; }
 }
+
+/* "?" help in the top bar, next to the language button (Zee, 2026-11-06). key → strings
+   help_<key>_title + help_<key>_1…n, built when opened so it follows the language. **x** = bold. */
+function jcHelp(key){
+  var bar = document.querySelector(".topbar");
+  if (!bar) return;
+  var b = el("jcHelpBtn");
+  if (!key) { if (b) b.remove(); return; }
+  if (!b) {
+    b = document.createElement("button");
+    b.type = "button"; b.id = "jcHelpBtn"; b.className = "lang help-btn"; b.textContent = "?";
+    b.setAttribute("aria-haspopup", "dialog");
+    bar.insertBefore(b, el("langBtn"));
+    b.addEventListener("click", function(){ jcHelpOpen(b.dataset.key); });
+  }
+  b.dataset.key = key;
+  b.setAttribute("aria-label", jcT("help"));
+}
+function jcHelpOpen(key){
+  var d = el("jcHelp");
+  if (!d) {
+    d = document.createElement("dialog");
+    d.id = "jcHelp"; d.className = "sheet";
+    document.body.appendChild(d);
+    d.addEventListener("click", function(e){        /* a tap outside the window closes it */
+      if (e.target !== d) return;
+      var r = d.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) jcHelpClose(d);
+    });
+  }
+  var items = [];
+  for (var i = 1; i <= 12; i++) {
+    var k = "help_" + key + "_" + i, t = jcT(k);
+    if (t === k) break;
+    items.push("<li>" + esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>") + "</li>");
+  }
+  d.setAttribute("aria-label", jcT("help_" + key + "_title"));
+  d.innerHTML = '<div class="sheethead"><h2>' + esc(jcT("help_" + key + "_title")) + '</h2>' +
+    '<button type="button" class="lang" id="jcHelpClose">' + esc(jcT("ev_labels_close")) + '</button></div>' +
+    '<ul class="helplist">' + items.join("") + '</ul>';
+  el("jcHelpClose").addEventListener("click", function(){ jcHelpClose(d); });
+  if (d.showModal) d.showModal(); else d.setAttribute("open", "");
+}
+function jcHelpClose(d){ if (d.close) d.close(); else d.removeAttribute("open"); }

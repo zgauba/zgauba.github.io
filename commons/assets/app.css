@@ -80,3 +80,16 @@ a.btn.ghost, a.btn.ghost:visited{color:var(--jc-ink)}
 .richbar{display:flex; gap:6px; margin:2px 0 -2px}
 .richbar .rich-b{font-weight:900} .richbar .rich-u{text-decoration:underline}
 .richpreview{border:1px dashed var(--jc-line); border-radius:10px; padding:10px 12px; font-size:14px; overflow-wrap:anywhere}
+
+/* pop-up window (Map Labels, page help): native <dialog> */
+dialog.sheet{border:1px solid var(--jc-line); border-radius:16px; background:var(--jc-bg); color:var(--jc-ink);
+  width:min(92vw, 420px); max-height:80vh; overflow:auto; padding:14px 16px 18px}
+dialog.sheet::backdrop{background:rgba(0,0,0,.6)}
+.sheethead{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px}
+.sheethead h2{margin:0; font-size:18px}
+/* the "?" help button in the top bar (2026-11-06) */
+.topbar .help-btn{width:30px; height:30px; min-width:30px; padding:0; border-radius:50%; font-weight:800; font-size:14px; flex:0 0 auto; margin-inline-end:-4px}
+.helplist{margin:4px 0 0; padding-inline-start:18px; display:flex; flex-direction:column; gap:8px; font-size:15px; line-height:1.45}
+/* My Home → account: organizers' own button above the box; others a quiet link at the bottom */
+a#toAdmin.btn{display:block; text-align:center; margin-bottom:12px}
+.orglink{margin-top:18px; text-align:center}
