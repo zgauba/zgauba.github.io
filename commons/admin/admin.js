@@ -241,6 +241,13 @@ function healthChecks(r){
   ["orphan_users", "photo_purge"].forEach(function(job){
     var j = m && hObj(m[job]), label = "adm_h_job_" + job;
     if (!j) unknown(label);
+    else if (!owner) {                       /* reduced for non-owners (server, T5.2 hardening): ran / stale / failed */
+      if (j.failed === true) row(label, "bad", jcFmt("adm_h_job_failed", { t: hAgo(j.last_at) || "?" }));
+      else if (j.never_run === true) row(label, "warn", jcT("adm_h_job_never"));
+      else if (j.stale === true) row(label, "bad", jcFmt("adm_h_job_stale", { t: hAgo(j.last_at) || "?" }));
+      else if (j.failed === false && j.stale === false && hAgo(j.last_at)) row(label, "ok", jcFmt("adm_h_cron_ok", { t: hAgo(j.last_at) }));
+      else unknown(label);
+    }
     else if (j.error) row(label, "bad", jcFmt("adm_h_job_failed", { t: hAgo(j.last_at) || "?" }), String(j.error));
     else if (j.never_run === true) row(label, "warn", jcT("adm_h_job_never"));
     else if (j.stale === true) row(label, "bad", jcFmt("adm_h_job_stale", { t: hAgo(j.last_at) || "?" }));

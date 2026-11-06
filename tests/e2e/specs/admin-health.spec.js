@@ -174,8 +174,17 @@ test("back from App Health returns to Organizer Tools; Arabic labels", async ({ 
 });
 
 test("a community admin who isn't the platform owner: no whole-platform rows; lockouts count only this community", async ({ page }) => {
-  const r = healthReport({ rate_limited_now: { admin_unlock: 1, join_pre_membership: 5 } });
+  // the server's non-owner shape (T5.2 hardening): no platform keys; cleanups as ran / stale / failed only
+  const r = healthReport({ rate_limited_now: { admin_unlock: 1 } });
+  delete r.storage; delete r.failures_since_baseline;
+  r.maintenance = {
+    orphan_users: { last_at: r.maintenance.orphan_users.last_at, stale: false, never_run: false, failed: false },
+    photo_purge: { last_at: r.maintenance.photo_purge.last_at, stale: false, never_run: false, failed: true },
+  };
   await openHealth(page, { owner: false, report: r });
+  await expect(row(page, "unused accounts")).toHaveClass(/\bok\b/);
+  await expect(row(page, "unused accounts")).toContainText("Last ran 10 h ago.");
+  await expect(row(page, "expired photos")).toHaveClass(/\bbad\b/);
   await expect(page.locator(".hrow")).toHaveCount(7);
   await expect(row(page, "Storage")).toHaveCount(0);
   await expect(row(page, "Wrong codes")).toHaveCount(0);
