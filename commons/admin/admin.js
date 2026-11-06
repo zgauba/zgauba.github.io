@@ -75,9 +75,11 @@ var REQ = '<span class="req" aria-hidden="true">*</span>';   /* needed before pu
    Arabic wording: DRAFT, pending review. */
 var LOOKS = ["plain", "halloween", "haq_al_laila", "gathering", "market", "yard_sale"];
 var ENTRANCE = HALLOWEEN.fields.entrance;
+/* treat nights run all three event-day tools (R2a, Events audit F1) */
+var TREAT_NIGHT = { giant_switch: true, supply: true, crowd_reports: true };
 var TEMPLATES = [
-  { id: "halloween", kind: "homes", look: "halloween", features: { giant_switch: true }, schema: HALLOWEEN },
-  { id: "haq_al_laila", kind: "homes", look: "haq_al_laila", features: { giant_switch: true }, schema: { fields: {
+  { id: "halloween", kind: "homes", look: "halloween", features: TREAT_NIGHT, schema: HALLOWEEN },
+  { id: "haq_al_laila", kind: "homes", look: "haq_al_laila", features: TREAT_NIGHT, schema: { fields: {
     /* from Zee's Haq al Laila concept (Oct 2026): the choice that matters is nut-free —
        allergy-friendly homes stand out on the map */
     treats: { type: "enum", values: ["mix", "nut_free", "both"], required: true, pin: "glyph",
@@ -183,7 +185,19 @@ function show(name){
 /* ---------- App health (T5.2 PR 6) ---------- */
 var HEALTH_ICON = { ok: "✅", warn: "⚠️", bad: "❌", unknown: "❔", info: "📊" };
 /* known keys → string key (jcOwn: own string values only) */
-var NOTICE_KINDS = { departure: "y", pin_flag: "y", over_cap: "y" };
+var NOTICE_KINDS = { departure: "y", pin_flag: "y", over_cap: "y", event_ended: "y", autoclose_failed: "y" };
+/* R2a (D2): event notices name the event, not a home */
+var EVENT_NOTICES = { event_ended: "y", autoclose_failed: "y" };
+function noticeHead(n){
+  if (!jcOwn(EVENT_NOTICES, n.kind)) return noticeHome(n.home);
+  var d = hObj(n.detail) || {};
+  return typeof d.title === "string" && d.title ? d.title : typeof d.slug === "string" ? d.slug : jcT("adm_h_n_event");
+}
+function noticeBody(n){
+  var d = hObj(n.detail) || {};
+  if (n.kind === "event_ended") return jcFmt("adm_h_n_event_ended", { t: fmtDate(d.closes_at) });
+  return jcT(jcOwn(NOTICE_KINDS, n.kind) ? "adm_h_n_" + n.kind : "adm_h_n_other");
+}
 /* the state log's fields, in words; anything new shows as its own name */
 var CHANGE_KEYS = { signup: "y", live_state: "y", supply_level: "y", report: "y", reports_cleared: "y", status: "y", starts_at: "y",
   booking: "y", booking_cancel: "y", missing: "y", pet_missing: "y", pet_archive: "y" };
@@ -369,6 +383,7 @@ var VIEWS = {
       /* the banner (T5.2 PR 4): organizers any time; an event admin while an event they run is live */
       html += '<form class="panel" id="bannerForm" novalidate><p class="help">' + esc(jcT("adm_banner_help")) + '</p>' +
         '<textarea id="bannerText" maxlength="280" dir="auto" aria-label="' + esc(jcT("adm_banner")) + '"></textarea>' +
+        bannerTieHtml() +
         '<div class="row"><button class="btn" id="bannerSave" type="submit">' + esc(jcT("adm_banner_post")) + '</button>' +
         '<button class="btn ghost" id="bannerClear" type="button">' + esc(jcT("adm_banner_clear")) + '</button></div></form>';
     } else {
@@ -547,7 +562,7 @@ var VIEWS = {
     on("useHalloween", function(){
       if (ed.qs.length && !window.confirm(jcT("ed_q_replace_confirm"))) return;
       ed.qs = fromSchema(HALLOWEEN);
-      el("f_giant_switch").checked = true;
+      FEATURES.forEach(function(k){ el("f_" + k).checked = TREAT_NIGHT[k] === true; });
       drawQuestions();
     });
     on("clearQs", function(){
@@ -655,9 +670,9 @@ var VIEWS = {
       (health.noticesErr ? '<p class="help">' + esc(jcT("adm_h_notices_failed")) + ' ' + esc(jcErrText({ code: health.noticesErr })) + '</p>'
        : !ns.length ? '<p class="help">' + esc(jcT("adm_h_notices_none")) + '</p>'
        : '<ul class="fblist">' + ns.map(function(n){
-          return '<li class="read"><div class="fbhead"><span class="fbkind">' + esc(noticeHome(n.home)) + '</span>' +
+          return '<li class="read"><div class="fbhead"><span class="fbkind" dir="auto">' + esc(noticeHead(n)) + '</span>' +
             '<small>' + esc(fmtDate(n.created_at)) + '</small></div>' +
-            '<p class="fbbody">' + esc(jcT(jcOwn(NOTICE_KINDS, n.kind) ? "adm_h_n_" + n.kind : "adm_h_n_other")) + '</p>' +
+            '<p class="fbbody">' + esc(noticeBody(n)) + '</p>' +
             '<div class="acts">' +
             (hObj(n.home) && n.home.id ? '<button class="mini" type="button" data-nhome="' + esc(n.home.id) + '">' + esc(jcT("adm_hh_open_home")) + '</button>' : '') +
             '<button class="mini" type="button" data-notice="' + esc(n.id) + '">' + esc(jcT("adm_h_resolve")) + '</button></div></li>';
@@ -780,7 +795,8 @@ var VIEWS = {
 var LOG_KEYS = { home_edit: "y", home_pin_set: "y", home_suppress: "y", member_remove: "y", invite_approve: "y",
   invite_decline: "y", code_rotate: "y", broadcast_set: "y", notice_resolve: "y", event_save: "y", event_publish: "y",
   event_signups: "y", event_announce: "y", event_close: "y", event_autoclose: "y", entry_moderate: "y", entry_pin_set: "y",
-  entry_spot_set: "y", event_admin_link: "y", event_admin_accept: "y", event_admin_revoke: "y" };
+  entry_spot_set: "y", event_admin_link: "y", event_admin_accept: "y", event_admin_revoke: "y",
+  broadcast_tie: "y" };
 /* the homes list, well-formed rows only (a null row would throw while drawing) */
 function hhShape(d){
   if (!hObj(d) || !Array.isArray(d.homes) || !Array.isArray(d.pending)) return null;
@@ -946,13 +962,16 @@ function wireHouseholds(){
   });
 }
 
+/* R2a (D2): the hourly job closes an event 24 h after its end */
+function closesAt(e){ return e.ends_effective ? new Date(Date.parse(e.ends_effective) + 864e5).toISOString() : null; }
 function eventRow(e){
   var status = e.status === "draft" ? "adm_status_draft" : e.status === "archived" ? "adm_status_archived"
+    : e.ended === true ? null                                                                          /* R2a (D2) */
     : e.coming_soon ? "adm_status_soon" : e.signups_open ? "adm_status_open" : "adm_status_paused";   /* T5.4 */
   var place = e.kind === "venue"                                     /* T5.2 2c */
     ? (e.venue_name_en ? jcFmt("adm_at", { v: ar() && e.venue_name_ar ? e.venue_name_ar : e.venue_name_en }) : jcT("adm_no_venue"))
     : null;
-  var line = [jcT(status), place, fmtDate(e.starts_at),
+  var line = [status ? jcT(status) : jcFmt("adm_status_ended", { t: fmtDate(closesAt(e)) }), place, fmtDate(e.starts_at),
               jcFmt(e.kind === "venue" ? "adm_households" : "adm_homes", { n: e.entries || 0 })].filter(Boolean).join(" · ");
   var acts = "";
   function btn(a, label, ghost){
@@ -996,6 +1015,12 @@ function act(a, id, b){
     var m = el("msg"); m.className = "msg err";
     m.textContent = jcFmt(a === "open" ? "adm_open_missing" : "adm_publish_missing", { list: miss.join(", ") });
     return m.scrollIntoView({ block: "nearest" });
+  }
+  /* R2a (F2): a homes event needs its date to go live (opening a coming-soon one is its publish) */
+  if ((a === "publish" || (a === "open" && e.coming_soon)) && e.kind !== "venue" && !e.starts_at) {
+    var md = el("msg"); md.className = "msg err";
+    md.textContent = jcFmt(a === "open" ? "adm_open_missing" : "adm_publish_missing", { list: jcT("ed_starts") });
+    return md.scrollIntoView({ block: "nearest" });
   }
   if (a === "publish" && !window.confirm(jcFmt("adm_publish_confirm", { t: title(e) }))) return;
   if (a === "announce" && !window.confirm(jcFmt(e.status === "live" ? "adm_back_soon_confirm" : "adm_announce_confirm", { t: title(e) }))) return;
@@ -1424,6 +1449,16 @@ function downloadCsv(){
 }
 
 /* ---------- the banner (T5.2 PR 4) ---------- */
+/* R2a (U3): an organizer can tie the banner to a live event — closing that event takes it down */
+function tieEvents(){ return events.filter(function(e){ return e.status === "live"; }); }
+function bannerTieHtml(){
+  if (!isOrganizer() || !tieEvents().length) return '';
+  return '<label class="tie">' + esc(jcT("adm_banner_tie")) + '<select id="bannerEvent">' +
+    '<option value="">' + esc(jcT("adm_banner_tie_none")) + '</option>' +
+    tieEvents().map(function(e){
+      return '<option value="' + esc(e.id) + '">' + esc(ar() && e.title_ar ? e.title_ar : e.title_en) + '</option>';
+    }).join("") + '</select></label>';
+}
 function wireBanner(){
   var f = el("bannerForm");
   if (!f) return;
@@ -1433,10 +1468,12 @@ function wireBanner(){
   function post(text){
     if (text && !window.confirm(jcT("adm_banner_confirm"))) return;
     busy(text ? "bannerSave" : "bannerClear", true);
-    rpc("jc_admin_broadcast_set", { p_text: text }).then(function(r){
+    var tie = text && el("bannerEvent") ? el("bannerEvent").value : "";
+    (tie ? rpc("jc_admin_broadcast_set_event", { p_text: text, p_event: tie })
+         : rpc("jc_admin_broadcast_set", { p_text: text })).then(function(r){
       cfg = Object.assign({}, cfg || {}, { broadcast: (r && r.broadcast) || "" });
       paint(); show("home");
-      showOk(jcT(cfg.broadcast ? "adm_banner_posted" : "adm_banner_cleared"));
+      showOk(jcT(!cfg.broadcast ? "adm_banner_cleared" : tie ? "adm_banner_posted_tied" : "adm_banner_posted"));
     }, function(err){ busy(text ? "bannerSave" : "bannerClear", false); fail(err); });
   }
   f.addEventListener("submit", function(e){
@@ -1679,6 +1716,11 @@ function saveEvent(){
       el(miss[0].id).scrollIntoView({ block: "center" });
       return showErr("NO_VENUE");                     /* a live event can't lose its place (server says so too) */
     }
+  }
+  /* R2a (F2): an open homes event keeps its date (drafts may save without one; Publish asks) */
+  if (!draft && !orig.coming_soon && kindNow() !== "venue" && !el("starts_at").value) {
+    markMissing([{ id: "starts_at" }]); el("starts_at").scrollIntoView({ block: "center" });
+    return showErr("NO_DATE");
   }
   var slug = el("slug").value.trim();
   if (draft && !/^[a-z][a-z0-9-]{1,40}$/.test(slug)) return showErr("BAD_SLUG");
