@@ -237,8 +237,8 @@ function adminBackend(opts = {}) {
     notices: (opts.notices || NOTICES).map((n) => Object.assign({}, n)),
     events: [
       { id: ADMIN_DRAFT_ID, slug: "national-day-2026", title_en: "National Day", title_ar: null, description_en: null, description_ar: null,
-        starts_at: null, ends_at: null, status: "draft", signups_open: true, features: {}, theme: {},
-        payload_schema: { fields: {} }, safety: {}, entries: 0 },
+        starts_at: opts.draftUndated ? null : "2026-12-02T14:00:00Z", ends_at: null, status: "draft", signups_open: true,
+        features: {}, theme: {}, payload_schema: { fields: {} }, safety: {}, entries: 0 },   // R2a: publishing needs the date
       { id: ADMIN_LIVE_ID, slug: "test-event", title_en: opts.liveTitle || "Test Event", title_ar: null, description_en: "Practice", description_ar: null,
         starts_at: "2026-11-04T04:40:00Z", ends_at: "2026-12-04T04:40:00Z", status: "live", signups_open: true,
         features: { giant_switch: true }, theme: {}, payload_schema: { fields: { treats: { type: "enum", values: ["candy"], required: true } } },
@@ -371,6 +371,14 @@ function adminBackend(opts = {}) {
       jc_admin_broadcast_set: (a) => {
         if (!admin() && !st.adminEvents.length) return raise("NOT_ADMIN");
         st.broadcast = (a.p_text || "").trim();
+        return ok({ broadcast: st.broadcast });
+      },
+      // R2a (U3): organizers tie the banner to a live event — its close takes it down
+      jc_admin_broadcast_set_event: (a) => {
+        if (!admin()) return raise("NOT_ADMIN");
+        if (a.p_event && !st.events.some((e) => e.id === a.p_event && e.status === "live")) return raise("NOT_FOUND");
+        st.broadcast = (a.p_text || "").trim();
+        st.broadcastEvent = st.broadcast ? a.p_event : null;
         return ok({ broadcast: st.broadcast });
       },
       // T5.2 PR 6 — community admins only (jc_assert_admin('community'))

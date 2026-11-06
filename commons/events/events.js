@@ -196,7 +196,7 @@ function show(name){
 function headSub(ev, entries){
   var count = isVenue(ev) ? comingLine(ev.households_in || 0, ev, ev.places_left === 0)
                           : jcFmt("ev_homes_in", { n: entries.length });
-  return [fmtDate(ev.starts_at), jcT(ev.coming_soon ? "ev_soon" : ev.signups_open ? "ev_open" : "ev_closed"),
+  return [fmtDate(ev.starts_at), jcT(ended(ev) ? "ev_ended" : ev.coming_soon ? "ev_soon" : ev.signups_open ? "ev_open" : "ev_closed"),
           ev.coming_soon ? null : count].filter(Boolean).join(" · ");
 }
 
@@ -208,9 +208,11 @@ var VIEWS = {
     rpc("jc_events_list").then(function(evs){
       /* upcoming: soonest first (undated last); past: most recent first (server order) */
       function when(e){ return e.starts_at ? Date.parse(e.starts_at) : Infinity; }
-      var live = evs.filter(function(e){ return e.status === "live"; })
+      var live = evs.filter(function(e){ return e.status === "live" && !ended(e); })
                     .sort(function(a, b){ return when(a) - when(b); });
-      var past = evs.filter(function(e){ return e.status === "archived"; });
+      /* R2a (D2): ended-but-not-yet-closed events lead Past (most recent end first) */
+      var past = evs.filter(ended).sort(function(a, b){ return Date.parse(b.ends_effective) - Date.parse(a.ends_effective); })
+                    .concat(evs.filter(function(e){ return e.status === "archived"; }));
       /* Admin badge: organizers (events / community scope) on every event; event admins
          (T5.2 PR A/B) only on the events they run */
       var scopes = (state.me && state.me.admin_scopes) || [];
@@ -220,7 +222,7 @@ var VIEWS = {
          no status pill — the button says it. Past: the whole card opens the numbers. */
       function row(e){
         var url = "?id=" + encodeURIComponent(e.id);
-        var soon = e.coming_soon && e.status !== "archived";              /* T5.4: the badge says it; no count yet */
+        var soon = e.coming_soon && e.status !== "archived" && !ended(e);  /* T5.4: the badge says it; no count yet */
         var line = [fmtDate(e.starts_at), soon ? null : isVenue(e)
           /* households_in = every "in" household, as the event page counts (homes_in skips hidden ones) */
           ? (e.status === "archived" ? jcFmt("ev_came", { n: e.homes_in || 0 })
@@ -228,6 +230,7 @@ var VIEWS = {
           : jcFmt("ev_homes_in", { n: e.homes_in || 0 })];
         if (isVenue(e) && placeName(e)) line.splice(1, 0, jcFmt("ev_at", { v: placeName(e) }));
         if (e.status === "archived") line.push(jcT("ev_see_numbers"));
+        else if (ended(e)) line.push(jcT("ev_ended"));
         else if (!soon && !e.signups_open) line.push(jcT("ev_closed"));
         if (e.my_status === "in") line.push(jcT("ev_mine"));
         var info = (soon ? '<span class="soon">' + esc(jcT("coming_soon")) + '</span>' : '') +
@@ -243,7 +246,7 @@ var VIEWS = {
             (organizer || runs.indexOf(e.id) >= 0 ? '<a class="badge" href="../admin/?event=' + encodeURIComponent(e.id) + '">' + esc(jcT("ev_admin")) + '</a>' : '') +
           '</div>' +
           '<div class="evacts"><a class="btn ghost" href="' + url + '">' + esc(jcT("ev_view")) + '</a>' +
-            (e.signups_open && e.my_status !== "in" && !e.full
+            (openNow(e) && e.my_status !== "in" && !e.full
               ? '<a class="btn" href="' + url + '&amp;tab=mine">' + esc(jcT("ev_signup_cta")) + '</a>' : '') +
           '</div></li>';
       }
@@ -362,9 +365,14 @@ function renderMine(){
         ? '<p class="spot">' + (mine.spot ? esc(jcFmt("ev_your_spot", { s: mine.spot })) : esc(jcT("ev_spot_pending"))) + '</p>' : '') +
       (rows.length ? '<ul class="answers">' + rows.join("") + '</ul>' : '') +
       (mine.note ? '<p class="mynote">' + esc(mine.note) + '</p>' : '') +
+      /* R2a (U1): an organizer hid this sign-up, or the home is hidden from the directory — say so */
+      (!isVenue(ev) && (mine.hidden || mine.home_hidden) ? '<p class="help notshown" role="note">' + esc(jcT("ev_not_shown")) + '</p>' : '') +
       (isVenue(ev) ? '' : pinLine(h)) +
-      (ev.signups_open ? '<button class="btn" type="button" id="toSignup">' + esc(jcFmt("ev_update_btn", { h: myLabel() })) + '</button>' : '') +
-      '<button class="btn ghost" type="button" id="withdraw">' + esc(jcFmt("ev_withdraw", { h: myLabel() })) + '</button>';
+      (openNow(ev) ? '<button class="btn" type="button" id="toSignup">' + esc(jcFmt("ev_update_btn", { h: myLabel() })) + '</button>' : '') +
+      (ended(ev) ? '<p class="help">' + esc(jcT("ev_ended_help")) + '</p>'
+                 : '<button class="btn ghost" type="button" id="withdraw">' + esc(jcFmt("ev_withdraw", { h: myLabel() })) + '</button>');
+  } else if (ended(ev)) {
+    html += '<p class="help">' + esc(jcT("ev_ended_help")) + '</p>';
   } else if (!ev.signups_open) {
     html += '<p class="help">' + esc(jcT(ev.coming_soon ? "ev_soon_help" : "err_SIGNUPS_CLOSED")) + '</p>';
   } else if (isVenue(ev) && ev.places_left === 0) {
@@ -496,9 +504,17 @@ var staleAfterReport = false;                  /* entries this device reported �
 
 function eventDay(ev){
   if (!ev || ev.status !== "live" || isVenue(ev) || !ev.starts_at) return false;
-  var s = Date.parse(ev.starts_at), e = ev.ends_at ? Date.parse(ev.ends_at) : s + NO_END_MS, now = Date.now();
+  /* R2a: the server's end (ends_effective) wins — one rule for "event day" and "ended"; NO_END_MS is the fallback */
+  var s = Date.parse(ev.starts_at), e = ev.ends_effective ? Date.parse(ev.ends_effective)
+        : ev.ends_at ? Date.parse(ev.ends_at) : s + NO_END_MS, now = Date.now();
   return now >= s - LEAD_MS && now <= e;
 }
+/* R2a (D2): an event past its end takes no sign-ups or withdrawals; it shows under Past until it closes */
+/* the server says so; between refreshes the server's end time decides (the page may stay open past it) */
+function ended(ev){
+  return !!(ev && ev.status === "live" && (ev.ended === true || (ev.ends_effective && Date.parse(ev.ends_effective) < Date.now())));
+}
+function openNow(ev){ return !!(ev && ev.signups_open && !ended(ev)); }
 function feat(ev, k){ return !!(ev && ev.features && ev.features[k] === true); }
 /* treat nights say "Handing Out / Out of Treats"; other events "Open / Done" (key + "_treats") */
 function treatKey(ev, k){ return TREAT_LOOKS[lookOf(ev)] === true ? k + "_treats" : k; }
@@ -572,6 +588,7 @@ function bannerHtml(){
 }
 /* banner + "Updated 7:42 PM"; returns true when either changed (the map needs refitting) */
 var dayShown = false;               /* was the event-day window open at the last paint */
+var endedShown = false;             /* R2a: had the event ended at the last paint */
 function paintDay(){
   var b = el("banner"), u = el("upd"), changed = false;
   if (b) {
@@ -587,6 +604,7 @@ function paintDay(){
     }
   }
   dayShown = eventDay(data.event);
+  endedShown = ended(data.event);
   if (u) {
     var show = dayShown && !!lastAt;
     var text = show ? jcFmt(stale ? "ev_updated_stale" : "ev_updated", { t: fmtTime(lastAt) }) : "";
@@ -680,7 +698,7 @@ function focusSel(){
 }
 var mineShown = null;
 function mineKey(){
-  return JSON.stringify([data.mine, data.event.features, data.event.signups_open, eventDay(data.event)]);
+  return JSON.stringify([data.mine, data.event.features, data.event.signups_open, ended(data.event), eventDay(data.event)]);
 }
 
 function refreshDue(){
@@ -703,7 +721,9 @@ function refresh(){
 /* every ~2 minutes, ±10 % so a street of phones doesn't hit the database in the same second; the
    window opening or closing while the page sits open redraws once (controls appear / go — R7) */
 function tick(){
-  if (current === "detail" && data && !editing && eventDay(data.event) !== dayShown) repaint();
+  /* R2a (D2): so does the end passing — a venue / undated-day event has no event-day window to close */
+  if (current === "detail" && data && !editing
+      && (eventDay(data.event) !== dayShown || ended(data.event) !== endedShown)) repaint();
   refresh();
   setTimeout(tick, REFRESH_MS * (0.9 + 0.2 * Math.random()));
 }

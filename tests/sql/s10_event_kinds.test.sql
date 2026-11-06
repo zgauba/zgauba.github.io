@@ -52,7 +52,7 @@ begin
 
   -- ---------- R01 defaults: a new event is a homes event with the plain look ----------
   perform pg_temp.s10_as(c1);
-  v := jc_admin_event_save(null, '{"slug": "street-night", "title_en": "Street night"}');
+  v := jc_admin_event_save(null, '{"slug": "street-night", "title_en": "Street night", "starts_at": "2099-01-01T18:00:00Z"}');
   ev_h := pg_temp.s10_ev(v, 'street-night');
   execute 'reset role';
   if (select kind || '/' || look from jc_events where id = ev_h) <> 'homes/plain' then raise exception 'FAIL R01a defaults'; end if;
@@ -111,7 +111,7 @@ begin
   if pg_temp.s10_err(format('select jc_admin_event_save(%L, %L)', ev_m, '{"venue_lng": 80}')) is distinct from 'BAD_PIN' then
     raise exception 'FAIL R03f one-coordinate edit dodged the 10 km rule'; end if;
   -- a live homes event (nobody in yet) can't become a place-less venue
-  v := jc_admin_event_save(null, '{"slug": "quiz", "title_en": "Quiz"}');
+  v := jc_admin_event_save(null, '{"slug": "quiz", "title_en": "Quiz", "starts_at": "2099-01-02T18:00:00Z"}');
   ev_g := pg_temp.s10_ev(v, 'quiz');
   perform jc_admin_event_publish(ev_g);
   if pg_temp.s10_err(format('select jc_admin_event_save(%L, %L)', ev_g, '{"kind": "venue"}')) is distinct from 'NO_VENUE' then

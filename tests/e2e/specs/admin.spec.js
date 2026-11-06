@@ -54,13 +54,15 @@ test("new event from the Halloween template: short name follows the title; quest
   await expect(page.locator('.qcard[data-q="2"] [data-q-pin]')).toHaveValue("ring");
   await expect(page.locator('.qcard[data-q="0"] [data-c-f="glyph"]').first()).toHaveValue("🍬");
   await expect(page.locator("#f_giant_switch")).toBeChecked();
+  await expect(page.locator("#f_supply")).toBeChecked();
+  await expect(page.locator("#f_crowd_reports")).toBeChecked();
   await page.locator("#save").click();
   await expect(page.locator("#msg")).toHaveText("Saved.");
   const f = lastCall(calls, "jc_admin_event_save").args;
   expect(f.p_event).toBeNull();
   expect(Object.keys(f.p_fields).sort()).toEqual(["features", "look", "payload_schema", "slug", "title_en"]);  // empty fields + default kind not sent
   expect(f.p_fields.look).toBe("halloween");
-  expect(f.p_fields.features).toEqual({ giant_switch: true });
+  expect(f.p_fields.features).toEqual({ giant_switch: true, supply: true, crowd_reports: true });   // R2a (F1): all three
   expect(f.p_fields.payload_schema.fields.entrance).toMatchObject({ pin: "ring", label_en: "Kids should come to…",
     labels_en: { front: "Front gate", garden: "Garden gate (park side)", both: "Both gates" } });
   expect(f.p_fields.payload_schema.fields.treats).toMatchObject({ pin: "glyph", glyphs: { candy: "🍬", non_food: "🎃", both: "🍬🎃" } });
