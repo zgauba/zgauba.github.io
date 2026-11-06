@@ -1,5 +1,8 @@
 # Jubail Commons — working backlog
 
+> **The plan of record is `docs/plans/ROADMAP.md` (2026-11-06).** This file is the raw idea log; when they
+> disagree, the roadmap wins.
+
 > This is the technical, public-safe backlog. The **authoritative backlog + ops
 > context live in the private ops reference doc** (Claude project "Jubail Villa")
 > — community context, contacts, and priorities stay there, never in this public
@@ -43,7 +46,7 @@ Last groomed: 2026-11-02
 - [ ] EN/AR toggle + RTL (centralized strings dictionary first).
 - [ ] Identity model with optional-PII slots from day one (zero-PII default;
       deviations per-feature, opt-in, minimal, disclosed).
-- [ ] Recovery PIN at sign-up (user-chosen 4–6 digits; recover via
+- [x] ~~Recovery PIN at sign-up~~ — **dropped 2026-11-06** (accounts use email + password + reset). Was: (user-chosen 4–6 digits; recover via
       unit+village+PIN, rate-limited). Fallback: optional email magic-link
       (disclose if adopted).
 - [ ] Control-panel UI rework: explicit-state controls (toggles / segmented

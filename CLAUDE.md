@@ -46,5 +46,6 @@ ONE repo, served by GitHub Pages as the user site, holding three things:
 
 ## Where docs live
 
+- `docs/plans/ROADMAP.md` — **the plan of record**: phases to launch (launch only when the full app is built)
 - `docs/architecture.md` — Stack Manifest (refresh via `/manifest`)
 - `docs/qa/`, `docs/incidents/`, `docs/plans/` — audits, incidents, multi-PR plans
