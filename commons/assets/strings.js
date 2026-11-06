@@ -245,6 +245,10 @@ var JC_STRINGS = {
     ev_out_treats: "Out of treats",
     ev_legend_reported: "Reported out",
     ev_legend: "Map key",
+    ev_labels: "Map Labels",
+    ev_labels_close: "Close",
+    ev_legend_states: "Tonight",
+    ev_legend_supply: "How much is left",
     look_tagline_haq_al_laila: "عطونا الله يعطيكم",
     /* T5.2 PR 5b — event day */
     ev_live_q: "Right now, {h} is…",
@@ -888,6 +892,10 @@ var JC_STRINGS = {
     ev_out_treats: "نفدت الحلوى",
     ev_legend_reported: "أُبلغ أنه نفد",
     ev_legend: "دليل الخريطة",
+    ev_labels: "دليل الخريطة",
+    ev_labels_close: "إغلاق",
+    ev_legend_states: "الليلة",
+    ev_legend_supply: "كم تبقّى",
     look_tagline_haq_al_laila: "عطونا الله يعطيكم",
     /* T5.2 PR 5b — يوم الفعالية */
     ev_live_q: "الآن، {h}…",

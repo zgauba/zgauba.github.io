@@ -145,7 +145,7 @@ function pinIcon(e){
 /* the map key, one row each: icons · gates (rings) · tonight's states — wraps, never scrolls
    sideways (5a.1: the gate chips sat off-screen) */
 function legendHtml(ev){
-  var icons = [], rings = [], states = [], gf = pinField(ev, "glyph"), rf = pinField(ev, "ring"), feats = ev.features || {};
+  var icons = [], rings = [], states = [], supply = [], gf = pinField(ev, "glyph"), rf = pinField(ev, "ring"), feats = ev.features || {};
   if (gf) (gf.spec.values || []).forEach(function(v){
     var g = glyphHtml(gf.spec, v);
     if (g) icons.push('<span class="chip">' + g + ' ' + esc(valueLabel(gf.spec, v)) + '</span>');
@@ -156,10 +156,28 @@ function legendHtml(ev){
   });
   if (feats.giant_switch) states.push('<span class="chip"><i class="ringdot st done">✕</i>' + esc(jcT(outKey(ev, "ev_legend_done"))) + '</span>');
   if (feats.crowd_reports) states.push('<span class="chip"><i class="ringdot st reported">?</i>' + esc(jcT("ev_legend_reported")) + '</span>');
-  var rows = [icons, rings, states].filter(function(r){ return r.length; });
-  return rows.length ? '<div class="legend" role="note" aria-label="' + esc(jcT("ev_legend")) + '">' +
-    rows.map(function(r){ return '<div class="row">' + r.join("") + '</div>'; }).join("") + '</div>' : '';
+  if (feats.supply === true) SUPPLY.forEach(function(n){
+    supply.push('<span class="chip">' + gaugeHtml(n) + esc(jcT("ev_supply_" + n)) + '</span>');
+  });
+  /* a heading per row: the question itself for icons / gates (the organizer's wording) */
+  var rows = [[gf ? fieldLabel(gf.key, gf.spec) : "", icons], [rf ? fieldLabel(rf.key, rf.spec) : "", rings],
+              [jcT("ev_legend_states"), states], [jcT("ev_legend_supply"), supply]]
+    .filter(function(r){ return r[1].length; });
+  return rows.length ? '<div class="legend">' + rows.map(function(r){
+    return '<h3>' + esc(r[0]) + '</h3><div class="row">' + r[1].join("") + '</div>';
+  }).join("") + '</div>' : '';
 }
+/* "Map Labels": the key in a popup window instead of under the map (Zee: "looks very messy") */
+function openLabels(){
+  var d = el("labels");
+  if (!d) return;
+  d.innerHTML = '<div class="sheethead"><h2>' + esc(jcT("ev_labels")) + '</h2>' +
+    '<button type="button" class="lang" id="labelsClose">' + esc(jcT("ev_labels_close")) + '</button></div>' + legendHtml(data.event);
+  on("labelsClose", function(){ closeLabels(d); });
+  if (d.showModal) d.showModal(); else d.setAttribute("open", "");
+}
+/* older browsers without <dialog>: it was opened with [open], so close the same way (review F1) */
+function closeLabels(d){ if (d.close) d.close(); else d.removeAttribute("open"); }
 
 function show(name){
   /* state first: map.remove() fires popupclose, which must not draw onto a dying map (review R1) */
@@ -478,9 +496,15 @@ function feat(ev, k){ return !!(ev && ev.features && ev.features[k] === true); }
 /* treat nights say "Handing Out / Out of Treats"; other events "Open / Done" (key + "_treats") */
 function treatKey(ev, k){ return TREAT_LOOKS[lookOf(ev)] === true ? k + "_treats" : k; }
 var SUPPLY = [3, 2, 1, 0];          /* Plenty · Some left · Running low · Almost out (server: 0–3) */
+/* "▮▮▮▯ Supply: Some left" — a four-bar gauge, like a phone battery (Zee, 2026-11-05) */
+function gaugeHtml(level){
+  return '<span class="gauge" aria-hidden="true">' + [0, 1, 2, 3].map(function(i){
+    return '<i' + (i <= level ? ' class="on"' : '') + '></i>';
+  }).join("") + '</span>';
+}
 function supplyLine(e){
   if (!feat(data.event, "supply") || pinState(e) || SUPPLY.indexOf(e.supply_level) < 0) return "";
-  return '<div class="supply">' + esc(jcFmt("ev_supply_line", { s: jcT("ev_supply_" + e.supply_level) })) + '</div>';
+  return '<div class="supply">' + gaugeHtml(e.supply_level) + esc(jcFmt("ev_supply_line", { s: jcT("ev_supply_" + e.supply_level) })) + '</div>';
 }
 function fmtTime(d){
   return d.toLocaleTimeString(ar() ? "ar-AE-u-nu-latn" : "en-US",
@@ -789,9 +813,11 @@ function renderMap(entries){
   el("body").innerHTML =
     '<div class="evmapwrap"><div class="evmap" id="map"></div>' +
       '<button type="button" class="lang maplayer" id="layerBtn">' + esc(jcT(layer === "sat" ? "pin_street" : "pin_sat")) + '</button>' +
-      '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
+      '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button>' +
+      (venue || !legendHtml(ev) ? '' : '<button type="button" class="lang maplabels" id="labelsBtn" aria-haspopup="dialog">' +
+        '<span aria-hidden="true">?</span> ' + esc(jcT("ev_labels")) + '</button>') + '</div>' +
+    '<dialog class="sheet" id="labels" aria-label="' + esc(jcT("ev_labels")) + '"></dialog>' +
     '<div id="mapAfter">' +
-    (venue ? '' : legendHtml(ev)) +
     (unpinned ? '<p class="help" style="margin-top:8px">' + esc(unpinned) + ' · ' + esc(jcT("ev_unpinned")) +
       ' — <a href="#" id="seeList">' + esc(jcT("ev_list")) + '</a></p>' : '') +
     (venue && !entries.length && ev.coming_soon ? '<p class="help venueline">📍 ' + esc(jcT("ev_place_tba")) + '</p>' :
@@ -799,6 +825,14 @@ function renderMap(entries){
       (entries.length ? ' — <a target="_blank" rel="noopener" href="' + esc(directionsUrl(entries[0])) + '">' + esc(jcT("ev_directions")) + '</a>' : '') +
       '</p>' : '') + '</div>';
   on("seeList", function(e){ e.preventDefault(); el("tab-list").click(); });
+  on("labelsBtn", openLabels);
+  var m0 = document.querySelector(".evmapwrap");
+  var dl = el("labels");   /* a tap on the dimmed backdrop closes it */
+  if (dl) dl.addEventListener("click", function(e2){
+    if (e2.target !== dl) return;
+    var r = dl.getBoundingClientRect();     /* the window's own padding also reports the dialog: outside only (F2) */
+    if (e2.clientX < r.left || e2.clientX > r.right || e2.clientY < r.top || e2.clientY > r.bottom) closeLabels(dl);
+  });
   document.body.classList.add("evfit");     /* the map screen doesn't scroll: no spare padding under it */
   fitMap();                                 /* before Leaflet measures the box… */
   requestAnimationFrame(fitSoon);           /* …and again once the page has settled (fonts, header) */
@@ -828,12 +862,14 @@ function renderMap(entries){
   /* a neighbor's "They're Out" button lives in the popup; a refresh waits for the popup to close */
   map.on("popupopen", function(pe){
     popupOpen = true;
+    m0.classList.add("popopen");            /* Street / Map Labels / Find Me step aside while a popup is open */
     var node = pe.popup.getElement(), b = node && node.querySelector("[data-report]");
     var e = b && (data.entries || []).filter(function(x){ return x.id === b.dataset.report; })[0];
     if (e) b.addEventListener("click", function(){ report(e, pe.popup, b); });
   });
   map.on("popupclose", function(){
     popupOpen = false;
+    m0.classList.remove("popopen");
     if (pendingRepaint) { pendingRepaint = false; drawHomes(data.entries || []); }
   });
   on("locateBtn", function(){
@@ -848,6 +884,10 @@ function renderMap(entries){
   else if (pts.length === 1) map.setView(pts[0], 18);
 }
 
+/* a phone-sized popup the map pans clear of the edges: room for the zoom buttons on one side, and
+   below for "Find Me" (Zee, 2026-11-06: the popup hid its own close button) */
+var POPUP_OPTS = { maxWidth: 250, minWidth: 180, autoPanPaddingTopLeft: [12, 24], autoPanPaddingBottomRight: [12, 24] };
+
 /* the homes' pins, in their own layer so a refresh redraws them without moving the map */
 function drawHomes(entries){
   if (!map) return;
@@ -856,7 +896,7 @@ function drawHomes(entries){
     if (!hasPos(e)) return;
     /* your own home on top of its neighbours */
     L.marker([e.lat, e.lng], { icon: pinIcon(e), zIndexOffset: e.mine ? 1000 : 0, keyboard: true, title: jcHomeLabel(e) })
-      .addTo(homeLayer).bindPopup(function(){ return popupHtml(e); });   /* rebuilt on open: distance stays current */
+      .addTo(homeLayer).bindPopup(function(){ return popupHtml(e); }, POPUP_OPTS);   /* rebuilt on open: distance stays current */
   });
 }
 

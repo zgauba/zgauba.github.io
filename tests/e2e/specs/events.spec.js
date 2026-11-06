@@ -178,7 +178,7 @@ test("hostile note / house number rendered as text (list + map tooltip)", async 
     await stubBackend(page, { rpc: eb.rpc });
     await signIn(page);
     await page.goto("events/?id=" + LIVE_ID);
-    await page.locator("#map .leaflet-marker-icon").nth(1).click();
+    await page.locator("#map .leaflet-marker-icon").nth(1).dispatchEvent("click");   // the pin itself, even mid-zoom (flaked under load)
     await expect(page.locator(".leaflet-popup-content")).toContainText("<svg");
     await expect(page.locator(".leaflet-popup-content")).toContainText("<img");
     await page.locator("#tab-list").click();

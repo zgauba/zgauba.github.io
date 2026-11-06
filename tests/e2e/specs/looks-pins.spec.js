@@ -13,6 +13,11 @@ async function openEvent(page, ev) {
   await expect(page.locator("#map .leaflet-marker-icon")).toHaveCount(ev.entries.length);
 }
 const pin = (page, i) => page.locator("#map .leaflet-marker-icon .pin").nth(i);
+// the key lives in the "Map Labels" window (5b.2)
+async function openKey(page) {
+  await page.locator("#labelsBtn").click();
+  await expect(page.locator("#labels .legend")).toBeVisible();
+}
 
 test("pins: icon from the glyph question, ring from the ring question, ✕ done, ? reported, your own pin larger", async ({ page }) => {
   await openEvent(page, pinEvent());
@@ -39,19 +44,22 @@ test("pins: icon from the glyph question, ring from the ring question, ✕ done,
 
 test("map key names every icon and ring choice, plus Done / Reported only when the event uses them", async ({ page }) => {
   await openEvent(page, pinEvent());
-  const key = page.locator("#mapAfter .legend .chip");
+  await openKey(page);
+  const key = page.locator("#labels .legend .chip");
   await expect(key).toHaveText(["🍬 Candy only", "🎃 Non-food", "🍬🎃 Both", "Front gate", "Garden gate", "Both gates", "✕Out of treats", "?Reported out"]);   // treat night wording (5a.1)
-  await expect(page.locator("#mapAfter .legend .gl.teal")).toHaveText("🎃");
+  await expect(page.locator("#labels .legend .gl.teal")).toHaveText("🎃");
 });
 
 test("map key: switches off → no Done / Reported chips", async ({ page }) => {
   await openEvent(page, pinEvent({ features: {} }));
+  await openKey(page);
   await expect(page.locator(".legend .chip")).toHaveCount(6);
 });
 
 test("no pin questions and no switches: plain pins, no key", async ({ page }) => {
   await openEvent(page, pinEvent({ features: {}, payload_schema: { fields: {} } }));
   await expect(page.locator(".legend")).toHaveCount(0);
+  await expect(page.locator("#labelsBtn")).toHaveCount(0);                 // nothing to explain: no button
   await expect(pin(page, 0)).toHaveText("");
   await expect(pin(page, 0)).not.toHaveClass(/\br\d\b/);
 });
@@ -73,7 +81,9 @@ test("organizer-typed icons are text, never HTML (pin, key, popup, list)", async
   await openEvent(page, pinEvent({ payload_schema: schema }, [home("a", "1", 24.521, { treats: "x" })]));
   await expect(page.locator("#map img:not(.leaflet-tile)")).toHaveCount(0);
   await expect(pin(page, 0)).toContainText("<img");
+  await openKey(page);
   await expect(page.locator(".legend")).toContainText("<img");
+  await page.locator("#labelsClose").click();
   await page.locator("#map .leaflet-marker-icon").first().dispatchEvent("click");   // the pin itself, even mid-zoom
   await expect(page.locator(".leaflet-popup-content")).toContainText("<img");
   await page.locator("#tab-list").click();
@@ -192,9 +202,11 @@ test("two-emoji icons (🍬🎃) shrink to fit inside the pin; the teal tint is 
                                       home("b", "2", 24.526, { treats: "non_food", entrance: "front" })]));
   const g = pin(page, 0).locator(".gl");
   await expect(g).toHaveClass(/\bmulti\b/);
-  const [pb, gb] = [await pin(page, 0).boundingBox(), await g.boundingBox()];
-  expect(gb.x).toBeGreaterThanOrEqual(pb.x);                              // not cut off either side
-  expect(gb.x + gb.width).toBeLessThanOrEqual(pb.x + pb.width);
+  // both boxes in one go: two separate reads can straddle the map's zoom animation (flaked 2 in 8)
+  const [pb, gb] = await pin(page, 0).evaluate((n) => [n.getBoundingClientRect(), n.querySelector(".gl").getBoundingClientRect()]
+    .map((r) => ({ x: r.x, width: r.width })));
+  expect(gb.x).toBeGreaterThanOrEqual(pb.x - 0.5);                        // not cut off either side
+  expect(gb.x + gb.width).toBeLessThanOrEqual(pb.x + pb.width + 0.5);
   await expect(pin(page, 1).locator(".gl")).not.toHaveClass(/\bmulti\b/);
   expect(await pin(page, 1).locator(".gl").evaluate((n) => getComputedStyle(n).filter)).toContain("hue-rotate");
 });
@@ -210,6 +222,7 @@ test("hostile choice wording and look name stay text / are ignored; a malformed 
   } };
   await openEvent(page, pinEvent({ payload_schema: schema, look: '"><img src=x onerror=alert(2)>' },
     [home("a", "1", 24.521, { treats: "y", gate: "f" })]));
+  await openKey(page);
   await expect(page.locator(".legend")).toContainText("<img");
   await expect(page.locator("main img:not(.leaflet-tile)")).toHaveCount(0);   // map tiles are the only images
   await expect(page.locator("html")).not.toHaveAttribute("data-look", /.*/);
@@ -238,13 +251,15 @@ test("'both gates' draws a split ring: half front colour, half garden colour (pi
   expect(t).toBe(l); expect(r).toBe(b); expect(t).not.toBe(r);
   expect(t).toBe("rgb(255, 255, 255)");                                   // front gate = ring 0
   expect((await sides(pin(page, 1)))[0]).toBe(r);                         // garden gate = the other half
+  await openKey(page);
   const dot = page.locator(".legend .chip").filter({ hasText: "Both gates" }).locator(".ringdot");
   expect(await sides(dot)).toEqual([t, r, b, l]);
 });
 
 test("map key is readable: 14px+ text in the main ink colour, gate / state dots 20px", async ({ page }) => {
   await openEvent(page, pinEvent());
-  const chips = page.locator("#mapAfter .legend .chip");
+  await openKey(page);
+  const chips = page.locator("#labels .legend .chip");
   const st = await chips.evaluateAll((ns) => ns.map((n) => {
     const c = getComputedStyle(n), d = n.querySelector(".ringdot");
     return { fs: parseFloat(c.fontSize), color: c.color, dot: d ? d.getBoundingClientRect().width : null };
@@ -260,7 +275,9 @@ test("map key is readable: 14px+ text in the main ink colour, gate / state dots 
 
 test("map key: icons, gates and states each get a row; nothing hidden off the side", async ({ page }) => {
   await openEvent(page, pinEvent());
+  await openKey(page);
   await expect(page.locator(".legend .row")).toHaveCount(3);
+  await expect(page.locator(".legend h3")).toHaveText(["Treats", "Entrance", "Tonight"]);   // the questions' own words
   await expect(page.locator(".legend .row").nth(1)).toContainText("Front gate");
   const fits = await page.locator(".legend .row").evaluateAll((rows) => rows.every((n) => n.scrollWidth <= n.clientWidth + 1));
   expect(fits).toBe(true);                                                 // no row runs off the side
@@ -269,6 +286,7 @@ test("map key: icons, gates and states each get a row; nothing hidden off the si
 
 test("events that aren't treat nights say 'Done', not 'Out of treats'", async ({ page }) => {
   await openEvent(page, pinEvent({ look: "yard_sale" }));
+  await openKey(page);
   await expect(page.locator(".legend")).toContainText("Done");
   await expect(page.locator(".legend")).not.toContainText("Out of treats");
 });
@@ -299,17 +317,60 @@ test("builder: Halloween template pre-ticks 'Both gates' as a split ring; ticks 
   expect(saves[saves.length - 1].args.p_fields.payload_schema.fields.entrance.ring_split).toEqual(["both"]);
 });
 
-test("a long header + three-row key on a small phone: the key can still be scrolled clear of the tab bar", async ({ page }) => {
+test("small phone: the map screen fits without scrolling; the Map Labels window fits on screen and closes", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 640 });
-  await openEvent(page, pinEvent({ look: "haq_al_laila" }));
-  const last = page.locator(".legend .row").last();
-  await expect(page.locator("body")).not.toHaveClass(/\bevfit\b/);       // the screen unlocked scrolling
-  const bar = await page.locator("#tabbar").boundingBox();
-  await expect.poll(async () => {                                          // scroll as a thumb would, until settled
-    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-    const k = await last.boundingBox();
-    return k.y + k.height <= bar.y + 1;                                    // not hidden behind the tab bar
-  }).toBe(true);
+  await openEvent(page, pinEvent({ look: "haq_al_laila", features: { giant_switch: true, crowd_reports: true, supply: true } }));
+  await expect(page.locator("body")).toHaveClass(/\bevfit\b/);           // no key under the map any more
+  await openKey(page);
+  const d = await page.locator("#labels").boundingBox();
+  expect(d.y).toBeGreaterThanOrEqual(0);
+  expect(d.y + d.height).toBeLessThanOrEqual(640);                         // the window itself fits
+  const last = page.locator("#labels .legend .row").last();
+  await last.scrollIntoViewIfNeeded();
+  await expect(last).toBeInViewport();                                     // and scrolls to its last row
+  await page.locator("#labelsClose").click();
+  await expect(page.locator("#labels")).toBeHidden();
+  await openKey(page);
+  const box = await page.locator("#labels").boundingBox();
+  await page.mouse.click(box.x + 4, box.y + box.height / 2);              // the window's own edge: stays open
+  await expect(page.locator("#labels")).toBeVisible();
+  await page.mouse.click(5, 5);                                            // a tap on the dimmed backdrop closes it
+  await expect(page.locator("#labels")).toBeHidden();
+});
+
+test("a pin's popup: nothing covers it or its close button; the map buttons come back when it closes", async ({ page }) => {
+  await openEvent(page, pinEvent());
+  await page.locator("#map .leaflet-marker-icon").nth(0).dispatchEvent("click");
+  const pop = page.locator(".leaflet-popup");
+  await expect(pop).toBeVisible();
+  await expect(page.locator("#layerBtn")).toBeHidden();
+  await expect(page.locator("#labelsBtn")).toBeHidden();
+  await expect(page.locator(".leaflet-control-zoom")).toBeHidden();
+  await page.waitForTimeout(400);                                          // the map's pan to fit the popup
+  const x = page.locator(".leaflet-popup-close-button");
+  const onTop = await x.evaluate((n) => { const r = n.getBoundingClientRect();
+    return n.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); });   // the button or its own ×
+  expect(onTop).toBe(true);                                                // tappable, not under a button
+  expect((await pop.boundingBox()).width).toBeLessThanOrEqual(290);        // phone-sized
+  await x.click();
+  await expect(page.locator("#layerBtn")).toBeVisible();
+  await expect(page.locator("#labelsBtn")).toBeVisible();
+});
+
+test("supply: the key explains the four bars; the popup and list show the gauge", async ({ page }) => {
+  const entries = [home("a", "1", 24.521, { treats: "candy", entrance: "front" }, { supply_level: 1 })];
+  await openEvent(page, pinEvent({ features: { supply: true } }, entries));
+  await openKey(page);
+  await expect(page.locator(".legend h3").last()).toHaveText("How much is left");
+  const levels = page.locator(".legend .row").last().locator(".chip");
+  await expect(levels).toHaveText(["Plenty", "Some left", "Running low", "Almost out"]);
+  expect(await levels.evaluateAll((cs) => cs.map((c) => c.querySelectorAll(".gauge i.on").length))).toEqual([4, 3, 2, 1]);
+  await page.locator("#labelsClose").click();
+  await page.locator("#map .leaflet-marker-icon").first().dispatchEvent("click");
+  const sup = page.locator(".leaflet-popup .supply");
+  await expect(sup).toHaveText("Supply: Running low");
+  await expect(sup.locator(".gauge i.on")).toHaveCount(2);
+  await expect(sup.locator(".gauge i")).toHaveCount(4);
 });
 
 test("split ring falls back to one colour when it can't split", async ({ page }) => {

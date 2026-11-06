@@ -134,7 +134,23 @@ textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-
 .alertacts .btn{flex:1; margin:0; padding:9px 10px; font-size:14px}
 .upd{margin:6px 0 0; font-size:12px; color:var(--jc-muted)}
 .upd.stale{color:var(--jc-warn)}
-.supply{font-size:12.5px; color:var(--jc-muted); margin-top:2px}
+.supply{font-size:12.5px; color:var(--jc-muted); margin-top:2px; display:flex; align-items:center; gap:6px}
+/* the supply gauge: four bars, filled from the left (5b.2) */
+.gauge{display:inline-flex; gap:2px; align-items:flex-end}
+.gauge i{width:6px; height:12px; border-radius:2px; background:var(--jc-line)}
+.gauge i.on{background:var(--jc-accent)}
+/* "Map Labels": a button over the map, the key in a popup window (5b.2) */
+.evmapwrap .maplabels{position:absolute; top:58px; right:10px; z-index:600}
+/* a pin's popup open: the overlay buttons (which sit above Leaflet's panes) step aside so they can't
+   cover the popup or its close button; the zoom buttons too (5b.2) */
+.evmapwrap.popopen > .lang, .evmapwrap.popopen .leaflet-control-zoom{visibility:hidden}
+.leaflet-popup-content{margin:12px 14px}
+dialog.sheet{border:1px solid var(--jc-line); border-radius:16px; background:var(--jc-bg); color:var(--jc-ink);
+  width:min(92vw, 420px); max-height:80vh; overflow:auto; padding:14px 16px 18px}
+dialog.sheet::backdrop{background:rgba(0,0,0,.6)}
+.sheethead{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px}
+.sheethead h2{margin:0; font-size:18px}
+.legend h3{margin:10px 0 6px; font-size:13px; color:var(--jc-muted); font-weight:700}
 /* "They're Out of Treats": a text link like Directions / Google Maps (red = it tells a neighbor something) */
 .pop .rep{font:inherit; font-weight:700; color:var(--jc-danger); background:none; border:0; padding:4px 0; cursor:pointer; text-decoration:underline}
 .pop .rep:disabled{opacity:.5; cursor:progress}
