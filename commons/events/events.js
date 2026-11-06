@@ -173,9 +173,11 @@ function openLabels(){
   if (!d) return;
   d.innerHTML = '<div class="sheethead"><h2>' + esc(jcT("ev_labels")) + '</h2>' +
     '<button type="button" class="lang" id="labelsClose">' + esc(jcT("ev_labels_close")) + '</button></div>' + legendHtml(data.event);
-  on("labelsClose", function(){ d.close(); });
+  on("labelsClose", function(){ closeLabels(d); });
   if (d.showModal) d.showModal(); else d.setAttribute("open", "");
 }
+/* older browsers without <dialog>: it was opened with [open], so close the same way (review F1) */
+function closeLabels(d){ if (d.close) d.close(); else d.removeAttribute("open"); }
 
 function show(name){
   /* state first: map.remove() fires popupclose, which must not draw onto a dying map (review R1) */
@@ -824,8 +826,13 @@ function renderMap(entries){
       '</p>' : '') + '</div>';
   on("seeList", function(e){ e.preventDefault(); el("tab-list").click(); });
   on("labelsBtn", openLabels);
+  var m0 = document.querySelector(".evmapwrap");
   var dl = el("labels");   /* a tap on the dimmed backdrop closes it */
-  if (dl) dl.addEventListener("click", function(e2){ if (e2.target === dl) dl.close(); });
+  if (dl) dl.addEventListener("click", function(e2){
+    if (e2.target !== dl) return;
+    var r = dl.getBoundingClientRect();     /* the window's own padding also reports the dialog: outside only (F2) */
+    if (e2.clientX < r.left || e2.clientX > r.right || e2.clientY < r.top || e2.clientY > r.bottom) closeLabels(dl);
+  });
   document.body.classList.add("evfit");     /* the map screen doesn't scroll: no spare padding under it */
   fitMap();                                 /* before Leaflet measures the box… */
   requestAnimationFrame(fitSoon);           /* …and again once the page has settled (fonts, header) */
@@ -855,12 +862,14 @@ function renderMap(entries){
   /* a neighbor's "They're Out" button lives in the popup; a refresh waits for the popup to close */
   map.on("popupopen", function(pe){
     popupOpen = true;
+    m0.classList.add("popopen");            /* Street / Map Labels / Find Me step aside while a popup is open */
     var node = pe.popup.getElement(), b = node && node.querySelector("[data-report]");
     var e = b && (data.entries || []).filter(function(x){ return x.id === b.dataset.report; })[0];
     if (e) b.addEventListener("click", function(){ report(e, pe.popup, b); });
   });
   map.on("popupclose", function(){
     popupOpen = false;
+    m0.classList.remove("popopen");
     if (pendingRepaint) { pendingRepaint = false; drawHomes(data.entries || []); }
   });
   on("locateBtn", function(){
@@ -875,6 +884,10 @@ function renderMap(entries){
   else if (pts.length === 1) map.setView(pts[0], 18);
 }
 
+/* a phone-sized popup the map pans clear of the edges: room for the zoom buttons on one side, and
+   below for "Find Me" (Zee, 2026-11-06: the popup hid its own close button) */
+var POPUP_OPTS = { maxWidth: 250, minWidth: 180, autoPanPaddingTopLeft: [12, 24], autoPanPaddingBottomRight: [12, 24] };
+
 /* the homes' pins, in their own layer so a refresh redraws them without moving the map */
 function drawHomes(entries){
   if (!map) return;
@@ -883,7 +896,7 @@ function drawHomes(entries){
     if (!hasPos(e)) return;
     /* your own home on top of its neighbours */
     L.marker([e.lat, e.lng], { icon: pinIcon(e), zIndexOffset: e.mine ? 1000 : 0, keyboard: true, title: jcHomeLabel(e) })
-      .addTo(homeLayer).bindPopup(function(){ return popupHtml(e); });   /* rebuilt on open: distance stays current */
+      .addTo(homeLayer).bindPopup(function(){ return popupHtml(e); }, POPUP_OPTS);   /* rebuilt on open: distance stays current */
   });
 }
 

@@ -331,8 +331,30 @@ test("small phone: the map screen fits without scrolling; the Map Labels window 
   await page.locator("#labelsClose").click();
   await expect(page.locator("#labels")).toBeHidden();
   await openKey(page);
-  await page.mouse.click(5, 5);                                            // a tap on the dimmed backdrop closes it too
+  const box = await page.locator("#labels").boundingBox();
+  await page.mouse.click(box.x + 4, box.y + box.height / 2);              // the window's own edge: stays open
+  await expect(page.locator("#labels")).toBeVisible();
+  await page.mouse.click(5, 5);                                            // a tap on the dimmed backdrop closes it
   await expect(page.locator("#labels")).toBeHidden();
+});
+
+test("a pin's popup: nothing covers it or its close button; the map buttons come back when it closes", async ({ page }) => {
+  await openEvent(page, pinEvent());
+  await page.locator("#map .leaflet-marker-icon").nth(0).dispatchEvent("click");
+  const pop = page.locator(".leaflet-popup");
+  await expect(pop).toBeVisible();
+  await expect(page.locator("#layerBtn")).toBeHidden();
+  await expect(page.locator("#labelsBtn")).toBeHidden();
+  await expect(page.locator(".leaflet-control-zoom")).toBeHidden();
+  await page.waitForTimeout(400);                                          // the map's pan to fit the popup
+  const x = page.locator(".leaflet-popup-close-button");
+  const onTop = await x.evaluate((n) => { const r = n.getBoundingClientRect();
+    return n.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); });   // the button or its own ×
+  expect(onTop).toBe(true);                                                // tappable, not under a button
+  expect((await pop.boundingBox()).width).toBeLessThanOrEqual(290);        // phone-sized
+  await x.click();
+  await expect(page.locator("#layerBtn")).toBeVisible();
+  await expect(page.locator("#labelsBtn")).toBeVisible();
 });
 
 test("supply: the key explains the four bars; the popup and list show the gauge", async ({ page }) => {
