@@ -154,3 +154,5 @@ textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-
 /* the event's Admin button, right under the language button (2026-11-06) */
 .evadminrow{display:flex; justify-content:flex-end; margin:-8px 0 6px}
 .evadminrow a, .evadminrow a:visited{text-decoration:none; color:var(--jc-ink)}
+/* R2b-1: "Adjusted by an organizer · 7:42 PM" / "An organizer removed your sign-up." */
+.status.orgline{color:var(--jc-warn)}

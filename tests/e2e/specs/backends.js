@@ -72,7 +72,8 @@ const HAQ_EVENT = pinEvent({ id: HAQ_ID, slug: "haq-al-laila-2027", title_en: "H
 const DAY_ID = "66666666-6666-4666-8666-666666666666";
 function dayBackend(opts = {}) {
   const now = Date.now(), startsIn = opts.startsIn != null ? opts.startsIn : -3600e3;
-  const st = { live: "active", supply: null, reportsOpen: opts.reportsOpen || 0, gets: 0,
+  const st = { live: "active", supply: opts.supply != null ? opts.supply : null, reportsOpen: opts.reportsOpen || 0, gets: 0,
+    status: opts.status || "in", orgAdjusted: opts.orgAdjusted || null, orgWithdrawn: opts.orgWithdrawn || null,   // R2b-1
     others: PIN_ENTRIES.filter((e) => !e.mine).map((e) => Object.assign({}, e)) };
   const event = pinEvent(Object.assign({ id: DAY_ID, slug: "halloween-tonight", title_en: "Halloween Tonight",
     starts_at: new Date(now + startsIn).toISOString(), ends_at: new Date(now + startsIn + 4 * 3600e3).toISOString(),
@@ -80,9 +81,11 @@ function dayBackend(opts = {}) {
   const mineEntry = PIN_ENTRIES.find((e) => e.mine);
   const get = () => ({
     event, stats: null,
-    mine: { id: "m", status: "in", payload: mineEntry.payload, note: null, live_state: st.live, supply_level: st.supply,
+    mine: Object.assign({ id: "m", status: st.status, payload: mineEntry.payload, note: null, live_state: st.live, supply_level: st.supply,
             org_note: null, hidden: false, reports_locked_until: null, spot: null, reports_open: st.reportsOpen },
-    entries: st.others.concat([Object.assign({}, mineEntry, { live_state: st.live, supply_level: st.supply })]),
+            // R2b-1 keys; opts.oldServer = a server from before R2b-1 (no keys at all)
+            opts.oldServer ? {} : { org_adjusted_at: st.orgAdjusted, org_withdrawn_at: st.orgWithdrawn }),
+    entries: st.others.concat(st.status === "in" ? [Object.assign({}, mineEntry, { live_state: st.live, supply_level: st.supply })] : []),
   });
   const feat = (k) => event.features[k] === true;
   return {
@@ -101,6 +104,13 @@ function dayBackend(opts = {}) {
         if (a.p_state != null) st.live = a.p_state;
         if (a.p_supply != null) st.supply = a.p_supply;
         if (a.p_state === "done") st.reportsOpen = 0;
+        st.orgAdjusted = null;                  // R2b-1: the household acted
+        return ok(get());
+      },
+      // R2b-1: tap the pressed level again
+      jc_entry_supply_clear: () => {
+        if (!feat("supply")) return raise("FEATURE_OFF");
+        st.supply = null; st.orgAdjusted = null;
         return ok(get());
       },
       jc_entry_reports_clear: () => { st.reportsOpen = 0; return ok(get()); },
@@ -144,6 +154,7 @@ function eventsBackend(opts = {}) {
       jc_entry_live_set: (a) => day.rpc.jc_entry_live_set(a),
       jc_entry_reports_clear: (a) => day.rpc.jc_entry_reports_clear(a),
       jc_entry_report: (a) => day.rpc.jc_entry_report(a),
+      jc_entry_supply_clear: (a) => day.rpc.jc_entry_supply_clear(a),
       jc_event_signup: (a) => {
         if (!st.signupsOpen) return raise("SIGNUPS_CLOSED");
         const p = Object.assign({}, a.p_payload); const note = p.note || null; delete p.note;
@@ -240,9 +251,9 @@ function adminBackend(opts = {}) {
         starts_at: opts.draftUndated ? null : "2026-12-02T14:00:00Z", ends_at: null, status: "draft", signups_open: true,
         features: {}, theme: {}, payload_schema: { fields: {} }, safety: {}, entries: 0 },   // R2a: publishing needs the date
       { id: ADMIN_LIVE_ID, slug: "test-event", title_en: opts.liveTitle || "Test Event", title_ar: null, description_en: "Practice", description_ar: null,
-        starts_at: "2026-11-04T04:40:00Z", ends_at: "2026-12-04T04:40:00Z", status: "live", signups_open: true,
-        features: { giant_switch: true }, theme: {}, payload_schema: { fields: { treats: { type: "enum", values: ["candy"], required: true } } },
-        safety: {}, entries: 3 },
+        starts_at: opts.liveStartsAt || "2026-11-04T04:40:00Z", ends_at: "2026-12-04T04:40:00Z", status: "live", signups_open: true,
+        features: opts.liveFeatures || { giant_switch: true }, theme: {}, payload_schema: { fields: { treats: { type: "enum", values: ["candy"], required: true } } },
+        safety: {}, entries: 3, ...(opts.liveLook ? { look: opts.liveLook } : {}) },
       ...(opts.extraEvents || []),
       { id: ADMIN_PAST_ID, slug: "halloween-2026", title_en: "Halloween 2026", status: "archived", signups_open: false,
         starts_at: "2026-10-31T00:00:00Z", features: { giant_switch: true }, payload_schema: { fields: {} }, entries: 124 },
@@ -358,7 +369,24 @@ function adminBackend(opts = {}) {
         if (v && list.some((o) => o !== x && o.status === "in" && o.spot === v)) return "SPOT_TAKEN";
         x.spot = v;
       }),
-      jc_admin_entry_pin_set: (a) => entryWrite(a.p_entry, (x) => { x.event_lat = a.p_lat; x.event_lng = a.p_lng; }),
+      jc_admin_entry_pin_set: (a) => entryWrite(a.p_entry, (x) => { x.event_lat = a.p_lat; x.event_lng = a.p_lng; x.org_adjusted_at = new Date().toISOString(); }),
+      // R2b-1 — as the server: one of state / supply / clear; supply + clear together is BAD_SUPPLY; 'in' only
+      jc_admin_entry_live_set: (a) => entryWrite(a.p_entry, (x) => {
+        const clear = a.p_supply_clear === true, f = (find(Object.keys(st.entries).find((k) => st.entries[k].includes(x))) || {}).features || {};
+        if (a.p_state == null && a.p_supply == null && !clear) return "BAD_STATE";
+        if (a.p_supply != null && clear) return "BAD_SUPPLY";
+        if (a.p_state != null && f.giant_switch !== true) return "FEATURE_OFF";
+        if ((a.p_supply != null || clear) && f.supply !== true) return "FEATURE_OFF";
+        if (x.status !== "in") return "NOT_FOUND";
+        if (a.p_state != null) x.live_state = a.p_state;
+        if (a.p_supply != null) x.supply_level = a.p_supply;
+        if (clear) x.supply_level = null;
+        x.org_adjusted_at = new Date().toISOString();
+      }),
+      jc_admin_entry_withdraw: (a) => entryWrite(a.p_entry, (x) => {
+        if (x.status !== "in") return "NOT_FOUND";
+        x.status = "withdrawn"; x.spot = null; x.reports_open = 0; x.org_withdrawn_at = new Date().toISOString();
+      }),
       jc_admin_home_pin_set: (a) => {
         if (!admin() && !st.adminEvents.length) return raise("NOT_ADMIN");
         let from = null;

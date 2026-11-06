@@ -350,10 +350,18 @@ function renderMine(){
   if (mine && mine.org_note) {
     html += '<div class="orgnote" role="note"><b>' + esc(jcT("ev_org_note")) + '</b><p>' + esc(mine.org_note) + '</p></div>';
   }
+  /* R2b-1: an organizer removed this sign-up (when, never who); signing up again clears it */
+  if (h && mine && !isIn && mine.org_withdrawn_at) {
+    html += '<p class="status orgline" role="note">' + esc(jcT("ev_org_removed")) + '</p>';
+  }
   if (!h) {
     html += '<p class="help">' + esc(jcT("ev_no_home")) + '</p><a class="btn" href="../home/">' + esc(jcT("ev_claim")) + '</a>';
   } else if (isIn) {
     html += liveHtml();                          /* event day: the switch + supply, first */
+    /* R2b-1: an organizer changed the switch, supply or pin; the household's own tap clears it */
+    if (mine.org_adjusted_at && fmtStamp(mine.org_adjusted_at)) {
+      html += '<p class="status orgline" role="note">' + esc(jcFmt("ev_org_adjusted", { t: fmtStamp(mine.org_adjusted_at) })) + '</p>';
+    }
     var fields = (ev.payload_schema && ev.payload_schema.fields) || {};
     var rows = Object.keys(fields).filter(function(k){ return mine.payload && mine.payload[k] !== undefined; }).map(function(k){
       var v = mine.payload[k];
@@ -533,6 +541,12 @@ function fmtTime(d){
   return d.toLocaleTimeString(ar() ? "ar-AE-u-nu-latn" : "en-US",
     { hour: "numeric", minute: "2-digit", timeZone: (cfg && cfg.tz) || "Asia/Dubai" });
 }
+/* "7:42 PM" today, "4 Nov 7:42 PM" another day; "" for anything unreadable */
+function fmtStamp(iso){
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return (fmtDate(iso) === fmtDate(new Date().toISOString()) ? "" : fmtDate(iso) + " ") + fmtTime(d);
+}
 
 /* My Sign-Up: "Right now, Villa 12 is… [Handing Out | ✕ Out of Treats]" and the four supply
    levels — every choice visible, the current one filled; never a button that cycles (Zee). */
@@ -555,7 +569,8 @@ function liveHtml(){
       '<div class="seg4" role="group" aria-label="' + esc(jcT("ev_supply_q")) + '">' + SUPPLY.map(function(n){
         return '<button type="button" data-supply="' + n + '" aria-pressed="' + (mine.supply_level === n) + '">' +
           esc(jcT("ev_supply_" + n)) + '</button>';
-      }).join("") + '</div>';
+      }).join("") + '</div>' +
+      (SUPPLY.indexOf(mine.supply_level) >= 0 ? '<p class="liveq">' + esc(jcT("ev_supply_clear_hint")) + '</p>' : '');
   }
   return html + '</div>';
 }
@@ -568,7 +583,8 @@ function wireLive(){
   });
   Array.prototype.forEach.call(document.querySelectorAll("#live [data-supply]"), function(b){
     b.addEventListener("click", function(){
-      if (b.getAttribute("aria-pressed") === "true") return;
+      /* R2b-1: the level that's already on, tapped again, clears it ("I tapped Plenty by mistake" — Zee) */
+      if (b.getAttribute("aria-pressed") === "true") return act("jc_entry_supply_clear", { p_event: data.event.id });
       act("jc_entry_live_set", { p_event: data.event.id, p_state: null, p_supply: Number(b.dataset.supply) });
     });
   });
