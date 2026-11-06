@@ -510,7 +510,10 @@ function eventDay(ev){
   return now >= s - LEAD_MS && now <= e;
 }
 /* R2a (D2): an event past its end takes no sign-ups or withdrawals; it shows under Past until it closes */
-function ended(ev){ return !!(ev && ev.status === "live" && ev.ended === true); }
+/* the server says so; between refreshes the server's end time decides (the page may stay open past it) */
+function ended(ev){
+  return !!(ev && ev.status === "live" && (ev.ended === true || (ev.ends_effective && Date.parse(ev.ends_effective) < Date.now())));
+}
 function openNow(ev){ return !!(ev && ev.signups_open && !ended(ev)); }
 function feat(ev, k){ return !!(ev && ev.features && ev.features[k] === true); }
 /* treat nights say "Handing Out / Out of Treats"; other events "Open / Done" (key + "_treats") */

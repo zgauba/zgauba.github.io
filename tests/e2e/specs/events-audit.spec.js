@@ -149,7 +149,7 @@ test("Organizer Tools: an ended event says when it closes automatically", async 
   await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await page.goto("admin/");
-  await expect(page.locator('li[data-event="test-event"] small')).toContainText("Ended · closes automatically 7 Nov, 10:50");
+  await expect(page.locator('li[data-event="test-event"] small')).toContainText(/Ended · closes automatically 7 Nov\D+10:50/);   // engines word the date slightly differently
 });
 
 test("App Health: 'ended — closes automatically' and 'couldn't close' notices name the event, not a home", async ({ page }) => {
@@ -166,7 +166,7 @@ test("App Health: 'ended — closes automatically' and 'couldn't close' notices 
   await page.locator("#healthOpen").click();
   const li = page.locator(".fblist li");
   await expect(li.nth(0).locator(".fbkind")).toHaveText("Halloween <b>Test</b>");   // text, never markup
-  await expect(li.nth(0)).toContainText("It has ended. It closes automatically 7 Nov, 10:50 and its numbers are saved.");
+  await expect(li.nth(0)).toContainText(/It has ended\. It closes automatically 7 Nov\D+10:50 and its numbers are saved\./);
   await expect(li.nth(0).locator("[data-nhome]")).toHaveCount(0);                     // no home to open
   await expect(li.nth(1).locator(".fbkind")).toHaveText("fireworks");
   await expect(li.nth(1)).toContainText("It couldn't close automatically. Close it from Organizer Tools → Events.");

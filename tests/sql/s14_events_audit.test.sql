@@ -233,7 +233,7 @@ begin
   n := jc_private.events_autoclose();
   if n <> 0 then raise exception 'FAIL A07k second run closed % events', n; end if;
   if (select count(*) from jc_admin_notices where kind in ('event_ended', 'autoclose_failed') and community_id = 'testville14'
-       and resolved_at is null) <> 4 then   -- tonight, no-end, will-fail (ended) + will-fail (failed)
+       and resolved_at is null) <> 3 then   -- tonight + no-end (ended) and will-fail (failed: overdue, so no "ended" notice)
     raise exception 'FAIL A07l notices duplicated: %', (select count(*) from jc_admin_notices where community_id = 'testville14' and resolved_at is null); end if;
   drop trigger s14_refuse on jc_event_stats;
   n := jc_private.events_autoclose();
@@ -304,7 +304,20 @@ begin
   v := jc_admin_broadcast_set_event('Parking on the north road tonight', ev_h);
   if v ->> 'broadcast' <> 'Parking on the north road tonight' then raise exception 'FAIL A10d tie returned %', v; end if;
   execute 'reset role';
-  if (select broadcast_event from jc_communities where id = 'testville14') is distinct from ev_h then raise exception 'FAIL A10e banner not tied'; end if;
+  if (select broadcast_event from jc_communities where id = 'testville14') is distinct from ev_h
+     or not (select broadcast_org from jc_communities where id = 'testville14') then raise exception 'FAIL A10e banner not tied'; end if;
+  execute 'set local role authenticated';
+  -- an event admin still can't replace (or clear) an organizer's banner just because it is tied to their event
+  perform pg_temp.s14_as(c1); tok := jc_event_admin_link_create(ev_h) ->> 'token';
+  perform pg_temp.s14_as(e2); perform jc_event_admin_accept(tok);
+  if pg_temp.s14_err('select jc_admin_broadcast_set(''mine now'')') is distinct from 'BANNER_IN_USE' then
+    raise exception 'FAIL A10e2 an event admin replaced the organizer''s tied banner'; end if;
+  if pg_temp.s14_err('select jc_admin_broadcast_set('''')') is distinct from 'BANNER_IN_USE' then
+    raise exception 'FAIL A10e3 an event admin cleared the organizer''s tied banner'; end if;
+  perform pg_temp.s14_as(c1); perform jc_event_admin_revoke(ev_h, e2, null);
+  execute 'reset role';
+  if (select broadcast from jc_communities where id = 'testville14') <> 'Parking on the north road tonight' then
+    raise exception 'FAIL A10e4 revoking an event admin took down the organizer''s tied banner'; end if;
   execute 'set local role authenticated';
   perform pg_temp.s14_as(e2);   -- e2 was revoked above: not an organizer, not an event admin
   if pg_temp.s14_err(format('select jc_admin_broadcast_set_event(''x'', %L)', ev_h)) is distinct from 'NOT_ADMIN' then
@@ -328,7 +341,7 @@ begin
   execute 'reset role';
   if (select broadcast from jc_communities where id = 'testville14') <> 'Pool closed Friday' then
     raise exception 'FAIL A10k a close took down an unrelated banner'; end if;
-  k := k + 11;
+  k := k + 14;
 
   -- ---------- A11 frozen signatures ----------
   if (select string_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', ', ' order by p.proname)

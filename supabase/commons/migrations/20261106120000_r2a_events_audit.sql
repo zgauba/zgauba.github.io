@@ -14,19 +14,22 @@
 -- Rollback (manual): select cron.unschedule('jc-event-autoclose'); re-create the replaced functions from
 -- 20261106090000_t5_2_hardening.sql and earlier; drop function public.jc_admin_broadcast_set_event(text, uuid),
 -- jc_private.events_autoclose(), jc_private.event_close_core(uuid), jc_private.event_ends(timestamptz, timestamptz);
--- alter table jc_communities drop column broadcast_by; restore the notices kind CHECK (after resolving /
+-- alter table jc_communities drop column broadcast_by, drop column broadcast_org; restore the notices kind CHECK (after resolving /
 -- deleting event_ended + autoclose_failed rows). Auto-closed events stay closed (close is irreversible).
 
 -- ---------- 1. schema ----------
 alter table public.jc_communities
-  add column broadcast_by uuid references auth.users(id) on delete set null;   -- U3: who posted the banner
+  add column broadcast_by uuid references auth.users(id) on delete set null,   -- U3: who posted the banner
+  -- U3: an organizer posted it. A tied organizer banner has broadcast_event set, which until now meant "an
+  -- event admin's banner" — this keeps event admins from replacing an organizer's banner (T5.2b rule).
+  add column broadcast_org boolean not null default false;
 alter table public.jc_admin_notices drop constraint jc_admin_notices_kind_check;
 alter table public.jc_admin_notices add constraint jc_admin_notices_kind_check
   check (kind = any (array['departure', 'over_cap', 'pin_flag', 'event_ended', 'autoclose_failed']));   -- D2
 
 -- ---------- 2. D2: when an event ends, and the close itself ----------
 create function jc_private.event_ends(p_starts timestamptz, p_ends timestamptz) returns timestamptz
-language sql immutable security definer set search_path = public, pg_temp as $$   -- definer + pinned: the jc_private rule (G13)
+language sql stable security definer set search_path = public, pg_temp as $$   -- definer + pinned: the jc_private rule (G13)
   -- the client's event day uses the same rule (NO_END_MS = 6 h); undated events never end
   select case when p_starts is null then null else coalesce(p_ends, p_starts + interval '6 hours') end
 $$;
@@ -48,7 +51,7 @@ begin
   update jc_event_entries set archived_at = now() where event_id = ev.id and archived_at is null;
   update jc_events set status = 'archived', archived_at = now() where id = ev.id;
   -- T5.2b: a banner tied to the event goes with it (R2a: an organizer's tied banner too)
-  update jc_communities set broadcast = '', broadcast_event = null, broadcast_by = null
+  update jc_communities set broadcast = '', broadcast_event = null, broadcast_by = null, broadcast_org = false
    where id = ev.community_id and broadcast_event = ev.id;
   -- R2a: its "ended — closes automatically" notice has done its job
   update jc_admin_notices set resolved_at = now()
@@ -598,7 +601,7 @@ begin
     if v_event is null then raise exception 'NOT_ADMIN'; end if;
     perform 1 from jc_communities c where c.id = v_comm for update;
     if exists (select 1 from jc_communities c where c.id = v_comm
-                and c.broadcast_event is null and c.broadcast <> '') then
+                and (c.broadcast_event is null or c.broadcast_org) and c.broadcast <> '') then   -- R2a: + a tied organizer banner
       raise exception 'BANNER_IN_USE';
     end if;
   end if;
@@ -611,7 +614,8 @@ begin
   if char_length(v_text) > 280 then raise exception 'TOO_LONG'; end if;
   update jc_communities set broadcast = v_text,
          broadcast_event = case when v_org or v_text = '' then null else v_event end,   -- T5.2b
-         broadcast_by    = case when v_text = '' then null else v_user end              -- R2a (U3)
+         broadcast_by    = case when v_text = '' then null else v_user end,             -- R2a (U3)
+         broadcast_org   = v_org and v_text <> ''                                         -- R2a (U3)
    where id = v_comm;
   perform jc_admin_log_add(v_comm, 'broadcast_set', jsonb_build_object('text', v_text, 'event_id', v_event));
   return jsonb_build_object('broadcast', v_text);
@@ -638,8 +642,8 @@ begin
   if not found then raise exception 'NOT_FOUND'; end if;
   -- R2a (U3): the revoked admin's banner about this event goes with them
   if p_user is not null then
-    update jc_communities set broadcast = '', broadcast_event = null, broadcast_by = null
-     where id = v_comm and broadcast_event = p_event and broadcast_by = p_user;
+    update jc_communities set broadcast = '', broadcast_event = null, broadcast_by = null, broadcast_org = false
+     where id = v_comm and broadcast_event = p_event and broadcast_by = p_user and not broadcast_org;
   end if;
   perform jc_admin_log_add(v_comm, 'event_admin_revoke', jsonb_build_object(
     'event_id', p_event, 'user_id', p_user, 'link_id', p_link));
@@ -659,7 +663,7 @@ begin
   end if;
   v_r := jc_admin_broadcast_set(p_text);               -- same cleaning, caps and log
   update jc_communities set broadcast_event = case when broadcast = '' then null else p_event end
-   where id = v_comm;
+   where id = v_comm;                                  -- broadcast_org stays true: still the organizer's banner
   perform jc_admin_log_add(v_comm, 'broadcast_tie', jsonb_build_object('event_id', p_event));
   return v_r;
 end;
@@ -681,10 +685,12 @@ begin
      and ev.status = 'live'
      and not coalesce(jc_private.event_ends(ev.starts_at, ev.ends_at) < now(), false);
   -- ended: one notice per event (kept current if the end time changed while it was open)
+  -- (an event already past its 24 h closes below this run — no notice to resolve straight away)
   for r in select ev.id, ev.community_id, ev.slug, ev.title_en,
                   jc_private.event_ends(ev.starts_at, ev.ends_at) + interval '24 hours' as closes_at
              from jc_events ev
-            where ev.status = 'live' and jc_private.event_ends(ev.starts_at, ev.ends_at) < now() loop
+            where ev.status = 'live' and jc_private.event_ends(ev.starts_at, ev.ends_at) < now()
+              and jc_private.event_ends(ev.starts_at, ev.ends_at) + interval '24 hours' >= now() loop
     update jc_admin_notices set detail = jsonb_build_object('event_id', r.id, 'slug', r.slug,
                                          'title', r.title_en, 'closes_at', r.closes_at)
      where community_id = r.community_id and kind = 'event_ended' and resolved_at is null
