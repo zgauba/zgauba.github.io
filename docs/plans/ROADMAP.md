@@ -22,6 +22,9 @@ The `e2e` test community stays the place to try everything; Jubail's modules sta
 | T5.0–T5.1 | Accounts (email + password + reset), join code, home claim + required pin, household invites, tab bar, hub, auto-update; Events for residents with Halloween parity |
 | T5.2 | Organizer Tools (templates, question builder, kinds homes / one place, looks, sign-ups tab, pin moves, banner, CSV, per-event admins), event looks + pins, **event day** (two-sided switch, supply gauge, crowd reports + "We're Not Out", 2-min refresh), App Health & Notices, page help "?", Organizer Tools sub-menu, event Admin button, DB hardening |
 | T5.3–T5.4 | Feedback to the platform owner (email via Resend); Coming Soon stage |
+| R0 | WebKit e2e lane in CI (non-blocking until green ×2); its first catch fixed (map buttons over pin popups) — PR #62 |
+| R1 | Organizer Tools → Community → **Households**: list by village, invite Approve / Decline, home edit, directory hide, member remove, admin log, notice → home — PR #63 |
+| R2a | Events audit fixes: events end + auto-close 24 h later (stats always taken), vacated homes start clean, treat-night templates, homes events need a date, hidden households told, banners go with their event — PR #64 (DB `r2a_events_audit`) |
 
 Detail: `docs/architecture.md` (Stack Manifest) and the reviews in `docs/qa/`.
 
@@ -30,12 +33,12 @@ Detail: `docs/architecture.md` (Stack Manifest) and the reviews in `docs/qa/`.
 Each phase ships as one or more PRs through `/plan-change` → `/ship-pr` (and `/db-rehearse` when it has a
 migration). "DB" = needs a migration.
 
-### R0 — WebKit test lane (synthesis S1, KG 17)  ·  tests only
+### R0 — WebKit test lane (synthesis S1, KG 17)  ·  tests only  ·  ✓ done 2026-11-06 (PR #62)
 - Add a Playwright `webkit` project to the e2e suite and CI — three shipped bugs were iPhone-Safari-only and
   Chromium CI passed them. Non-blocking until green twice, then blocking. Flakes beyond one PR → their own
   test-only PR. Real-iPhone checks stay in R8.
 
-### R1 — Households (Organizer Tools → Community)  ·  app only
+### R1 — Households (Organizer Tools → Community)  ·  app only  ·  ✓ done 2026-11-06 (PR #63)
 Community admins have database functions for homes but **no screen** — and invite requests over a
 household's member limit currently have nowhere to go.
 - Households list by village: home label, pin status, members (display name or masked email — never the
@@ -46,7 +49,18 @@ household's member limit currently have nowhere to go.
 - Admin log (`jc_admin_log_list`); links from App Health notices ("household left", "pin far away") to the home.
 - Verify each RPC's live shape before building (they date from S1, never exercised by a screen).
 
-### R2 — Event-night extras + Events audit fixes  ·  DB (two PRs: R2a fixes, then R2b extras)
+### R1.1 — Households: fix a home's pin  ·  app only  ·  in progress
+- Zee 2026-11-06: "Fix pin" / "Set pin" per home in Households, reusing the Sign-ups tab pin move (map +
+  confirm naming the home + Undo) and the existing `jc_admin_home_pin_set` (clears pin flags, resolves the
+  "pin far away" notice). Parked WIP on `feat/r1-1-household-pin` (e177013).
+
+### Event page polish  ·  app only  ·  queued after R1.1
+- **Admin button on the title line**, not its own row (Zee 2026-11-06 screenshot: it pushes the title down).
+- **Full-screen map button** — a CSS expand with a close ✕ (iOS Safari has no element Fullscreen API);
+  Leaflet `invalidateSize` after resize; pins, popups, Find Me, Map Labels / Street keep working.
+- Check the thin horizontal line across the map in iOS Safari (likely a tile seam); fix if it reproduces.
+
+### R2 — Event-night extras + Events audit fixes  ·  DB (R2a ✓ done 2026-11-06, PR #64; then R2b-1, R2b-2)
 **R2a — Events audit fixes** (`docs/qa/events-qa-2026-11-06.md`; Zee 2026-11-06: fix all of them). Ships first:
 it changes existing behaviour, and R2b builds on the same functions.
 - **D1 + L1** — when a household leaves a home, its sign-ups lose the organizer's "hidden" flag and their spot,
@@ -59,7 +73,8 @@ it changes existing behaviour, and R2b builds on the same functions.
 - **U1** — a hidden or directory-hidden household sees "Your home isn't shown on the map" on My Sign-Up.
 - **U3** — closing an event clears any banner about it; revoking an event admin clears their banner.
 
-**R2b — Event-night extras**
+**R2b — Event-night extras** (plan: `docs/plans/R2-event-night.md` — R2b-1 = organizer acts → household told,
+R2b-2 = safety block, holiday lights, clean text)
 - **Organizer marks a home out** (Zee 2026-11-06: yes) — organizers + that event's admins set a home's
   live state / supply on event night; admin-logged; the household sees it on My Sign-Up. New RPC (never
   change `jc_entry_live_set`'s signature).
@@ -73,6 +88,8 @@ it changes existing behaviour, and R2b builds on the same functions.
   event's admins withdraw a sign-up; admin-logged. New RPC.
 - **The household is told** (synthesis; 3a) — when an organizer moves its pin or marks it out, My Sign-Up says
   "adjusted by an organizer" (no organizer named).
+- **Clear a supply level** (Zee 2026-11-06; R2b-1) — tapping the selected "How much is left" level again clears it.
+  New RPC; `jc_entry_live_set`'s signature unchanged (its null means "leave as is").
 - **Clean event text on write** (synthesis; KG 16) — `jc_clean_text` on event title / description in the save
   path; stored text left as is.
 
@@ -188,6 +205,11 @@ of its wording + design (R8) and the event itself need to be ready by early Janu
   sign-ups at their end time and auto-close 24 h later; hidden households are told; the hidden flag resets
   when a new family moves in. Every audit finding is fixed in R2a.
 - Order: R0 → R1 → R2 as listed; R2 is planned (`/plan-change`) while R1 is built, and built after R1 merges.
+- **Verification is tiered** (2026-11-06): cosmetic → suite once + CI + screenshots, a short review note, no
+  reviewer agent; screen logic → + `code-reviewer`; data / auth / PII → rehearse, suite twice, database +
+  security + code review (`/ship-pr` step 1b).
+- **No two build agents on overlapping files** (2026-11-06) — `admin.js`, `strings.js`, `events.js` are shared
+  by almost every phase, so builds run one at a time; planning, reviews and audits may run alongside.
 
 ## Superseded ideas (from the Oct–Nov planning conversations)
 
