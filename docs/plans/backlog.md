@@ -36,6 +36,10 @@ Last groomed: 2026-11-02
 
 ## Commons platform features
 
+> **Launch rule (Zee 2026-11-06):** no launch to residents until the FULL app is built — Events, Courts,
+> Pets, The Community (map + directory) and the planned backlog ideas (e.g. customizable main navigation).
+> The T6 launch gate (`docs/qa/SYNTHESIS-2026-11-03.md`) is the LAST step, not the next one.
+
 - [ ] EN/AR toggle + RTL (centralized strings dictionary first).
 - [ ] Identity model with optional-PII slots from day one (zero-PII default;
       deviations per-feature, opt-in, minimal, disclosed).
@@ -54,7 +58,8 @@ Last groomed: 2026-11-02
       homes, polyline + optional Google Maps handoff; recompute as homes go out.
 - [ ] Kilometers-walked counter: strictly client-side, localStorage,
       "at least X km" framing; community total only as explicit opt-in.
-- [ ] **Facility booking module** (padel-first soft launch): per-facility slot
+- [ ] **Facility booking module** — **tennis + basketball courts only, NO padel (Zee 2026-11-06;
+      the schema's `jc_facilities.kind` still says padel|tennis|other → change in the Courts migration)**: per-facility slot
       grid; anti-squatting rules (advance window, max slot length, per-villa
       caps) mandatory; one-tap cancellation; admin slot-blocking; "official
       community-management bookings take precedence" on the booking screen;

@@ -100,7 +100,10 @@ begin
   if v_err is distinct from 'NOT_ADMIN' then raise exception 'FAIL N06 non-admin report: %', v_err; end if;
   k := k + 3;
 
-  -- ---------- N07 report contents ----------
+  -- ---------- N07 report contents (as the platform owner: the whole-platform rows are owner-only — T5.2 hardening) ----------
+  execute 'reset role';
+  insert into jc_platform_owners (user_id) values (t1);
+  execute 'set local role authenticated';
   perform set_config('request.jwt.claims', json_build_object('sub', t1, 'role', 'authenticated')::text, true);
   v := jc_admin_unlock('T4-TV6-ADMIN-01');
   v := jc_admin_report();
