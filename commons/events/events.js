@@ -183,6 +183,7 @@ function show(name){
   /* state first: map.remove() fires popupclose, which must not draw onto a dying map (review R1) */
   var old = map;
   map = null; homeLayer = null; popupOpen = false; pendingRepaint = false; mineShown = null;
+  mapFull = false; document.body.classList.remove("mapfull");   /* any redraw: the map is back in the page */
   if (old) old.remove();
   current = name;
   setLook(name === "list" ? null : lookOf(data && data.event));
@@ -267,17 +268,18 @@ var VIEWS = {
     var tabs = tabsFor(ev);
     if (tabs.indexOf(tab) < 0) tab = "map";   /* ?tab=list on a one-place event */
     var look = lookOf(ev);
-    /* Admin, under the language button: community admins / organizers, and this event's own admins (Zee, 2026-11-06) */
+    /* Admin: community admins / organizers, and this event's own admins (Zee, 2026-11-06) — on the title's line,
+       at its end, so it never pushes the title and the map down (Zee, 2026-11-07) */
     var sc = (state.me && state.me.admin_scopes) || [];
     var canAdmin = sc.indexOf("community") >= 0 || sc.indexOf("events") >= 0 ||
                    ((state.me && state.me.admin_events) || []).indexOf(ev.id) >= 0;
     el("view").innerHTML =
-      (canAdmin ? '<div class="evadminrow"><a class="lang" id="evAdmin" href="../admin/?event=' + encodeURIComponent(ev.id) + '">' +
-        esc(jcT("ev_admin")) + '</a></div>' : '') +
       '<div class="evhead">' +
         /* the look's mark; Haq al Laila leads with its Arabic tagline in both languages */
         (look === "haq_al_laila" ? '<p class="tagline" lang="ar" dir="rtl">' + esc(jcT("look_tagline_haq_al_laila")) + '</p>' : '') +
-        '<h1>' + (look ? '<span class="mark" aria-hidden="true">' + LOOK_MARKS[look] + '</span> ' : '') + esc(title(ev)) + '</h1>' +
+        '<div class="evtitle"><h1>' + (look ? '<span class="mark" aria-hidden="true">' + LOOK_MARKS[look] + '</span> ' : '') + esc(title(ev)) + '</h1>' +
+        (canAdmin ? '<a class="lang" id="evAdmin" href="../admin/?event=' + encodeURIComponent(ev.id) + '">' + esc(jcT("ev_admin")) + '</a>' : '') +
+        '</div>' +
         '<p class="sub" id="evsub">' + esc(headSub(ev, entries)) + '</p>' +
         /* two lines, then "More" — the map stays above the fold (Zee, 2026-11-04) */
         /* formatted with the editor's markers — jcRich escapes everything first (rich.js) */
@@ -825,6 +827,7 @@ function measureDesc(){
 function fitMap(){
   var m = el("map");
   if (!m) return;
+  if (mapFull) { if (map) map.invalidateSize(); return; }   /* full screen: CSS sizes it */
   /* innerHeight follows Safari's toolbar; visualViewport would also shrink on pinch-zoom (review) */
   var vh = window.innerHeight;
   var bar = el("tabbar") ? el("tabbar").getBoundingClientRect().height : 0;
@@ -840,6 +843,24 @@ function fitMap(){
   m.style.height = h + "px";
   if (map) map.invalidateSize();
 }
+/* The map, bigger (Zee, 2026-11-07): the map box fills the screen above everything, and one button
+   both opens and closes it (Escape too). A CSS expand, so it works in iOS Safari, which has no element
+   Fullscreen API; Leaflet re-measures once the box has its new size. */
+var mapFull = false;
+function setMapFull(on){
+  var w = document.querySelector(".evmapwrap"), b = el("fullBtn");
+  mapFull = !!on && !!w;
+  if (w) w.classList.toggle("full", mapFull);
+  document.body.classList.toggle("mapfull", mapFull);
+  if (b) {
+    b.textContent = jcT(mapFull ? "ev_map_close" : "ev_map_full");
+    b.setAttribute("aria-pressed", String(mapFull));
+  }
+  if (!mapFull) fitMap();
+  requestAnimationFrame(function(){ if (map) map.invalidateSize(); });
+}
+document.addEventListener("keydown", function(e){ if (e.key === "Escape" && mapFull) setMapFull(false); });
+
 var fitTimer = null;
 function fitSoon(){ clearTimeout(fitTimer); fitTimer = setTimeout(function(){ measureDesc(); fitMap(); }, 120); }
 window.addEventListener("resize", fitSoon);
@@ -853,13 +874,16 @@ function renderMap(entries){
     entries = hasPos(spot) ? [spot] : [];   /* both coordinates, or no pin (review) */
   }
   var unpinned = venue ? 0 : entries.filter(function(e){ return !hasPos(e); }).length;
+  mapFull = false; document.body.classList.remove("mapfull");   /* a redrawn map starts in the page */
   el("body").innerHTML =
     '<div class="evmapwrap"><div class="evmap" id="map"></div>' +
       /* top right, one row: Map Labels · Street; Find Me bottom right (Zee, 2026-11-06) */
       '<div class="mapbtns">' +
         (venue || !legendHtml(ev) ? '' : '<button type="button" class="lang" id="labelsBtn" aria-haspopup="dialog">' + esc(jcT("ev_labels")) + '</button>') +
         '<button type="button" class="lang" id="layerBtn">' + esc(jcT(layer === "sat" ? "pin_street" : "pin_sat")) + '</button></div>' +
-      '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
+      '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button>' +
+      /* bottom left, clear of the zoom (top left), Street / Map Labels (top right) and Find Me (bottom right) */
+      '<button type="button" class="lang mapfull" id="fullBtn" aria-pressed="false">' + esc(jcT("ev_map_full")) + '</button></div>' +
     '<dialog class="sheet" id="labels" aria-label="' + esc(jcT("ev_labels")) + '"></dialog>' +
     '<div id="mapAfter">' +
     (unpinned ? '<p class="help" style="margin-top:8px">' + esc(unpinned) + ' · ' + esc(jcT("ev_unpinned")) +
@@ -870,6 +894,7 @@ function renderMap(entries){
       '</p>' : '') + '</div>';
   on("seeList", function(e){ e.preventDefault(); el("tab-list").click(); });
   on("labelsBtn", openLabels);
+  on("fullBtn", function(){ setMapFull(!mapFull); });
   var m0 = document.querySelector(".evmapwrap");
   var dl = el("labels");   /* a tap on the dimmed backdrop closes it */
   if (dl) dl.addEventListener("click", function(e2){

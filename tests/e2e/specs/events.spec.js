@@ -790,7 +790,7 @@ test("tab bar is slim (≤ 56px) and each tab is still ≥ 44px to tap", async (
   for (const b of await page.locator("#tabbar a").all()) expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
 });
 
-test("event page: an Admin button under the language button for organizers and this event's admins only", async ({ page, browser }) => {
+test("event page: an Admin button on the title's line for organizers and this event's admins only", async ({ page, browser }) => {
   const { adminBackend: ab0 } = require("./backends");
   const eb = eventsBackend();
   const admin = ab0({ scopes: ["community"] });
@@ -800,16 +800,20 @@ test("event page: an Admin button under the language button for organizers and t
   const btn = page.locator("#evAdmin");
   await expect(btn).toHaveText("Admin");
   await expect(btn).toHaveAttribute("href", "../admin/?event=" + LIVE_ID);
-  const [b, lang] = [await btn.boundingBox(), await page.locator("#langBtn").boundingBox()];
-  expect(b.y).toBeGreaterThan(lang.y + lang.height - 2);                    // below the language button
-  expect(Math.abs((b.x + b.width) - (lang.x + lang.width))).toBeLessThan(4); // right-aligned with it
-  // a resident: no button
+  const [b, lang, h1] = [await btn.boundingBox(), await page.locator("#langBtn").boundingBox(), await page.locator("h1").boundingBox()];
+  // on the title's line (Zee, 2026-11-07): it overlaps the h1 vertically and sits after it
+  expect(b.y).toBeLessThan(h1.y + h1.height);
+  expect(b.y + b.height).toBeGreaterThan(h1.y);
+  expect(b.x).toBeGreaterThanOrEqual(h1.x + h1.width - 1);
+  expect(Math.abs((b.x + b.width) - (lang.x + lang.width))).toBeLessThan(4); // right-aligned with the language button
+  // a resident: no button — and the title sits exactly where it does for the organizer (no row pushed in)
   const p2 = await browser.newPage({ ...test.info().project.use });
   await stubBackend(p2, { rpc: eventsBackend().rpc });
   await signIn(p2);
   await p2.goto("events/?id=" + LIVE_ID);
   await expect(p2.locator("h1")).toBeVisible();
   await expect(p2.locator("#evAdmin")).toHaveCount(0);
+  expect(Math.abs((await p2.locator("h1").boundingBox()).y - h1.y)).toBeLessThan(2);
   await p2.close();
 });
 
@@ -838,4 +842,72 @@ test("event page Admin button sits on the language button's side in Arabic too",
   await page.goto("events/?id=" + LIVE_ID);
   const [b, lang] = [await page.locator("#evAdmin").boundingBox(), await page.locator("#langBtn").boundingBox()];
   expect(Math.abs(b.x - lang.x)).toBeLessThan(4);                           // both on the left in RTL
+  const h1 = await page.locator("h1").boundingBox();
+  expect(b.y).toBeLessThan(h1.y + h1.height);                               // on the title's line in RTL too
+  expect(b.x + b.width).toBeLessThanOrEqual(h1.x + 1);                      // …at its end (the left)
+});
+
+// Event-page polish (Zee, 2026-11-07): the map, bigger — a CSS expand (iOS Safari has no element Fullscreen API)
+async function openMap(page, lang) {
+  if (lang) await page.addInitScript((l) => localStorage.setItem("jc_lang", l), lang);
+  await stubBackend(page, { rpc: eventsBackend().rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=map");
+  await expect(page.locator("#map .leaflet-control-zoom")).toBeVisible();
+}
+const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+async function controlsDontCollide(page) {
+  const boxes = [];
+  for (const sel of ["#fullBtn", "#locateBtn", "#layerBtn", ".leaflet-control-zoom"]) boxes.push(await page.locator(sel).boundingBox());
+  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) expect(overlap(boxes[i], boxes[j])).toBe(false);
+}
+
+test("map: Full Screen fills the screen over the tab bar, Leaflet re-measures, Close Map (and Escape) put it back", async ({ page }) => {
+  await openMap(page);
+  const before = await page.locator("#map").boundingBox();
+  await expect(page.locator("#fullBtn")).toHaveText("Full Screen");
+  await controlsDontCollide(page);
+  await page.locator("#fullBtn").click();
+  await expect(page.locator(".evmapwrap")).toHaveClass(/\bfull\b/);
+  await expect(page.locator("#fullBtn")).toHaveText("Close Map");
+  await expect(page.locator("#fullBtn")).toHaveAttribute("aria-pressed", "true");
+  const vp = page.viewportSize();
+  const full = await page.locator("#map").boundingBox();
+  expect(Math.round(full.width)).toBe(vp.width);
+  expect(Math.round(full.height)).toBe(vp.height);
+  // over the tab bar: the bottom of the screen is the map
+  expect(await page.evaluate(() => !!document.elementFromPoint(innerWidth / 2, innerHeight - 5).closest(".evmapwrap"))).toBe(true);
+  // Leaflet re-measured (invalidateSize): its own idea of the size is the full box
+  await expect.poll(() => page.evaluate(() => {
+    const p = document.querySelector("#map .leaflet-control-container .leaflet-bottom.leaflet-right").getBoundingClientRect();
+    return Math.round(p.bottom) === innerHeight;
+  })).toBe(true);
+  await controlsDontCollide(page);
+  await page.locator("#fullBtn").click();
+  await expect(page.locator(".evmapwrap")).not.toHaveClass(/\bfull\b/);
+  await expect(page.locator("#fullBtn")).toHaveText("Full Screen");
+  expect(Math.abs((await page.locator("#map").boundingBox()).height - before.height)).toBeLessThan(3);
+  expect(await page.evaluate(() => document.body.classList.contains("mapfull"))).toBe(false);
+  await page.locator("#fullBtn").click();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".evmapwrap")).not.toHaveClass(/\bfull\b/);
+});
+
+test("map: Full Screen in Arabic — its own words, the controls still apart", async ({ page }) => {
+  await openMap(page, "ar");
+  await expect(page.locator("#fullBtn")).toHaveText("ملء الشاشة");
+  await controlsDontCollide(page);
+  await page.locator("#fullBtn").click();
+  await expect(page.locator("#fullBtn")).toHaveText("أغلق الخريطة");
+  await controlsDontCollide(page);
+});
+
+test("map: a redraw while full screen (language) gives the page back", async ({ page }) => {
+  await openMap(page);
+  await page.locator("#fullBtn").click();
+  await expect(page.locator(".evmapwrap")).toHaveClass(/\bfull\b/);
+  await page.locator("#langBtn").evaluate((b) => b.click());       // under the map: clicked by script
+  await expect(page.locator("#fullBtn")).toHaveText("ملء الشاشة");
+  await expect(page.locator(".evmapwrap")).not.toHaveClass(/\bfull\b/);
+  expect(await page.evaluate(() => document.body.classList.contains("mapfull"))).toBe(false);
 });
