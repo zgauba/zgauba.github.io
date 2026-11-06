@@ -1,4 +1,4 @@
-# Commons browser tests (T5.1): runs the stubbed Playwright suite on every PR that
+# Commons browser tests (T5.1; WebKit lane R0): runs the stubbed Playwright suite on every PR that
 # touches commons/ or the tests. Never touches the live backend (all RPC + Auth
 # calls are stubbed; the real-backend smoke test stays manual — it needs a code).
 name: Commons e2e
@@ -30,12 +30,45 @@ jobs:
         run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run the suite
-        run: npx playwright test
+      - name: Run the suite (Chromium project; the WebKit lane is the separate job below)
+        run: npx playwright test --project=mobile
       - name: Keep the failure report
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: playwright-results
+          path: tests/e2e/test-results
+          retention-days: 7
+
+  # WebKit = the iPhone engine (R0). Non-blocking until it has been green twice in a row on
+  # real PRs; then drop continue-on-error and add it to the required checks. Same posture as
+  # `e2e`: pull_request only, contents: read, no secrets.
+  e2e-webkit:
+    name: e2e-webkit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: tests/e2e
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: 20
+      - name: Install Playwright (pinned in package-lock.json)
+        run: npm ci
+      - name: Install WebKit
+        run: npx playwright install --with-deps webkit
+      - name: Run the suite (WebKit project)
+        run: npx playwright test --project=webkit
+      - name: Flag the failure (continue-on-error shows this job green)
+        if: failure()
+        run: echo "WebKit lane FAILED (non-blocking) - see the Run step log" >> "$GITHUB_STEP_SUMMARY"
+      - name: Keep the failure report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: playwright-webkit-results
           path: tests/e2e/test-results
           retention-days: 7
