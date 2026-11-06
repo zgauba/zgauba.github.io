@@ -357,6 +357,18 @@ test("a pin's popup: nothing covers it or its close button; the map buttons come
   await expect(page.locator("#labelsBtn")).toBeVisible();
 });
 
+test("map buttons: Map Labels beside Street on one row (no '?'); Find Me bottom right", async ({ page }) => {
+  await openEvent(page, pinEvent());
+  await expect(page.locator("#labelsBtn")).toHaveText("Map Labels");
+  const [lab, street, find, map] = await Promise.all(["#labelsBtn", "#layerBtn", "#locateBtn", "#map"].map((s) => page.locator(s).boundingBox()));
+  expect(Math.abs(lab.y - street.y)).toBeLessThan(2);                      // same row
+  expect(lab.x + lab.width).toBeLessThanOrEqual(street.x);                 // Map Labels, then Street
+  expect(street.x + street.width).toBeGreaterThan(map.x + map.width - 20); // top right
+  expect(find.x + find.width).toBeGreaterThan(map.x + map.width - 20);     // Find Me: right…
+  expect(find.y + find.height).toBeGreaterThan(map.y + map.height - 60);   // …and bottom
+  expect(lab.x).toBeGreaterThan(map.x + 50);                               // clear of the zoom buttons
+});
+
 test("supply: the key explains the four bars; the popup and list show the gauge", async ({ page }) => {
   const entries = [home("a", "1", 24.521, { treats: "candy", entrance: "front" }, { supply_level: 1 })];
   await openEvent(page, pinEvent({ features: { supply: true } }, entries));

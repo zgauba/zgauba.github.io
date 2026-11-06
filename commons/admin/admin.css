@@ -12,7 +12,9 @@ h2.group{font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:v
 .danger{color:var(--jc-danger); border:1px solid var(--jc-danger); background:transparent}
 .btn.small{font-size:13px; padding:7px 11px}
 input[type=datetime-local]{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-surface-2);
-  border:1px solid var(--jc-line); border-radius:10px; padding:10px; width:100%; color-scheme:dark}
+  border:1px solid var(--jc-line); border-radius:10px; padding:10px; width:100%; color-scheme:dark;
+  /* iPhone: width:100% plus padding + border spilled off the right edge (Zee, 2026-11-06) */
+  box-sizing:border-box; display:block; -webkit-appearance:none; appearance:none; min-height:46px; text-align:start}
 textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-surface-2); border:1px solid var(--jc-line);
   border-radius:10px; padding:10px 12px; width:100%; min-height:72px; resize:vertical}
 input:disabled{opacity:.6}
