@@ -18,3 +18,11 @@
 | 7 | — | Deterministic WebKit failure `event-day.spec.js:98` (app bug, not fixed here) | **Tracked for Zee** — see PR body; lane cannot reach "green twice" until fixed |
 
 **Tests:** Chromium 273 / 273. WebKit 272 / 273 on two consecutive runs (same single failure both times).
+
+## Addendum (2026-11-06): map-button wrapper fix added to this PR (Zee: "agree to add fix")
+
+The WebKit lane's first real catch: the invisible `.mapbtns` row wrapper stayed above an open pin popup and
+intercepted taps on its close button (`event-day.spec.js:98`). It was not WebKit-specific; Chromium passed by timing.
+Fix: `.evmapwrap.popopen .mapbtns` joins the existing `visibility:hidden` rule in `commons/events/events.css`.
+Verified: the full suite passes on both engines locally (546/546 = 273 Chromium + 273 WebKit).
+Still open: the CI-only Leaflet `_leaflet_pos` error (`events.spec.js:368`). It goes to its own test-only PR if it recurs.
