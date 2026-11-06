@@ -40,7 +40,9 @@ declare
     -- T5.3 (feedback)
     'jc_feedback_send', 'jc_feedback_list', 'jc_feedback_mark_read',
     -- T5.4 (coming soon)
-    'jc_admin_event_announce'];
+    'jc_admin_event_announce',
+    -- R2a (events audit)
+    'jc_admin_broadcast_set_event'];
 begin
   -- Pre-launch suite: fixtures are written into 'jubail' and rolled back. Refuse to run
   -- once real residents exist — post-launch tests must move to a test community.

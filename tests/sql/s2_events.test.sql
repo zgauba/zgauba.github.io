@@ -108,7 +108,7 @@ begin
   v_err := null; begin perform jc_admin_event_save(null, '{"slug": "d-1", "title_en": "D", "payload_schema": {"fields": {"s": {"type": "text", "max": 5000}}}}'); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'BAD_SCHEMA' then raise exception 'FAIL E03l huge max: %', v_err; end if;
   v := jc_admin_event_save(null, jsonb_build_object(
-         'slug', 'diwali-2026', 'title_en', 'Diwali 2026',
+         'slug', 'diwali-2026', 'title_en', 'Diwali 2026', 'starts_at', '2099-11-01T14:00:00Z',   -- R2a: a homes event needs its date
          'features', '{"giant_switch": true, "supply": true, "crowd_reports": true}'::jsonb,
          'payload_schema', v_schema));
   select (x ->> 'id')::uuid into v_diwali from jsonb_array_elements(v) x where x ->> 'slug' = 'diwali-2026';
@@ -216,7 +216,7 @@ begin
   v_err := null; begin perform jc_entry_report(v_e2); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'ALREADY_DONE' then raise exception 'FAIL E10d: %', v_err; end if;
   perform set_config('request.jwt.claims', json_build_object('sub', u7, 'role', 'authenticated')::text, true);
-  v := jc_admin_event_save(null, '{"slug": "quiet-meet", "title_en": "Quiet meet"}');
+  v := jc_admin_event_save(null, '{"slug": "quiet-meet", "title_en": "Quiet meet", "starts_at": "2099-11-02T14:00:00Z"}');
   select (x ->> 'id')::uuid into v_quiet from jsonb_array_elements(v) x where x ->> 'slug' = 'quiet-meet';
   perform jc_admin_event_publish(v_quiet);
   -- withdraw + re-signup starts fresh on event-day state (u2 is 'done', supply 1)

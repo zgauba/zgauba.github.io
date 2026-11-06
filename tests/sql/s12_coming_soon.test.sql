@@ -90,13 +90,16 @@ begin
   k := k + 2;
 
   -- ---------- C08 a homes event: announce; turn it into a one-place event with no place (allowed while
-  -- coming soon); back to homes; open (nothing extra needed) ----------
+  -- coming soon); back to homes; open (R2a: a homes event needs its date first) ----------
   perform pg_temp.s12_as(c1);
   perform jc_admin_event_announce(ev_h);
   v := pg_temp.s12_ev(jc_admin_event_save(ev_h, '{"kind": "venue"}'), 'lights');
   if v ->> 'kind' <> 'venue' then raise exception 'FAIL C08a kind change while coming soon: %', v; end if;
   perform jc_admin_event_save(ev_h, '{"kind": "homes"}');
-  k := k + 1;
+  if pg_temp.s12_err(format('select jc_admin_event_signups(%L, true)', ev_h)) is distinct from 'NO_DATE' then
+    raise exception 'FAIL C08a2 undated homes event opened'; end if;
+  perform jc_admin_event_save(ev_h, '{"starts_at": "2099-12-20T16:00:00Z"}');
+  k := k + 2;
   v := pg_temp.s12_ev(jc_admin_event_signups(ev_h, true), 'lights');
   if not (v ->> 'signups_open')::boolean or (v ->> 'coming_soon')::boolean then raise exception 'FAIL C08: %', v; end if;
   k := k + 1;

@@ -41,8 +41,8 @@ begin
   values ('testville9', 'event-a', 'Event A', 'live', true, '{"fields": {}}') returning id into ev_a;
   insert into jc_events (community_id, slug, title_en, status, signups_open, payload_schema)
   values ('testville9', 'event-b', 'Event B', 'live', true, '{"fields": {}}') returning id into ev_b;
-  insert into jc_events (community_id, slug, title_en, status, signups_open, payload_schema)
-  values ('testville9', 'draft-d', 'Draft D', 'draft', true, '{"fields": {}}') returning id into ev_d;
+  insert into jc_events (community_id, slug, title_en, status, signups_open, payload_schema, starts_at)   -- R2a: dated
+  values ('testville9', 'draft-d', 'Draft D', 'draft', true, '{"fields": {}}', '2099-01-01T18:00:00Z') returning id into ev_d;
   insert into jc_events (community_id, slug, title_en, status, signups_open, payload_schema)
   values ('testville9b', 'event-x', 'Event X', 'live', true, '{"fields": {}}') returning id into ev_x;
 
