@@ -3,7 +3,8 @@
   "private": true,
   "description": "Dev-only browser tests for commons/ (stubbed backend). The site itself has no build and no dependencies.",
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test --project=mobile",
+    "test:webkit": "playwright test --project=webkit"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1"

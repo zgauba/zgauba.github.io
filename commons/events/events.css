@@ -141,9 +141,9 @@ textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-
 .gauge i{width:6px; height:12px; border-radius:2px; background:var(--jc-line)}
 .gauge i.on{background:var(--jc-accent)}
 /* "Map Labels": a button over the map, the key in a popup window (5b.2) */
-/* a pin's popup open: the overlay buttons (which sit above Leaflet's panes) step aside so they can't
+/* a pin's popup open: the overlay buttons and their (invisible) row wrapper — which sit above Leaflet's panes — step aside so they can't
    cover the popup or its close button; the zoom buttons too (5b.2) */
-.evmapwrap.popopen .lang, .evmapwrap.popopen .leaflet-control-zoom{visibility:hidden}
+.evmapwrap.popopen .lang, .evmapwrap.popopen .mapbtns, .evmapwrap.popopen .leaflet-control-zoom{visibility:hidden}
 .leaflet-popup-content{margin:12px 14px}
 /* dialog.sheet: shared, in app.css */
 .legend h3{margin:10px 0 6px; font-size:13px; color:var(--jc-muted); font-weight:700}

@@ -13,6 +13,9 @@ module.exports = defineConfig({
   },
   projects: [
     { name: "mobile", use: { ...devices["iPhone 13"], browserName: "chromium" } },
+    // Same iPhone viewport/UA on the real iOS engine (WebKit). Three shipped bugs were iPhone-Safari-only
+    // and passed the Chromium project (Known Gap 17). Bare `npx playwright test` runs BOTH projects (needs webkit installed); `npm test` = Chromium only. Run on its own: `npx playwright test --project=webkit`.
+    { name: "webkit", use: { ...devices["iPhone 13"], trace: "retain-on-failure" } },
   ],
   webServer: {
     command: "python3 -m http.server 4173 --bind 127.0.0.1 --directory ../..",

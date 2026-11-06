@@ -140,7 +140,7 @@ SOURCE-OF-TRUTH POLICY:
 - [live] GitHub Pages user site (legacy build) serving `main` root; push → deploy, ~10 min CDN cache. Verify via `gh api repos/zgauba/zgauba.github.io/actions/runs`.
 - [live] Old `zgauba/jubail-halloween` repo: Pages disabled + archived 2026-11-02; the `jubail-halloween/` folder now serves the identical URL.
 - [repo] One Pages build serves everything — career page shares blast radius with community-app pushes.
-- [repo] `.github/workflows/commons-e2e.yml` (T5.1): the stubbed Playwright suite runs on every PR touching `commons/` or `tests/e2e/` (never the live backend). A red check = don't merge. Actions pinned to commit SHAs (T5.2).
+- [repo] `.github/workflows/commons-e2e.yml` (T5.1): the stubbed Playwright suite runs on every PR touching `commons/` or `tests/e2e/` (never the live backend). A red `e2e` check = don't merge. R0 (2026-11-06): a second, non-blocking `e2e-webkit` job runs the same suite on WebKit (`continue-on-error`, so it shows green even when its tests fail — read the log); `npm test` = Chromium lane, `npm run test:webkit` = WebKit lane, bare `npx playwright test` = both. Actions pinned to commit SHAs (T5.2).
 - [repo] `.github/workflows/review-saved.yml` (T5.2): any PR touching `commons/` or `supabase/` must add a `docs/qa/*review*.md` (label `review-not-needed` for trivial copy). Reads the PR file list via the API; no checkout.
 - Note: the whole repo is served verbatim (this file is a public URL) — docs here must stay sanitized.
 
