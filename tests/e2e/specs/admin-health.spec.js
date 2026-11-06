@@ -5,7 +5,7 @@ const { stubBackend, raise } = require("./stub");
 const { adminBackend, signIn, healthReport } = require("./backends");
 
 async function openHealth(page, opts = {}) {
-  const ab = adminBackend(Object.assign({ scopes: ["community"] }, opts));
+  const ab = adminBackend(Object.assign({ scopes: ["community"], owner: true }, opts));   // the owner sees every row
   const sb = await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await page.goto("admin/");
@@ -171,4 +171,14 @@ test("back from App Health returns to Organizer Tools; Arabic labels", async ({ 
   await page.locator("#langBtn").click();
   await page.locator("#jcBackBtn").click();
   await expect(page.locator("h1")).toHaveText("Organizer Tools");
+});
+
+test("a community admin who isn't the platform owner: no whole-platform rows; lockouts count only this community", async ({ page }) => {
+  const r = healthReport({ rate_limited_now: { admin_unlock: 1, join_pre_membership: 5 } });
+  await openHealth(page, { owner: false, report: r });
+  await expect(page.locator(".hrow")).toHaveCount(7);
+  await expect(row(page, "Storage")).toHaveCount(0);
+  await expect(row(page, "Wrong codes")).toHaveCount(0);
+  await expect(row(page, "Locked out")).toContainText("1 after wrong organizer codes.");
+  await expect(page.locator("#view")).not.toContainText("on the platform");
 });

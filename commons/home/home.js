@@ -140,15 +140,19 @@ var VIEWS = {
           '<button class="btn" type="button" id="invite">' + esc(jcT("mh_invite")) + '</button>' +
         '</div>';
     } else if (mhTab === "account") {
+      /* organizers: their own button above the account box; anyone else: a quiet link at the
+         bottom, so a newly given code still has a way in (Zee, 2026-11-06) */
+      /* the same rule as Organizer Tools' own door (admin.js canEnter): a pets-only code doesn't open it (review R1) */
+      var sc = m.admin_scopes || [];
+      var organizer = sc.indexOf("events") >= 0 || sc.indexOf("community") >= 0 || (m.admin_events || []).length > 0 || m.is_owner === true;
       body =
+        (organizer ? '<a class="btn" id="toAdmin" href="../admin/">' + esc(jcT("mh_organizer")) + '</a>' : '') +
         '<div class="panel">' +
           '<p class="who"><b>' + esc(acct.email || state.email || "") + '</b></p>' +
           '<label>' + esc(jcT("mh_name")) +
             '<input id="dname" type="text" maxlength="40" autocomplete="nickname"></label>' +
           '<p class="help">' + esc(jcT("mh_name_help")) + '</p>' +
           '<button class="btn ghost" type="button" id="saveName">' + esc(jcT("mh_save")) + '</button>' +
-          /* organizers unlock with a code there; residents without one just see the lock */
-          '<a class="btn ghost" id="toAdmin" href="../admin/">' + esc(jcT("mh_organizer")) + '</a>' +
           '<button class="btn ghost" type="button" id="signOut">' + esc(jcT("acct_sign_out")) + '</button>' +
         '</div>' +
         /* T5.3 feedback: goes to the person who runs Commons, with this home (said up front) */
@@ -165,7 +169,8 @@ var VIEWS = {
           '<p class="help">' + esc(jcT("mh_delete_help")) + '</p>' +
           '<input id="delConfirm" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="DELETE">' +
           '<button class="btn ghost danger" type="button" id="delete">' + esc(jcT("mh_delete_btn")) + '</button>' +
-        '</div></div>';
+        '</div></div>' +
+        (organizer ? '' : '<p class="help orglink"><a id="toAdmin" href="../admin/">' + esc(jcT("mh_have_code")) + '</a></p>');
     } else {
       body =
         '<div class="panel">' +
@@ -421,6 +426,7 @@ function paint(){
   el("langBtn").textContent = jcT("toggle_label");
   document.title = jcT("mh_title") + " — " + name;
   if (state && state.status === "member") jcTabBar("../", "home", cfg);
+  jcHelp("home");                          /* also while claiming a home — that's what it explains (R3) */
 }
 
 el("langBtn").addEventListener("click", function(){

@@ -121,6 +121,8 @@ test("owner with an organizer code: Exit returns to the home view, not a dead lo
 test("hub feedback link isn't duplicated by a language switch", async ({ page }) => {
   await stubBackend(page, {});
   await signIn(page);
+  // the button is in the HTML before landing.js wires it: tapping in that gap did nothing (~1 in 20 runs)
+  await expect(page.locator("#fbLink")).toHaveText("Ideas & Feedback");
   await page.locator("#langBtn").click();
   await expect(page.locator("#fbLink")).toHaveText("أفكار وملاحظات");          // redraw done before switching back (CI race)
   await page.locator("#langBtn").click();

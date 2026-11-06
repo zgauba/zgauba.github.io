@@ -162,6 +162,7 @@ function show(name){
   jcBack(name === "signups" ? leaveSignups
        : name === "pinmove" ? function(){ pm = null; show("signups"); }
        : name === "feedback" || name === "health" ? function(){ show("home"); } : null, "back");
+  jcHelp(name === "lock" ? null : "admin");
   VIEWS[name]();
 }
 
@@ -248,8 +249,11 @@ function healthChecks(r){
     else unknown(label);
   });
 
-  var st = hObj(r.storage);
-  if (!st || !hNum(st.bytes) || !hNum(st.limit_bytes) || st.limit_bytes <= 0) unknown("adm_h_storage");
+  /* whole-platform numbers (storage, wrong codes, join lockouts): the platform owner only (Zee, 2026-11-06);
+     the server still sends them to any community admin until the per-community split */
+  var st = owner ? hObj(r.storage) : "skip";
+  if (st === "skip") {}
+  else if (!st || !hNum(st.bytes) || !hNum(st.limit_bytes) || st.limit_bytes <= 0) unknown("adm_h_storage");
   else {
     var pct = Math.round(st.bytes * 1000 / st.limit_bytes) / 10;
     row("adm_h_storage", pct >= 100 ? "bad" : st.alert === true || pct >= 80 ? "warn" : "ok",
@@ -263,13 +267,16 @@ function healthChecks(r){
   else unknown("adm_h_traffic");   /* the broken-counter flag missing is not "fine" (H1) */
 
   var rl = hObj(r.rate_limited_now);
-  if (!rl || !hNum(rl.admin_unlock) || !hNum(rl.join_pre_membership)) unknown("adm_h_locked");
-  else if (rl.admin_unlock + rl.join_pre_membership > 0)
-    row("adm_h_locked", "warn", jcFmt("adm_h_locked_text", { a: rl.admin_unlock, j: rl.join_pre_membership }));
+  var joins = owner ? rl && rl.join_pre_membership : 0;
+  if (!rl || !hNum(rl.admin_unlock) || !hNum(joins)) unknown("adm_h_locked");
+  else if (rl.admin_unlock + joins > 0)
+    row("adm_h_locked", "warn", owner ? jcFmt("adm_h_locked_text", { a: rl.admin_unlock, j: joins })
+                                      : jcFmt("adm_h_locked_here", { a: rl.admin_unlock }));
   else row("adm_h_locked", "ok", jcT("adm_h_locked_none"));
 
   var f = hObj(r.failures_since_baseline);
-  if (!f || !hNum(f.admin_codes) || !hNum(f.join_codes)) unknown("adm_h_wrong");
+  if (!owner) {}
+  else if (!f || !hNum(f.admin_codes) || !hNum(f.join_codes)) unknown("adm_h_wrong");
   else row("adm_h_wrong", "info", jcFmt("adm_h_wrong_text", { a: f.admin_codes, j: f.join_codes, d: hDate(f.baseline_at) }));
 
   var sc = hObj(r.state_changes_24h);

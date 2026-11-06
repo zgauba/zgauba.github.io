@@ -187,6 +187,7 @@ function show(name){
   current = name;
   setLook(name === "list" ? null : lookOf(data && data.event));
   jcBack(name === "list" ? null : "./", "ev_back");   /* back to the events list, in the top bar */
+  jcHelp(name === "detail" ? "event" : "events");
   document.body.classList.remove("evfit");
   VIEWS[name]();
 }

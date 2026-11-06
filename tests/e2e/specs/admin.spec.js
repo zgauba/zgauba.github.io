@@ -841,3 +841,35 @@ test("event editor: the date fields fit the phone screen (no spilling past the r
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(vw);
 });
+
+test("My Home → Account: organizers get their own button above the box; residents a quiet link at the bottom", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("home/?tab=account");
+  const btn = page.locator("a#toAdmin.btn");
+  await expect(btn).toHaveText("Organizer Tools");
+  const [b, panel] = [await btn.boundingBox(), await page.locator(".panel").first().boundingBox()];
+  expect(b.y + b.height).toBeLessThanOrEqual(panel.y);                   // above the account box, not inside it
+  expect(await page.locator(".panel #toAdmin").count()).toBe(0);
+});
+
+test("My Home → Account: a resident sees 'Have an organizer code?' at the bottom, not a big button", async ({ page }) => {
+  const ab = adminBackend();
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("home/?tab=account");
+  await expect(page.locator("#toAdmin")).toHaveText("Have an organizer code?");
+  await expect(page.locator("a#toAdmin.btn")).toHaveCount(0);
+});
+
+test("My Home → Account: a pets-only code doesn't get the Organizer Tools button; the platform owner does", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["pets"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("home/?tab=account");
+  await expect(page.locator("#toAdmin")).toHaveText("Have an organizer code?");
+  ab.st.scopes = []; ab.st.owner = true;
+  await page.reload();
+  await expect(page.locator("a#toAdmin.btn")).toHaveText("Organizer Tools");
+});
