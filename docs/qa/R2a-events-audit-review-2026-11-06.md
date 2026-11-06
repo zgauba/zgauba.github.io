@@ -13,7 +13,8 @@ under "Independent reviews", each with a disposition.
 
 ## What was verified
 
-- **Dry run** (whole suite + migration, always rolls back): `ALL_TESTS_PASSED (721 checks)`. Baseline on live
+- **Dry run** (whole suite + migration, always rolls back): `ALL_TESTS_PASSED (721 checks)` at the self-review,
+  723 after the independent-review fixes (below). Baseline on live
   was 658; the s12 fixture gained 1 check, s14 is 62 new.
 - **Fails on today's code:** s14 run alone against the live schema stops at
   `FAIL A01a hide survived the household leaving` (D1). The grants test stops at G02, because
@@ -49,5 +50,47 @@ have no overloads. SQL check A11 asserts this.
 
 ## Independent reviews
 
-_(to be appended by the main session: database-reviewer, security-reviewer, code-reviewer, each finding with
-its disposition)_
+`database-reviewer`, `security-reviewer` and `code-reviewer` ran from the main session (2026-11-06). None
+found anything High or Critical. The coordinator combined the findings; dispositions are below.
+
+**After the fixes (commit after `c6be8ee`):**
+- Dry run: `ALL_TESTS_PASSED (723 checks)`.
+- New SQL check A07r fails on the earlier dedupe logic.
+- Nothing persisted: re-checked live after every dry run (no new columns, functions, cron job, fixtures or
+  history row; the notices CHECK is unchanged; `halloween-test` is still live).
+- e2e: 628/628 twice on Chromium + WebKit (314 tests each). The open-page and venue-line tests fail on the
+  previous `events.js`.
+
+### Independent database review
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| D-M1 | Medium | The grace notice came back every hour after an organizer dismissed it: dedupe only looked at open rows. | **Fixed.** Insert only when no row for that event is open **and** none was dismissed by a person (`resolved_by` set) for the same `closes_at`. The job's own "end moved later" resolutions (`resolved_by` null) don't count. Test A07r (fails on the old code). |
+| D-M2 | Medium | `jc_admin_broadcast_set_event` checked the event without a lock, so a close running at the same moment could leave a tie pointing at an archived event. | **Fixed.** `… status = 'live' FOR SHARE`, then `NOT_FOUND`. A running close (`FOR UPDATE`) finishes first. |
+| D-M4 | Medium (design) | A start with no end gives a 6 h window, then closes a day later, and organizers aren't told. | **Fixed in the client** (coordinator's call; Zee can override). Publishing, opening a coming-soon event, or saving a live event to "start, no end" asks: "No end time — sign-ups stop 6 hours after the start and the event closes a day after that." EN + AR. No server requirement. |
+| D-L1 | Low | No test proves the job's close and the button's close give the same numbers. | **Fixed.** A07q: two identical events, one closed by `events_autoclose`, one by `jc_event_close`; their `jc_event_stats` snapshots match apart from `taken_at`. |
+| D-L2 | Low | A07 counted the job's global return value, so an overdue event in live data (e.g. `halloween-test` after 2026-11-07 06:50 UTC) would break the suite. | **Fixed.** Counts are the test community's `event_autoclose` admin-log rows. |
+| D-L3 | Low | Banners posted before the migration have `broadcast_by` null: they survive a revoke and clear at close. | **Accepted.** One-time gap, no backfill. |
+| D-L4 | Low | A transient failure writes an `autoclose_failed` notice. | **Accepted.** It clears when the next run succeeds (A07m). |
+| D-Info | Info | Plain `create function` (not `or replace`) for the new functions. | **Accepted.** It's a single transactional apply, so a re-run fails loudly instead of silently replacing. |
+
+### Independent security review
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| S-L1 | Low | G13 checked only `anon` on `jc_private`. | **Fixed.** G13 also fails if `authenticated` can execute any `jc_private` function except the storage-policy checks `pet_photo_can_read` / `pet_photo_can_write`, which need it by design. |
+| S-L2 | Low | An event admin can replace another event admin's banner. | **Accepted.** That's T5.2b behaviour; organizer banners are protected (A10e2–e4). |
+| S-L3 | Low | A pre-migration banner has `broadcast_by` null, so a revoke doesn't take it down. | **Accepted.** Same one-time gap as D-L3. |
+| S-L4 | Low | The `autoclose_failed` notice stored `sqlerrm` text, which can carry values. | **Fixed.** It stores `sqlstate` only (A07e checks `P0001`). |
+| S-L5 | Low | An event admin closing their event removes an organizer banner tied to it. | **Accepted (intended).** A tied banner exists to come down with its event. |
+| S-Info | Info | A failure inserting the failure notice would abort the whole job run. | **Fixed.** The notice insert has its own nested `begin … exception`, which raises a warning only. |
+
+### Independent code review (client)
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| C-M1 | Medium | `tick()` redrew only when the event-day window changed. Venue events and homes events whose day window had already closed kept Sign Up / Withdraw on a page left open past the end. | **Fixed.** `tick()` also redraws when `ended()` flips (`endedShown`, set in `paintDay`). |
+| C-M2 | Medium | No test for a page open across the end, nor for an older server's payload. | **Fixed.** (a) `page.clock`: an open page crosses `ends_effective`, and Withdraw goes away for homes **and** venue events (fails on the old `events.js`). (b) The pre-R2a payload with no `ended` / `ends_effective`: event day runs and nothing reads NaN. |
+| C-L1 | Low | "Your home isn't shown on the map" could show on a one-place event, which has no home pins. | **Fixed.** Homes events only, with a test. |
+| C-L2 | Low | The client derived the close time as `ends_effective + 864e5`, a second copy of the server rule. | **Fixed.** `jc_admin_events_list` returns `closes_at`; the client uses it and keeps the old calculation only for an older server. Test included. |
+| C-L3 | Low | Saving a draft without a date gives no warning. | **Accepted (intended).** The date is required at Publish / Open (F2). |
