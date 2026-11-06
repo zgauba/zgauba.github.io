@@ -55,6 +55,8 @@ function hhBackend(opts = {}) {
     // R1.1: the live shape — the pin back (not the homes list), with the old spot for Undo
     jc_admin_home_pin_set: (a) => {
       if (opts.pinError) return raise(opts.pinError);
+      st.pinCalls = (st.pinCalls || 0) + 1;
+      if (opts.undoError && st.pinCalls > 1) return raise(opts.undoError);    // the save works, its Undo is refused
       const h = home(a.p_home);
       if (!h) return raise("NOT_FOUND");
       const from = h.lat == null ? null : [h.lat, h.lng];
@@ -277,6 +279,8 @@ test("fix a pin: map opens on the home's pin, the confirm names the home, exact 
   await expect(page.locator("h1")).toHaveText("Fix Pin");
   await expect(page.locator(".sub")).toHaveText("Villa 7 · Ain Al Maha");
   await expect(page.getByText("Showing the home's own pin.")).toBeVisible();
+  await page.locator("#coords").fill("24.5400, 54.4400");                // a new spot, so save ≠ Undo
+  await page.locator("#coordsGo").click();
   let asked = "";
   page.once("dialog", (d) => { asked = d.message(); d.accept(); });
   await page.locator("#hhPinGo").click();
@@ -286,12 +290,44 @@ test("fix a pin: map opens on the home's pin, the confirm names the home, exact 
   const a = writes(calls, "jc_admin_home_pin_set")[0];
   expect(Object.keys(a).sort()).toEqual(["p_home", "p_lat", "p_lng"]);
   expect(a.p_home).toBe("h7");
-  expect(a.p_lat).toBeCloseTo(24.53, 3);                                // the map opened on the home's own pin
-  expect(a.p_lng).toBeCloseTo(54.43, 3);
+  expect(a.p_lat).toBeCloseTo(24.54, 4);                                // the NEW spot
+  expect(a.p_lng).toBeCloseTo(54.44, 4);
   expect(writes(calls, "jc_admin_homes_list")).toHaveLength(2);         // the list is read again after the write
   await page.locator("#undo").click();
   await expect(page.locator("#msg")).toHaveText("Put back.");
-  expect(writes(calls, "jc_admin_home_pin_set")[1]).toEqual({ p_home: "h7", p_lat: 24.53, p_lng: 54.43 });
+  expect(writes(calls, "jc_admin_home_pin_set")[1]).toEqual({ p_home: "h7", p_lat: 24.53, p_lng: 54.43 });   // the OLD spot
+});
+
+test("Undo refused (the old spot is outside the community): its own wording, nothing else sent", async ({ page }) => {
+  const { calls } = await openHouseholds(page, { undoError: "BAD_PIN" });
+  await card(page, "h7").locator('[data-hh="pin"]').click();
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#hhPinGo").click();
+  await expect(page.locator("#msg")).toContainText("Villa 7's pin saved.");
+  await page.locator("#undo").click();
+  await expect(page.locator("#msg")).toHaveText("The old spot is outside the community, so it can't be put back.");
+  await expect(page.locator("h1")).toHaveText("Households");
+  expect(writes(calls, "jc_admin_home_pin_set")).toHaveLength(2);
+  await expect(card(page, "h7").locator('[data-hh="pin"]')).toBeEnabled();   // one write at a time is released
+});
+
+test("Undo failing for another reason: plain wording, not the map's", async ({ page }) => {
+  await openHouseholds(page, { undoError: "SOMETHING_ELSE" });
+  await card(page, "h7").locator('[data-hh="pin"]').click();
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#hhPinGo").click();
+  await page.locator("#undo").click();
+  await expect(page.locator("#msg")).toHaveText("Something went wrong. Try again in a moment.");
+});
+
+test("the home went away while fixing its pin: the list is read again and says so", async ({ page }) => {
+  const { calls } = await openHouseholds(page, { pinError: "NOT_FOUND" });
+  await card(page, "h7").locator('[data-hh="pin"]').click();
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#hhPinGo").click();
+  await expect(page.locator("h1")).toHaveText("Households");
+  await expect(page.locator("#msg")).toHaveText("That changed in the meantime. The list below is up to date.");
+  expect(writes(calls, "jc_admin_homes_list")).toHaveLength(2);
 });
 
 test("set a pin for a home with none: flags shown, no Undo (nothing to put back), flags gone after", async ({ page }) => {
@@ -302,13 +338,19 @@ test("set a pin for a home with none: flags shown, no Undo (nothing to put back)
   await expect(page.locator("h1")).toHaveText("Set Pin");
   await expect(page.getByText("This home has no pin yet.")).toBeVisible();
   await expect(page.locator(".panel .flags")).toContainText("Pin far away");
+  await page.locator("#coords").fill("24.5350, 54.4350");
+  await page.locator("#coordsGo").click();
   page.once("dialog", (d) => d.accept());
   await page.locator("#hhPinGo").click();
   await expect(page.locator("#msg")).toHaveText("Townhouse 40's pin saved. It had no pin before, so there's nothing to undo.");
   await expect(page.locator("#undo")).toHaveCount(0);
   await expect(card(page, "h8").locator(".flags")).not.toContainText("No pin");
   await expect(card(page, "h8").locator(".flags")).not.toContainText("Pin far away");
-  expect(writes(calls, "jc_admin_home_pin_set")).toHaveLength(1);
+  const s = writes(calls, "jc_admin_home_pin_set");
+  expect(s).toHaveLength(1);
+  expect(s[0].p_home).toBe("h8");
+  expect(s[0].p_lat).toBeCloseTo(24.535, 4);
+  expect(s[0].p_lng).toBeCloseTo(54.435, 4);
 });
 
 test("a spot outside the community: admin wording, the map stays open to try again", async ({ page }) => {
@@ -319,7 +361,10 @@ test("a spot outside the community: admin wording, the map stays open to try aga
   await expect(page.locator("#msg")).toHaveText("That spot can't be saved: a pin must be inside the community (within 10 km). Move the map onto the home.");
   await expect(page.locator("h1")).toHaveText("Fix Pin");
   await expect(page.locator("#hhPinGo")).toBeEnabled();
-  expect(writes(calls, "jc_admin_home_pin_set")).toHaveLength(1);
+  const s = writes(calls, "jc_admin_home_pin_set");
+  expect(s).toHaveLength(1);
+  expect(s[0].p_lat).toBeCloseTo(24.53, 3);                             // unmoved: the map opened on the home's own pin
+  expect(s[0].p_lng).toBeCloseTo(54.43, 3);
 });
 
 test("saying no to the pin confirm sends nothing", async ({ page }) => {

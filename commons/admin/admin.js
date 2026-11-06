@@ -772,6 +772,7 @@ var VIEWS = {
     vmap = initPinMap(h.lat != null && h.lng != null ? [h.lat, h.lng] : null);
     on("hhPinGo", hhPinSave);
     on("hhPinCancel", function(){ if (hhBusy) return; hhPin = null; show("households"); });
+    if (hhBusy) ["hhPinGo", "hhPinCancel"].forEach(function(b){ el(b).disabled = true; });   /* redrawn mid-save (language) */
   },
 
   /* R1 — the admin log: who did what, newest 100. The stored target holds ids: only a home
@@ -1008,24 +1009,29 @@ function noEndWarn(start, end){ return start && !end ? "\n\n" + jcT("adm_no_end_
 
 /* R1.1 — the pin fix. The write answers with the pin (not the homes list): the list is read again,
    then Households shows the result. Undo puts the old spot back — a home with no pin before has none
-   to put back. A refused spot (BAD_PIN: outside the community) keeps the map open. */
+   to put back. A refused spot (BAD_PIN: outside the community) keeps the map open. hhBusy stays on
+   until the list is read again: a tap in between would be thrown away by the redraw. */
 function hhReread(then){
   return rpc("jc_admin_homes_list").then(function(d){
     d = hhShape(d);
     if (d && hh) { hh.data = d; hh.open = null; }
   }, function(){}).then(function(){             /* the pin DID move: say so even if the re-read fails */
+    hhBusy = false;
     if (current !== "hhpin" && current !== "households") return;   /* never pull them off another screen */
     hhPin = null; show("households"); then();
   });
 }
 function hhAfterPin(text, undo){ return hhReread(function(){ okUndo(text, undo); }); }
-function hhPinErr(err){
-  hhBusy = false;
-  Array.prototype.forEach.call(document.querySelectorAll("#view button"), function(n){ n.disabled = false; });
+/* Undo is on Households (no map): undo=true words a refused old spot for that, other failures plainly */
+function hhPinErr(err, undo){
   err = err && err.code ? err : { code: "UNKNOWN" };
   var k = "adm_hh_err_" + err.code;
-  if (err.code === "NOT_ADMIN" || jcT(k) === k) return fail(err);
   if (err.code === "NOT_FOUND" && hh) return hhReread(function(){ hhMsg(jcT(k)); });   /* the home went away */
+  hhBusy = false;
+  Array.prototype.forEach.call(document.querySelectorAll("#view button"), function(n){ n.disabled = false; });
+  if (err.code === "NOT_ADMIN") return fail(err);
+  if (undo) return hhMsg(jcT(err.code === "BAD_PIN" ? "adm_hh_pin_undo_bad" : "err_UNKNOWN"));
+  if (jcT(k) === k) return fail(err);
   hhMsg(jcT(k));
 }
 function hhPinSave(){
@@ -1037,18 +1043,16 @@ function hhPinSave(){
   hhBusy = true;
   ["hhPinGo", "hhPinCancel"].forEach(function(b){ if (el(b)) el(b).disabled = true; });
   rpc("jc_admin_home_pin_set", { p_home: id, p_lat: p.lat, p_lng: p.lng }).then(function(r){
-    hhBusy = false;
     var from = r && Array.isArray(r.from) && r.from.length === 2 ? r.from : null;
     var undo = from ? function(){
-      if (hhBusy) return;
+      if (hhBusy) return false;                  /* okUndo keeps the button live */
       hhBusy = true;
       rpc("jc_admin_home_pin_set", { p_home: id, p_lat: from[0], p_lng: from[1] }).then(function(){
-        hhBusy = false;
         return hhAfterPin(jcT("adm_undone"), null);
-      }, hhPinErr);
+      }, function(err){ hhPinErr(err, true); });
     } : null;
     return hhAfterPin(jcFmt(from ? "adm_hh_pin_ok" : "adm_hh_pin_ok_new", { h: label }), undo);
-  }, hhPinErr);
+  }, function(err){ hhPinErr(err, false); });
 }
 
 function eventRow(e){
@@ -1417,7 +1421,7 @@ function okUndo(text, undo){
   var u = document.createElement("button");
   u.type = "button"; u.className = "mini"; u.id = "undo"; u.textContent = jcT("adm_undo");
   u.style.marginInlineStart = "10px";
-  u.addEventListener("click", function(){ u.disabled = true; undo(); });
+  u.addEventListener("click", function(){ u.disabled = true; if (undo() === false) u.disabled = false; });   /* false = not started */
   el("msg").appendChild(u);
 }
 

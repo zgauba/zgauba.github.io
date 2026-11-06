@@ -52,3 +52,22 @@
 | Low | Undo | Undo writes the `from` spot even if the household moved its own pin in between. That could undo their newer pin. | **Accepted**: same as the sign-ups pin move (T5.2). Undo is offered only in the success toast, right after the fix. |
 | Info | R2b-1 | R2b-1's "adjusted by an organizer" will be set inside `jc_admin_home_pin_set`, so pins fixed here get it with no client change. | Noted for the R2b-1 plan. |
 | Info | Conflict | The cherry-pick onto main conflicted with R2a's `closesAt` / `noEndWarn` helpers at the same spot. Both sides were kept; `node --check` passes and the full suite is green. | Resolved. |
+
+## Independent code-reviewer (2026-11-06)
+
+`code-reviewer` agent on PR #67, relayed by the coordinator. All 5 findings were fixed on this branch.
+
+| # | Sev | Where | Finding | Disposition |
+|---|---|---|---|---|
+| 1 | Medium | `admin.js` `hhPinErr` / Undo | Undo reused the BAD_PIN "move the map onto the home" copy, but no map is shown on Households. Scenario: a far (>10 km) pin is fixed, Undo is tapped, the server refuses BAD_PIN, and the wrong copy appears. | **Fixed.** `hhPinErr(err, undo)` gives Undo its own wording. BAD_PIN shows new `adm_hh_pin_undo_bad` (EN + AR); other Undo failures show the generic `err_UNKNOWN`. NOT_ADMIN still goes to `fail`, and NOT_FOUND still re-reads the list. Tests: "Undo refused…" and "Undo failing for another reason…". |
+| 2 | Medium | `admin-households.spec.js` first R1.1 test | The Undo assertion couldn't tell right from wrong: the map opened on the home's own pin, so the save payload equalled `from`. | **Fixed.** The test now moves the map (`#coords` 24.54, 54.44 → Go) before saving. It asserts the save sends the NEW spot and Undo sends the OLD one (24.53, 54.43). The h8 Set Pin test now asserts the exact coordinates sent. "The map opens on the home's own pin" moved to the BAD_PIN test, which saves unmoved. |
+| 3 | Low | `okUndo` | The Undo button was disabled before `undo()` ran. If `hhBusy` made `undo()` bail, the button stayed dead. | **Fixed.** `undo()` returns `false` when it doesn't start, and `okUndo` re-enables the button. Other `okUndo` callers return `undefined`, so they are unchanged. |
+| 4 | Low | `hhPinSave` / Undo | `hhBusy` was cleared before `hhReread` finished. A tap in that gap had its form thrown away by `hh.open = null; show()`. | **Fixed.** `hhBusy` now stays on until the re-read settles, and is cleared in `hhReread` (success or failure) or in `hhPinErr`. |
+| 5 | Info | `VIEWS.hhpin` | Switching language during an in-flight save redrew the buttons as enabled. | **Fixed.** `VIEWS.hhpin` re-disables Save and Cancel while `hhBusy` is on. |
+| (gap) | — | tests | There was no NOT_FOUND test through the pin path. | **Added:** "the home went away while fixing its pin…". |
+
+Not test-covered: #3, #4 and #5. Each needs a request held mid-flight, which this stub doesn't do (every answer comes back at once). They are small, guard-only changes.
+
+**Tests after the fixes:**
+- Full e2e, once locally: **648 / 648 passed** (324 Chromium + 324 WebKit; +3 tests per browser).
+- CI on the PR.
