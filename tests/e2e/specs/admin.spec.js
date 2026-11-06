@@ -915,3 +915,26 @@ test("Organizer Tools sub-menu: an events organizer gets no codes / health; Comm
   await expect(page.locator("#addCode")).toBeVisible();
   await expect(page.locator("#exit")).toBeVisible();
 });
+
+test("Organizer Tools ?tab=: an unknown or not-allowed tab falls back to one the person has", async ({ page }) => {
+  const ab = adminBackend({ adminEvents: [PAST_ID] });                    // event admin, no live event: no Banner tab
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/?tab=banner");
+  await expect(page.locator("#atab-events")).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".aevents")).toBeVisible();
+  await page.goto("admin/?tab=zzz");
+  await expect(page.locator("#atab-events")).toHaveAttribute("aria-selected", "true");
+});
+
+test("Organizer Tools: a half-typed banner survives switching tabs; focus stays on the tapped tab", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/?tab=banner");
+  await page.locator("#bannerText").fill("Half way through");
+  await page.locator("#atab-events").click();
+  await expect(page.locator("#atab-events")).toBeFocused();
+  await page.locator("#atab-banner").click();
+  await expect(page.locator("#bannerText")).toHaveValue("Half way through");
+});

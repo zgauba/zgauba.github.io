@@ -97,14 +97,15 @@ test("owner with no organizer code still reaches the inbox — right subtitle, n
 
 // ── app review fixes ──
 test("the unread count arriving late never wipes a half-typed banner", async ({ page }) => {
+  let landed = false;
   const ab = adminBackend({ scopes: ["events"], owner: true, feedback: JSON.parse(JSON.stringify(FB)) });
   await stubBackend(page, { rpc: Object.assign({}, ab.rpc, {
-    jc_feedback_list: (a, c) => new Promise((r) => setTimeout(() => r(ab.rpc.jc_feedback_list(a, c)), 800)),
+    jc_feedback_list: (a, c) => new Promise((r) => setTimeout(() => { landed = true; r(ab.rpc.jc_feedback_list(a, c)); }, 800)),
   }) });
   await signIn(page);
   await page.goto("admin/?tab=banner");                                           // banner + inbox are separate tabs now
   await page.locator("#bannerText").fill("Typing before the count lands");
-  await page.waitForTimeout(1200);                                                 // the late count has landed
+  await expect.poll(() => landed).toBe(true);                                      // the late count has landed
   await expect(page.locator("#bannerText")).toHaveValue("Typing before the count lands");
   await page.locator("#atab-community").click();
   await expect(page.locator("#fbOpen")).toHaveText("Feedback Inbox · 1 Unread");

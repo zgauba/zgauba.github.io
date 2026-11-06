@@ -812,3 +812,30 @@ test("event page: an Admin button under the language button for organizers and t
   await expect(p2.locator("#evAdmin")).toHaveCount(0);
   await p2.close();
 });
+
+for (const [who, opts, shown] of [
+  ["this event's own admin", { adminEvents: ["11111111-1111-4111-8111-111111111111"] }, true],
+  ["an admin of a different event", { adminEvents: ["44444444-4444-4444-8444-444444444444"] }, false],
+  ["an events organizer (code)", { scopes: ["events"] }, true],
+  ["the platform owner with no admin scope", { owner: true }, false],
+]) {
+  test(`event page Admin button: ${who} → ${shown ? "shown" : "hidden"}`, async ({ page }) => {
+    const { adminBackend: ab0 } = require("./backends");
+    const admin = ab0(opts);
+    await stubBackend(page, { rpc: Object.assign({}, eventsBackend().rpc, { jc_me_get: admin.rpc.jc_me_get }) });
+    await signIn(page);
+    await page.goto("events/?id=" + LIVE_ID);
+    await expect(page.locator("h1")).toBeVisible();
+    await expect(page.locator("#evAdmin")).toHaveCount(shown ? 1 : 0);
+  });
+}
+
+test("event page Admin button sits on the language button's side in Arabic too", async ({ page }) => {
+  const { adminBackend: ab0 } = require("./backends");
+  await page.addInitScript(() => localStorage.setItem("jc_lang", "ar"));
+  await stubBackend(page, { rpc: Object.assign({}, eventsBackend().rpc, { jc_me_get: ab0({ scopes: ["community"] }).rpc.jc_me_get }) });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  const [b, lang] = [await page.locator("#evAdmin").boundingBox(), await page.locator("#langBtn").boundingBox()];
+  expect(Math.abs(b.x - lang.x)).toBeLessThan(4);                           // both on the left in RTL
+});

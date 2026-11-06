@@ -36,6 +36,7 @@ var fb = null;            /* jc_feedback_list: { unread, items } */
 var resolving = false;    /* a Mark Resolved is in flight */
 /* the organizer home's sub-menu (?tab=); which tabs a person sees: adminTabs() */
 var admTab = new URLSearchParams(location.search).get("tab") || "events";
+var bannerDraft = null;   /* the banner text being typed when the person switched tabs */
 function adminTabs(){
   var t = [];
   if (isOrganizer() || isEventAdmin()) t.push("events");
@@ -387,9 +388,11 @@ var VIEWS = {
     el("view").innerHTML = html;
     tabs.forEach(function(t){
       on("atab-" + t, function(){
+        if (el("bannerText")) bannerDraft = el("bannerText").value;   /* a half-typed banner survives a tab switch */
         admTab = t;
         try { history.replaceState(null, "", "?tab=" + t); } catch(e){}
         show("home");
+        if (el("atab-" + t)) el("atab-" + t).focus();                  /* keyboard focus stays on the tab */
       });
     });
 
@@ -1170,6 +1173,7 @@ function wireBanner(){
   if (!f) return;
   var t = el("bannerText");
   t.value = t.defaultValue = (cfg && cfg.broadcast) || "";
+  if (bannerDraft !== null) { t.value = bannerDraft; bannerDraft = null; }   /* typed before a tab switch */
   function post(text){
     if (text && !window.confirm(jcT("adm_banner_confirm"))) return;
     busy(text ? "bannerSave" : "bannerClear", true);
