@@ -166,3 +166,5 @@ body.mapfull{overflow:hidden}
 .evmapwrap.full .mapfull, .evmapwrap.full .maplocate{bottom:calc(28px + env(safe-area-inset-bottom))}
 /* R2b-1: "Adjusted by an organizer · 7:42 PM" / "An organizer removed your sign-up." */
 .status.orgline{color:var(--jc-warn)}
+/* full screen: Close Map stays reachable while a pin's popup is open (the popopen rule hides the other overlays) */
+.evmapwrap.full.popopen .mapfull{visibility:visible}

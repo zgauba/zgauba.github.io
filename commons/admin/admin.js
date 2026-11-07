@@ -1422,10 +1422,15 @@ function entryCard(x, ro){
 }
 
 function byEntry(id){ return ((su && su.list) || []).filter(function(x){ return x.id === id; })[0]; }
-/* a write that returns the whole list (moderate / spot / event pin) → redraw, then say so */
+/* a write that returns the whole list (moderate / spot / event pin) → redraw, then say so.
+   One at a time across every card (code review L6): a second tap while one is in flight is ignored
+   (returns false = "not started", which keeps an Undo button usable). */
+var suBusy = false;
 function suWrite(name, args, okText, undo){
+  if (suBusy) return false;
+  suBusy = true;
   var id = su.ev.id, from = screenKey();
-  return rpc(name, args).then(function(list){
+  return rpc(name, args).finally(function(){ suBusy = false; }).then(function(list){
     if (!su || su.ev.id !== id) return;
     su.list = list || [];
     if (screenKey() !== from) return;       /* a late answer: keep the data, don't pull them off another screen (review) */
@@ -1438,6 +1443,17 @@ function screenKey(){ return current + (pm ? ":" + pm.x.id : ""); }
 /* any failed write: buttons usable again (a re-render would drop what was typed), then say why */
 function suFail(err){
   Array.prototype.forEach.call(document.querySelectorAll("#view button"), function(n){ n.disabled = false; });
+  /* R2b-1 (db review L3): the sign-up changed meanwhile (a double tap, another organizer, the household) —
+     re-read the list and say so, instead of a bare "not available" over a stale card */
+  if (err && err.code === "NOT_FOUND" && su && current === "signups") {
+    var id = su.ev.id;
+    return refreshList(id).then(null, function(){}).then(function(){
+      if (!su || su.ev.id !== id || current !== "signups") return;
+      su.open = null; show("signups");
+      var m = el("msg");
+      if (m) { m.className = "msg err"; m.textContent = jcT("adm_su_err_NOT_FOUND"); }
+    });
+  }
   fail(err);
 }
 /* the ok message, with an Undo button when the change can be put back */
@@ -1464,6 +1480,7 @@ function wireEntries(){
         return;
       }
       if (a === "pin") { pm = { x: x }; return show("pinmove"); }
+      if (suBusy) return;                     /* another card's write is still in flight */
       var h = jcHomeLabel(x);
       /* R2b-1: no Undo for a removal — the confirm names the home; before the end the household can sign up again */
       if (a === "withdraw") {
@@ -1488,6 +1505,7 @@ function wireEntries(){
     if (!x) return;
     var h = jcHomeLabel(x);
     function send(level){
+      if (suBusy) return;
       Array.prototype.forEach.call(p.querySelectorAll("button"), function(n){ n.disabled = true; });
       suWrite("jc_admin_entry_live_set", { p_entry: x.id, p_state: null, p_supply: level, p_supply_clear: level === null },
         level === null ? jcFmt("adm_su_supply_cleared", { h: h }) : jcFmt("adm_su_supply_ok", { h: h, s: jcT("ev_supply_" + level) }));
@@ -1505,6 +1523,7 @@ function wireEntries(){
   Array.prototype.forEach.call(document.querySelectorAll("[data-form]"), function(f){
     var x = byEntry(f.dataset.id), what = f.dataset.form, inp = f.querySelector("[data-in]");
     function send(v){
+      if (suBusy) return;
       Array.prototype.forEach.call(f.querySelectorAll("button"), function(n){ n.disabled = true; });
       what === "note"
         ? suWrite("jc_admin_entry_moderate", { p_entry: x.id, p_hidden: null, p_org_note: v },

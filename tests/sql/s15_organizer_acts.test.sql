@@ -192,6 +192,29 @@ begin
     raise exception 'FAIL O03m an unknown entry (organizer)'; end if;
   k := k + 13;
 
+  -- ---------- O03b a no-op succeeds without telling the household or logging (db review L2) ----------
+  execute 'reset role';
+  update jc_event_entries set org_adjusted_at = null where id = en2;   -- en2: active, no supply level (O03)
+  select count(*) into n from jc_admin_log where action = 'entry_live_set' and target ->> 'entry_id' = en2::text;
+  execute 'set local role authenticated';
+  perform pg_temp.s15_as(e1);
+  v := jc_admin_entry_live_set(en2, 'active', null, false);   -- already active
+  v := jc_admin_entry_live_set(en2, null, null, true);        -- nothing to clear
+  if (pg_temp.s15_en(v, en2) ->> 'org_adjusted_at') is not null then raise exception 'FAIL O03n a no-op told the household'; end if;
+  execute 'reset role';
+  if (select count(*) from jc_admin_log where action = 'entry_live_set' and target ->> 'entry_id' = en2::text) <> n then
+    raise exception 'FAIL O03o a no-op wrote an admin log row'; end if;
+  -- the household's own switch with a null supply leaves the level alone (null = unchanged, frozen contract)
+  execute 'set local role authenticated';
+  perform pg_temp.s15_as(r2);
+  perform jc_entry_live_set(ev, null, 2);
+  v := jc_entry_live_set(ev, 'active', null);
+  if (v -> 'mine' ->> 'supply_level')::int is distinct from 2 then raise exception 'FAIL O03p a switch tap changed the supply: %', v -> 'mine'; end if;
+  execute 'reset role';
+  update jc_event_entries set supply_level = null where id = en2;   -- back to the O07 fixture
+  execute 'set local role authenticated';
+  k := k + 3;
+
   -- ---------- O04 decision 1: after the end, organizers until the close; households can't withdraw ----------
   perform pg_temp.s15_as(r1);
   if pg_temp.s15_err(format('select jc_entry_withdraw(%L)', ev_end)) is distinct from 'SIGNUPS_CLOSED' then
@@ -346,7 +369,12 @@ begin
     raise exception 'FAIL O09e the next family is told about the last one: %', v -> 'mine'; end if;
   -- the keys are there (additive, null when nothing happened)
   if not (v -> 'mine' ? 'org_adjusted_at' and v -> 'mine' ? 'org_withdrawn_at') then raise exception 'FAIL O09f mine lacks the keys'; end if;
-  k := k + 6;
+  -- an archived event keeps the last family's row (history), but never shows the new family its organizer lines
+  -- (security review L1)
+  v := jc_event_get(ev_arch);
+  if v -> 'mine' -> 'org_adjusted_at' <> 'null' or v -> 'mine' -> 'org_withdrawn_at' <> 'null' then
+    raise exception 'FAIL O09g an archived event told the next family about the last one: %', v -> 'mine'; end if;
+  k := k + 7;
 
   -- ---------- O10 once the event closes, its admin can't act; the organizer finds nothing ----------
   perform pg_temp.s15_as(c1); perform jc_event_close(ev, 'tonight');

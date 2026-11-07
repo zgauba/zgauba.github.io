@@ -51,7 +51,7 @@ test("adjusted by an organizer: the time, never who; the household's own tap cle
     db.rpc.jc_event_get = async (a) => { const r = await get(a); r.body.mine.org_by = "organizer-secret-id"; return r; };
   });
   const line = page.locator(".cta .orgline");
-  await expect(line).toHaveText(/^Adjusted by an organizer · \d{1,2}:\d{2}\s?[AP]M$/);
+  await expect(line).toHaveText(/^Adjusted by an organizer · \u2068\d{1,2}:\d{2}\s?[AP]M\u2069$/);
   await expect(line).toHaveAttribute("role", "note");
   expect(await page.content()).not.toContain("organizer-secret-id");
   await page.locator("#live [data-live=done]").click();
@@ -62,7 +62,7 @@ test("adjusted by an organizer: the time, never who; the household's own tap cle
 
 test("an older change shows its date too", async ({ page }) => {
   await openDay(page, { orgAdjusted: new Date(Date.now() - 3 * 86400e3).toISOString() });
-  await expect(page.locator(".cta .orgline")).toHaveText(/^Adjusted by an organizer · \d{1,2} [A-Z][a-z]{2} \d{1,2}:\d{2}\s?[AP]M$/);
+  await expect(page.locator(".cta .orgline")).toHaveText(/^Adjusted by an organizer · \u2068\d{1,2} [A-Z][a-z]{2} \d{1,2}:\d{2}\s?[AP]M\u2069$/);
 });
 
 test("removed by an organizer: said, and Sign Up again is offered while open", async ({ page }) => {
@@ -90,7 +90,7 @@ test("Arabic: the organizer lines and the clear hint, right to left", async ({ p
   await openDay(page, { orgAdjusted: new Date().toISOString(), supply: 1 });
   await page.locator("#langBtn").click();
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
-  await expect(page.locator(".cta .orgline")).toHaveText(/^عدّل أحد المنظمين هذا التسجيل \(.+\)$/);
+  await expect(page.locator(".cta .orgline")).toHaveText(/^عدّل أحد المنظمين هذا التسجيل \(\u2068.+\u2069\)$/);
   await expect(page.locator("#live")).toContainText("اضغط على المستوى المختار مرة أخرى لمسحه.");
 });
 
@@ -181,4 +181,75 @@ test("Arabic: the organizer's buttons and supply panel", async ({ page }) => {
   await expect(page.locator(".sulist li").first().locator('[data-su="withdraw"]')).toHaveText("أزل التسجيل");
   await page.locator(".sulist li").first().locator('[data-su="supply"]').click();
   await expect(page.locator("[data-supply-panel] [data-level]")).toHaveText(["كثير", "بقي بعضها", "قليل", "أوشك على النفاد"]);
+});
+
+// ── independent-review fixes (2026-11-07) ──
+test("household: a failed supply clear says why and leaves the levels usable", async ({ page }) => {
+  await openDay(page, { supply: 2, rpc: { jc_entry_supply_clear: () => ({ status: 400, body: { code: "P0001", message: "FEATURE_OFF" } }) } });
+  await page.locator("#live [data-supply='2']").click();
+  await expect(page.locator("#msg")).toHaveText("The organizers have turned that off for this event.");
+  await expect(page.locator("#live [data-supply='2']")).toBeEnabled();
+  await expect(page.locator("#live [data-supply='2']")).toHaveAttribute("aria-pressed", "true");   // nothing changed
+});
+
+test("organizer: the sign-up changed meanwhile (NOT_FOUND) → the list is re-read and it says so", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  const rpc = Object.assign({}, ab.rpc, {
+    // another organizer removed it a moment earlier: the server has it withdrawn, this screen doesn't
+    jc_admin_entry_withdraw: (a) => {
+      const x = Object.values(ab.st.entries).flat().find((o) => o.id === a.p_entry);
+      x.status = "withdrawn";
+      return { status: 400, body: { code: "P0001", message: "NOT_FOUND" } };
+    },
+  });
+  const sb = await stubBackend(page, { rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator('li[data-event="test-event"] [data-act="signups"]').click();
+  await expect(page.locator(".sulist").first()).toBeVisible();
+  const lists = rpcCalls(sb.calls, "jc_admin_entries_list").length;
+  page.once("dialog", (d) => d.accept());
+  await card(page, "12").locator('[data-su="withdraw"]').click();
+  await expect(page.locator("#msg")).toHaveText("This sign-up has already changed — the list is refreshed.");
+  expect(rpcCalls(sb.calls, "jc_admin_entries_list").length).toBe(lists + 1);
+  await expect(card(page, "12")).toHaveCount(0);
+  await expect(page.locator(".sub")).toHaveText("2 homes");
+});
+
+test("organizer: any other failed removal says why and leaves the buttons usable", async ({ page }) => {
+  const { calls } = await openSignups(page, { rpc: { jc_admin_entry_withdraw: () => ({ status: 400, body: { code: "P0001", message: "UNKNOWN" } }) } });
+  page.once("dialog", (d) => d.accept());
+  const btn = card(page, "12").locator('[data-su="withdraw"]');
+  await btn.click();
+  await expect(page.locator("#msg")).toHaveText("Something went wrong. Try again in a moment.");
+  await expect(btn).toBeEnabled();
+  await expect(card(page, "12")).toHaveCount(1);
+  expect(rpcCalls(calls, "jc_admin_entry_withdraw")).toHaveLength(1);
+});
+
+test("organizer: one write at a time across cards — a tap on another home while one is in flight sends nothing", async ({ page }) => {
+  let release;
+  const held = new Promise((r) => { release = r; });
+  const ab = adminBackend({ scopes: ["events"] });
+  const live = ab.rpc.jc_admin_entry_live_set;
+  const sb = await stubBackend(page, { rpc: Object.assign({}, ab.rpc, {
+    jc_admin_entry_live_set: async (a) => { await held; return live(a); },
+  }) });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator('li[data-event="test-event"] [data-act="signups"]').click();
+  await expect(page.locator(".sulist").first()).toBeVisible();
+  await card(page, "12").locator('[data-su="done"]').click();
+  await expect.poll(() => rpcCalls(sb.calls, "jc_admin_entry_live_set").length).toBe(1);
+  await card(page, "14").locator('[data-su="done"]').click();   // still in flight
+  page.once("dialog", (d) => d.accept());
+  await card(page, "7").locator('[data-su="withdraw"]').click();
+  await page.waitForTimeout(300);
+  expect(rpcCalls(sb.calls, "jc_admin_entry_live_set")).toHaveLength(1);
+  expect(rpcCalls(sb.calls, "jc_admin_entry_withdraw")).toHaveLength(0);
+  release();
+  await expect(page.locator("#msg")).toHaveText("Villa 12 is marked done. The household is told an organizer changed it.");
+  await card(page, "14").locator('[data-su="done"]').click();   // free again
+  await expect(page.locator("#msg")).toHaveText("Villa 14 is marked done. The household is told an organizer changed it.");
+  expect(rpcCalls(sb.calls, "jc_admin_entry_live_set").map((c) => c.args.p_entry)).toEqual(["a1", "a2"]);
 });

@@ -43,6 +43,13 @@ begin
   select * into en from jc_event_entries
    where id = p_entry and event_id = ev.id and status = 'in' and archived_at is null for update;
   if en.id is null then raise exception 'NOT_FOUND'; end if;
+  -- a no-op (e.g. "done" on a home already done, clearing an empty level) succeeds without telling the
+  -- household or logging anything (db review L2)
+  if not ((p_state is not null and p_state is distinct from en.live_state)
+          or (p_supply is not null and p_supply is distinct from en.supply_level)
+          or (v_clear and en.supply_level is not null)) then
+    return jc_admin_entries_list(ev.id);
+  end if;
 
   update jc_event_entries
      set live_state = coalesce(p_state, live_state),
@@ -50,9 +57,12 @@ begin
          org_adjusted_at = now(), updated_at = now()
    where id = en.id;
   -- state history: actor = the organizer (auth.uid())
-  if p_state is not null then perform jc_log(v_comm, ev.id, en.id, 'live_state', to_jsonb(p_state)); end if;
-  if p_supply is not null then perform jc_log(v_comm, ev.id, en.id, 'supply_level', to_jsonb(p_supply)); end if;
-  if v_clear then perform jc_log(v_comm, ev.id, en.id, 'supply_level', 'null'::jsonb); end if;
+  -- the fields that actually changed
+  if p_state is distinct from en.live_state and p_state is not null then
+    perform jc_log(v_comm, ev.id, en.id, 'live_state', to_jsonb(p_state)); end if;
+  if p_supply is distinct from en.supply_level and p_supply is not null then
+    perform jc_log(v_comm, ev.id, en.id, 'supply_level', to_jsonb(p_supply)); end if;
+  if v_clear and en.supply_level is not null then perform jc_log(v_comm, ev.id, en.id, 'supply_level', 'null'::jsonb); end if;
   if p_state = 'done' then   -- as the household's own "done": neighbours' reports are answered
     update jc_entry_reports set cleared_at = now() where entry_id = en.id and cleared_at is null;
   end if;
@@ -370,8 +380,10 @@ begin
            'spot', en.spot,                                                      -- T5.2 3b
            -- R2a (U1): the household's own home is hidden from the directory (so from event maps)
            'home_hidden', (select h.directory_suppressed from jc_homes h where h.id = en.home_id),
-           -- R2b-1: an organizer changed / removed this sign-up (when, never who)
-           'org_adjusted_at', en.org_adjusted_at, 'org_withdrawn_at', en.org_withdrawn_at,
+           -- R2b-1: an organizer changed / removed this sign-up (when, never who) — live events only: an archived
+           -- event's row may belong to the family before a move-in (vacate keeps history) (security review L1)
+           'org_adjusted_at', case when ev.status = 'live' then en.org_adjusted_at end,
+           'org_withdrawn_at', case when ev.status = 'live' then en.org_withdrawn_at end,
            'reports_open', (select count(*) from jc_entry_reports r
                              where r.entry_id = en.id and r.cleared_at is null))
     into v_mine

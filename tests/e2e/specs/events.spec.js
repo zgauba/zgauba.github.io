@@ -848,11 +848,11 @@ test("event page Admin button sits on the language button's side in Arabic too",
 });
 
 // Event-page polish (Zee, 2026-11-07): the map, bigger — a CSS expand (iOS Safari has no element Fullscreen API)
-async function openMap(page, lang) {
+async function openMap(page, lang, id) {
   if (lang) await page.addInitScript((l) => localStorage.setItem("jc_lang", l), lang);
   await stubBackend(page, { rpc: eventsBackend().rpc });
   await signIn(page);
-  await page.goto("events/?id=" + LIVE_ID + "&tab=map");
+  await page.goto("events/?id=" + (id || LIVE_ID) + "&tab=map");
   await expect(page.locator("#map .leaflet-control-zoom")).toBeVisible();
 }
 const overlap = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
@@ -910,4 +910,29 @@ test("map: a redraw while full screen (language) gives the page back", async ({ 
   await expect(page.locator("#fullBtn")).toHaveText("ملء الشاشة");
   await expect(page.locator(".evmapwrap")).not.toHaveClass(/\bfull\b/);
   expect(await page.evaluate(() => document.body.classList.contains("mapfull"))).toBe(false);
+});
+
+test("map: full screen with a pin's popup open — Close Map stays visible (the other overlays step aside)", async ({ page }) => {
+  const { PINS_ID } = require("./backends");
+  await openMap(page, null, PINS_ID);
+  await page.locator("#fullBtn").click();
+  await page.locator("#map .leaflet-marker-icon").first().dispatchEvent("click");
+  await expect(page.locator(".leaflet-popup")).toBeVisible();
+  await expect(page.locator("#layerBtn")).toBeHidden();                           // the popopen rule, unchanged
+  await expect(page.locator("#fullBtn")).toBeVisible();
+  await page.locator("#fullBtn").click();
+  await expect(page.locator(".evmapwrap")).not.toHaveClass(/\bfull\b/);
+});
+
+test("map: Escape with Map Labels open closes only the window, the map stays full screen", async ({ page }) => {
+  const { PINS_ID } = require("./backends");
+  await openMap(page, null, PINS_ID);
+  await page.locator("#fullBtn").click();
+  await page.locator("#labelsBtn").click();
+  await expect(page.locator("#labels")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#labels")).toBeHidden();
+  await expect(page.locator(".evmapwrap")).toHaveClass(/\bfull\b/);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".evmapwrap")).not.toHaveClass(/\bfull\b/);
 });

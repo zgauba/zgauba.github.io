@@ -362,7 +362,9 @@ function renderMine(){
     html += liveHtml();                          /* event day: the switch + supply, first */
     /* R2b-1: an organizer changed the switch, supply or pin; the household's own tap clears it */
     if (mine.org_adjusted_at && fmtStamp(mine.org_adjusted_at)) {
-      html += '<p class="status orgline" role="note">' + esc(jcFmt("ev_org_adjusted", { t: fmtStamp(mine.org_adjusted_at) })) + '</p>';
+      /* the time in its own direction (U+2068 … U+2069 isolate): Latin digits + AM/PM never reorder inside Arabic */
+      html += '<p class="status orgline" role="note">' +
+        esc(jcFmt("ev_org_adjusted", { t: "⁨" + fmtStamp(mine.org_adjusted_at) + "⁩" })) + '</p>';
     }
     var fields = (ev.payload_schema && ev.payload_schema.fields) || {};
     var rows = Object.keys(fields).filter(function(k){ return mine.payload && mine.payload[k] !== undefined; }).map(function(k){
@@ -859,7 +861,10 @@ function setMapFull(on){
   if (!mapFull) fitMap();
   requestAnimationFrame(function(){ if (map) map.invalidateSize(); });
 }
-document.addEventListener("keydown", function(e){ if (e.key === "Escape" && mapFull) setMapFull(false); });
+document.addEventListener("keydown", function(e){
+  /* an open window (Map Labels) takes its own Escape — one press closes only that (code review L5) */
+  if (e.key === "Escape" && mapFull && !document.querySelector("dialog[open]")) setMapFull(false);
+});
 
 var fitTimer = null;
 function fitSoon(){ clearTimeout(fitTimer); fitTimer = setTimeout(function(){ measureDesc(); fitMap(); }, 120); }
