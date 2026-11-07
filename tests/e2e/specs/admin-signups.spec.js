@@ -172,7 +172,7 @@ test("CSV: every row incl. withdrawn, answers in words, formula-looking text def
   const text = require("fs").readFileSync(await dl.path(), "utf8");
   expect(text.charCodeAt(0)).toBe(0xFEFF);
   const lines = text.slice(1).split("\r\n");
-  expect(lines[0]).toBe('"Village","Home","Status","Hidden","Pin","Latitude","Longitude","treats","Household note","Organizer note","Open reports","Signed up","Last change"');
+  expect(lines[0]).toBe('"Village","Home","Status","Hidden","Pin","Latitude","Longitude","treats","Household note","Organizer note","Open reports","Signed up","Last change","Adjusted by an organizer","Removed by an organizer"');
   expect(lines).toHaveLength(5);                                                  // header + 4 (the withdrawn one too)
   expect(lines[1]).toContain('"Ain Al Maha","Villa 12","Signed up","","Home\'s pin","24.5302","54.4322","candy","\'=HYPERLINK(""x"")"');
   expect(lines[3]).toContain('"This event only","24.5311","54.4311","candy","\' @SUM(1)"');   // whitespace before @ defused too

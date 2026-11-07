@@ -151,6 +151,18 @@ textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-
 .pop .rep{font:inherit; font-weight:700; color:var(--jc-danger); background:none; border:0; padding:4px 0; cursor:pointer; text-decoration:underline}
 .pop .rep:disabled{opacity:.5; cursor:progress}
 
-/* the event's Admin button, right under the language button (2026-11-06) */
-.evadminrow{display:flex; justify-content:flex-end; margin:-8px 0 6px}
-.evadminrow a, .evadminrow a:visited{text-decoration:none; color:var(--jc-ink)}
+/* the event's Admin button: on the title's line, at its end (Zee, 2026-11-07 — it used to take a row of its own) */
+.evtitle{display:flex; align-items:flex-start; gap:10px}
+.evtitle h1{flex:1 1 auto; min-width:0; overflow-wrap:anywhere}
+.evtitle #evAdmin, .evtitle #evAdmin:visited{flex:0 0 auto; margin-top:2px; text-decoration:none; color:var(--jc-ink)}
+
+/* the map, bigger: fills the screen (a CSS expand — iOS Safari has no element Fullscreen API) */
+.evmapwrap .mapfull{position:absolute; bottom:28px; left:10px; z-index:600; padding:9px 14px; font-size:14px}
+body.mapfull{overflow:hidden}
+.evmapwrap.full{position:fixed; inset:0; z-index:1100; background:var(--jc-bg)}   /* over the tab bar (1000) */
+.evmapwrap.full .evmap{height:100% !important; min-height:0; border:0; border-radius:0}
+.evmapwrap.full .mapbtns{top:calc(10px + env(safe-area-inset-top))}
+.evmapwrap.full .leaflet-top{top:env(safe-area-inset-top)}
+.evmapwrap.full .mapfull, .evmapwrap.full .maplocate{bottom:calc(28px + env(safe-area-inset-bottom))}
+/* R2b-1: "Adjusted by an organizer · 7:42 PM" / "An organizer removed your sign-up." */
+.status.orgline{color:var(--jc-warn)}
