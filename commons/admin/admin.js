@@ -74,7 +74,7 @@ var REQ = '<span class="req" aria-hidden="true">*</span>';   /* needed before pu
 /* T5.2 2c — "New event" starts from a template (plan amendment A5). A template only
    pre-fills: kind, look, questions, switches, spots — the organizer changes anything.
    Arabic wording: DRAFT, pending review. */
-var LOOKS = ["plain", "halloween", "haq_al_laila", "gathering", "market", "yard_sale"];
+var LOOKS = ["plain", "halloween", "haq_al_laila", "gathering", "market", "yard_sale", "holiday_lights"];
 var ENTRANCE = HALLOWEEN.fields.entrance;
 /* treat nights run all three event-day tools (R2a, Events audit F1) */
 var TREAT_NIGHT = { giant_switch: true, supply: true, crowd_reports: true };
@@ -113,6 +113,23 @@ var TEMPLATES = [
       labels_en: { furniture: "Furniture", clothes: "Clothes", toys: "Toys & books", mixed: "A bit of everything" },
       labels_ar: { furniture: "أثاث", clothes: "ملابس", toys: "ألعاب وكتب", mixed: "القليل من كل شيء" },
       glyphs: { furniture: "🛋️", clothes: "👕", toys: "🧸", mixed: "📦" } } } } },
+  /* R2b-2 (Zee 2026-11-06: "just another event template"): each decorated home is a stop. The switch lets a
+     home say it's done for the night; nothing runs out, so no supply level or neighbor reports. */
+  { id: "holiday_lights", kind: "homes", look: "holiday_lights", features: { giant_switch: true }, schema: { fields: {
+    view: { type: "enum", values: ["street", "garden", "both"], required: true, pin: "ring",
+      label_en: "Best seen from…", label_ar: "أفضل مشاهدة من…",
+      labels_en: { street: "The street", garden: "The garden (park side)", both: "Both" },
+      labels_ar: { street: "الشارع", garden: "الحديقة (جهة المنتزه)", both: "الاثنان" },
+      ring_split: ["both"] },
+    lights: { type: "enum", values: ["warm", "colour", "music"], required: true, pin: "glyph",
+      label_en: "What kind of lights?", label_ar: "ما نوع الأضواء؟",
+      labels_en: { warm: "Warm white", colour: "Colourful", music: "Lights and music" },
+      labels_ar: { warm: "أبيض دافئ", colour: "ملوّنة", music: "أضواء وموسيقى" },
+      glyphs: { warm: "💡", colour: "🌈", music: "🎶" } },
+    until: { type: "enum", values: ["h21", "h22", "h23", "late"],
+      label_en: "Lights on until…", label_ar: "الأضواء مضاءة حتى…",
+      labels_en: { h21: "9 pm", h22: "10 pm", h23: "11 pm", late: "Midnight or later" },
+      labels_ar: { h21: "9 مساءً", h22: "10 مساءً", h23: "11 مساءً", late: "منتصف الليل أو بعده" } } } } },
   { id: "blank", kind: "homes", look: "plain", schema: { fields: {} } }
 ];
 
@@ -526,6 +543,15 @@ var VIEWS = {
         '<fieldset><legend>' + esc(jcT("ed_features")) + '</legend>' + FEATURES.map(function(f){
           return '<label class="check"><input type="checkbox" id="f_' + f + '"> <span>' + esc(jcT("ed_f_" + f)) + '</span></label>';
         }).join("") + '</fieldset>' +
+        /* R2b-2: the event's safety box — the community's security line + the lost-child meeting point */
+        '<fieldset id="safetyBox"><legend>' + esc(jcT("ed_safety")) + '</legend>' +
+          '<label class="check"><input type="checkbox" id="f_safety"> <span>' + esc(jcT("ed_safety_on")) + '</span></label>' +
+          '<label>' + esc(jcT("ed_safety_phone")) + '<input id="safety_phone" type="tel" inputmode="tel" maxlength="24" autocomplete="off" dir="ltr"></label>' +
+          '<p class="help">' + esc(jcT("ed_safety_phone_help")) + '</p>' +
+          '<label>' + esc(jcT("ed_safety_meet_en")) + '<input id="safety_meeting_en" type="text" maxlength="200" dir="ltr"></label>' +
+          '<label>' + esc(jcT("ed_safety_meet_ar")) + '<input id="safety_meeting_ar" type="text" maxlength="200" dir="rtl"></label>' +
+          '<p class="help">' + esc(jcT("ed_safety_help")) + '</p>' +
+        '</fieldset>' +
         '<fieldset><legend>' + esc(jcT("ed_questions")) + '</legend><div id="qs"></div>' +
           (schemaLocked ? '<p class="help">' + esc(jcT("ed_q_locked")) + '</p>'
             : '<p class="help">' + esc(jcT("ed_q_privacy")) + '</p>' +
@@ -547,6 +573,11 @@ var VIEWS = {
     el("ends_at").value = el("ends_at").defaultValue = toLocalInput(ev.ends_at);
     var feats0 = ed.ev ? ev.features : ed.tpl && ed.tpl.features;      /* a template pre-sets switches */
     FEATURES.forEach(function(f){ el("f_" + f).checked = !!(feats0 && feats0[f]); });
+    el("f_safety").checked = el("f_safety").defaultChecked = !!(ed.ev && ev.features && ev.features.safety === true);
+    var sf0 = (ed.ev && ev.safety) || {};
+    [["safety_phone", "phone"], ["safety_meeting_en", "meeting_en"], ["safety_meeting_ar", "meeting_ar"]].forEach(function(p){
+      el(p[0]).value = el(p[0]).defaultValue = typeof sf0[p[1]] === "string" ? sf0[p[1]] : "";
+    });
     ["venue_name_en", "venue_name_ar"].forEach(function(k){ el(k).value = el(k).defaultValue = ev[k] || ""; });
     el("capacity").value = el("capacity").defaultValue = ev.capacity != null ? String(ev.capacity) : "";
     el("spots").checked = el("spots").defaultChecked = ed.ev ? !!ev.spots : !!(ed.tpl && ed.tpl.spots);
@@ -1867,6 +1898,23 @@ function markMissing(miss){
   miss.forEach(function(m){ var n = el(m.id); if (n) { n.classList.add("missing"); n.setAttribute("aria-invalid", "true"); } });
 }
 
+/* R2b-2: the safety box as the server stores it: { v: {phone, meeting_en, meeting_ar} (blank = undefined) } or
+   { err, at }. Arabic-Indic numerals become 0-9 and whitespace runs one space; the phone rule is the server's. */
+function safetyFields(){
+  function one(id){ var t = el(id).value.replace(/\s+/g, " ").trim(); return t === "" ? undefined : t; }
+  /* a pasted number often carries invisible direction marks, dashes, brackets or dots: marks go, the
+     separators become spaces (code review L1) — the server's rule itself is unchanged */
+  var phone = one("safety_phone");
+  if (phone) phone = phone.replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, "").replace(/[-().]/g, " ")
+                          .replace(/\s+/g, " ").trim() || undefined;
+  if (phone) phone = phone.replace(/[\u0660-\u0669]/g, function(d){ return String(d.charCodeAt(0) - 0x660); })
+                          .replace(/[\u06F0-\u06F9]/g, function(d){ return String(d.charCodeAt(0) - 0x6F0); });
+  var v = { phone: phone, meeting_en: one("safety_meeting_en"), meeting_ar: one("safety_meeting_ar") };
+  if (phone && typeof jcSafetyPhoneOk === "function" && !jcSafetyPhoneOk(phone)) return { err: "BAD_PHONE", at: "safety_phone" };
+  if (el("f_safety").checked && !v.phone && !v.meeting_en && !v.meeting_ar) return { err: "SAFETY_EMPTY", at: "safety_phone" };
+  return { v: v };
+}
+
 /* Only what changed goes to the server (premortem #1); a new event sends what's filled. */
 function saveEvent(){
   var ev = ed.ev, orig = ev || {};
@@ -1914,7 +1962,15 @@ function saveEvent(){
   /* features: the three switches, keeping any other flag an event already carries */
   var feats = Object.assign({}, orig.features || {});
   FEATURES.forEach(function(k){ if (el("f_" + k).checked) feats[k] = true; else delete feats[k]; });
+  /* R2b-2: the safety box — its switch rides in features, its text in safety (the server checks + tidies both) */
+  if (el("f_safety").checked) feats.safety = true; else delete feats.safety;
   if (JSON.stringify(feats) !== JSON.stringify(orig.features || {})) f.features = feats;
+  var sf = safetyFields();
+  if (sf.err) { el(sf.at).scrollIntoView({ block: "center" }); el(sf.at).focus(); return showErr(sf.err); }
+  var sfWas = orig.safety || {};
+  if (JSON.stringify(sf.v) !== JSON.stringify({ phone: sfWas.phone, meeting_en: sfWas.meeting_en, meeting_ar: sfWas.meeting_ar })) {
+    f.safety = JSON.parse(JSON.stringify(sf.v));      /* blank (undefined) keys drop out */
+  }
   /* T5.2 2c: kind + look; venue settings only for a one-place event (the server refuses
      them on a homes event, and switching to homes clears them there) */
   var kind = kindNow(), look = el("look").value;

@@ -84,7 +84,8 @@ function whatsappUrl(){
    gates") draws half in each of the first two other choices' colours (Halloween parity, 5a.1).
    Colour never carries meaning alone: done shows ✕, reported shows ?, and the key under the map
    names every ring and icon. */
-var LOOK_MARKS = { halloween: "🎃", haq_al_laila: "🌙", gathering: "🤝", market: "🛍️", yard_sale: "🏷️" };
+var LOOK_MARKS = { halloween: "🎃", haq_al_laila: "🌙", gathering: "🤝", market: "🛍️", yard_sale: "🏷️",
+                   holiday_lights: "✨" };                                       /* R2b-2 */
 /* treat nights say "out of treats"; everything else says "done" (Halloween copy rule) */
 var TREAT_LOOKS = { halloween: true, haq_al_laila: true };
 function outKey(ev, kind){ return TREAT_LOOKS[lookOf(ev)] === true ? "ev_out_treats" : kind; }
@@ -284,7 +285,8 @@ var VIEWS = {
         /* two lines, then "More" — the map stays above the fold (Zee, 2026-11-04) */
         /* formatted with the editor's markers — jcRich escapes everything first (rich.js) */
         (desc(ev) ? '<div class="desc rich" id="desc" dir="auto">' + jcRich(desc(ev)) + '</div>' +
-          '<button type="button" class="more" id="descMore" hidden>' + esc(jcT("ev_more")) + '</button>' : '') + '</div>' +
+          '<button type="button" class="more" id="descMore" hidden>' + esc(jcT("ev_more")) + '</button>' : '') +
+        safetyHtml(ev) + '</div>' +
       '<div class="subtabs" role="tablist">' + tabs.map(function(t){
         /* my own entry: "Sign Up" until this home is in, then "My Sign-Up" (Zee, 2026-11-05) */
         var key = t !== "mine" ? "ev_tab_" + t : (data.mine && data.mine.status === "in" ? "ev_tab_mine" : "ev_tab_signup");
@@ -805,6 +807,24 @@ function popupHtml(e){
     '<div class="popacts"><a target="_blank" rel="noopener" href="' + esc(directionsUrl(e)) + '">' + esc(jcT("ev_directions")) + '</a>' +
     '<a target="_blank" rel="noopener" href="' + esc(pinUrl(e)) + '">' + esc(jcT("ev_view_pin")) + '</a>' +
     reportLink(e) + '</div>' + reportedLine(e) + '</div>';
+}
+
+/* R2b-2: the event's safety box — the community's security line (a tel: link) and the lost-child meeting point.
+   Only when the organizer switched it on and filled something in; never on a closed event. The number is linked
+   only if it passes the server's rule, so a bad stored value is plain text, never a link. */
+function safetyHtml(ev){
+  var sf = ev.safety, on = ev.features && ev.features.safety === true;
+  if (!on || !sf || typeof sf !== "object" || ev.status === "archived") return "";
+  var phone = jcOwn(sf, "phone"), mine = jcOwn(sf, ar() ? "meeting_ar" : "meeting_en");
+  var meet = mine || jcOwn(sf, ar() ? "meeting_en" : "meeting_ar");
+  var meetLang = mine ? "" : ' lang="' + (ar() ? "en" : "ar") + '"';         /* the other language's text (review) */
+  if (!phone && !meet) return "";
+  return '<div class="safety" id="safety" role="note" aria-label="' + esc(jcT("ev_safety")) + '">' +
+    (phone ? '<p><span aria-hidden="true">🛡️</span> ' + esc(jcT("ev_safety_call")) + ': ' +
+      (typeof jcSafetyPhoneOk === "function" && jcSafetyPhoneOk(phone) ? '<a href="tel:' + phone.replace(/[^0-9+]/g, "") + '" dir="ltr">' + esc(phone) + '</a>'
+                              : '<bdi dir="ltr">' + esc(phone) + '</bdi>') + '</p>' : '') +
+    (meet ? '<p><span aria-hidden="true">📍</span> ' + esc(jcT("ev_safety_meet")) + ': <b dir="auto"' + meetLang + '>' + esc(meet) + '</b></p>' : '') +
+    '</div>';
 }
 
 /* "More" only when the description is actually cut off; it stays open across tab switches */

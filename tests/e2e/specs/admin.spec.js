@@ -554,13 +554,13 @@ test("one event's NOT_ADMIN (it just closed) keeps the person's other events —
 
 // ---- T5.2 PR 2c: templates, kind, look, venue ----
 
-test("New event opens six templates; Cancel goes back; Blank starts empty as a homes event", async ({ page }) => {
+test("New event opens seven templates; Cancel goes back; Blank starts empty as a homes event", async ({ page }) => {
   const ab = adminBackend({ scopes: ["community"] });
   await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await page.goto("admin/");
   await page.locator("#newEv").click();
-  await expect(page.locator("[data-tpl]")).toHaveCount(6);
+  await expect(page.locator("[data-tpl]")).toHaveCount(7);
   await page.locator("#cancel").click();
   await expect(page.locator(".aevents li")).toHaveCount(3);
   await page.locator("#newEv").click();

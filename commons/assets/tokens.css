@@ -78,6 +78,10 @@
 [data-look="gathering"]{ --jc-accent:#e8956a; --jc-accent-ink:#2a1206; }
 [data-look="market"]{ --jc-accent:#d9a441; --jc-accent-ink:#241800; }
 [data-look="yard_sale"]{ --jc-accent:#6fb3e8; --jc-accent-ink:#06192a; }
+[data-look="holiday_lights"]{   /* R2b-2: an evergreen night + warm string-light gold */
+  --jc-bg:#0b1411; --jc-surface:#13201b; --jc-surface-2:#1b2b24; --jc-line:#2a4036;
+  --jc-accent:#ffcf66; --jc-accent-ink:#241a00; --jc-brand-deep:#173328;
+}
 
 /* RTL: layout must flow from direction, not from side-specific rules.
    Use margin-inline / padding-inline / inset-inline in all Commons CSS. */
