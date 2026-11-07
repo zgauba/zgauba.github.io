@@ -27,7 +27,7 @@ h1{font-size:22px; font-weight:800; margin:0 0 6px}
 .panel{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius);
   padding:18px 16px; display:flex; flex-direction:column; gap:12px}
 label{display:flex; flex-direction:column; gap:5px; font-size:13px; font-weight:700; color:var(--jc-muted)}
-input[type=email], input[type=password], input[type=text], input[type=number]{
+input[type=email], input[type=password], input[type=text], input[type=number], input[type=tel]{
   font:inherit; font-size:16px; /* ≥16px: iOS doesn't zoom on focus */
   color:var(--jc-ink); background:var(--jc-surface-2); border:1px solid var(--jc-line);
   border-radius:10px; padding:11px 12px; width:100%}

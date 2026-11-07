@@ -128,6 +128,13 @@ function jcOwn(m, k){
   return m && typeof m === "object" && Object.prototype.hasOwnProperty.call(m, k) && typeof m[k] === "string" ? m[k] : null;
 }
 
+/* R2b-2: an event's security number — the server's rule (jc_admin_event_save): an optional leading +, then
+   numerals with single spaces, 3–15 numerals, ≤ 24 characters. The event page links it (tel:) only if it passes. */
+function jcSafetyPhoneOk(p){
+  return typeof p === "string" && p.length <= 24 && /^\+?[0-9]( ?[0-9])*$/.test(p) &&
+         p.replace(/[^0-9]/g, "").length >= 3 && p.replace(/[^0-9]/g, "").length <= 15;
+}
+
 /* "Villa 12" / "Townhouse 7" / "Apt 304, B2" — from a jc_me_get home object. */
 function jcHomeLabel(h){
   if (!h) return "";

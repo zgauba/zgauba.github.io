@@ -23,6 +23,12 @@ h2.group{font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:v
 .evhead .more{font:inherit; font-size:13.5px; font-weight:700; color:var(--jc-accent); background:none; border:0;
   padding:2px 0; cursor:pointer}
 .evhead + .subtabs{margin:10px 0 10px}
+/* R2b-2: the safety box — two short lines, so the map stays high */
+.evhead .safety{margin:8px 0 0; padding:8px 12px; border:1px solid var(--jc-line); border-radius:12px;
+  background:var(--jc-surface); font-size:14px; line-height:1.45}
+.evhead .safety p{margin:0; overflow-wrap:anywhere}
+.evhead .safety a, .evhead .safety a:visited{color:var(--jc-accent); font-weight:800; text-decoration:none; unicode-bidi:isolate}
+.evhead .safety b{font-weight:700}
 /* the map screen: no spare padding, and no "100vh" minimum (taller than the visible area on iOS) */
 body.evfit{min-height:0}
 /* one-place events (PR 4b) */

@@ -65,6 +65,22 @@ const PINS_EVENT = pinEvent({ id: PINS_ID, slug: "halloween-2027", title_en: "Ha
 const HAQ_EVENT = pinEvent({ id: HAQ_ID, slug: "haq-al-laila-2027", title_en: "Haq al Laila", title_ar: "حق الليلة",
   look: "haq_al_laila", payload_schema: HAQ_SCHEMA }, HAQ_ENTRIES);
 
+// ── R2b-2: holiday lights (a homes event, each decorated home a stop) with its safety box on ──
+const LIGHTS_SCHEMA = { fields: {
+  view: { type: "enum", values: ["street", "garden", "both"], required: true, pin: "ring",
+    labels_en: { street: "The street", garden: "The garden", both: "Both" }, ring_split: ["both"] },
+  lights: { type: "enum", values: ["warm", "colour", "music"], required: true, pin: "glyph",
+    labels_en: { warm: "Warm white", colour: "Colourful", music: "Lights and music" },
+    glyphs: { warm: "💡", colour: "🌈", music: "🎶" } },
+} };
+const LIGHTS_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const LIGHTS_SAFETY = { phone: "+971 2 555 0100", meeting_en: "The clubhouse gate", meeting_ar: "بوابة النادي" };
+const LIGHTS_ENTRIES = PIN_ENTRIES.map((e, i) => Object.assign({}, e, {
+  payload: { view: ["street", "garden", "both", "street", "garden", "both"][i], lights: ["warm", "colour", "music", "warm", "music", "colour"][i] } }));
+const LIGHTS_EVENT = pinEvent({ id: LIGHTS_ID, slug: "holiday-lights-2026", title_en: "Holiday Lights", title_ar: "أضواء الزينة",
+  description_en: "Walk the lit streets — every pin is a decorated home.", description_ar: "تجوّلوا في الشوارع المضاءة — كل دبوس منزل مزيَّن.",
+  look: "holiday_lights", payload_schema: LIGHTS_SCHEMA, features: { giant_switch: true, safety: true }, safety: LIGHTS_SAFETY }, LIGHTS_ENTRIES);
+
 // ── T5.2 PR 5b: event day ──
 // A treat night happening NOW (started 1 h ago, ends in 3 h), this home signed up, every feature on.
 // Keeps state like the real RPCs: the switch + supply on this home's entry, reports (going "done"
@@ -149,6 +165,7 @@ function eventsBackend(opts = {}) {
         ? ok({ event: PAST, mine: null, stats: STATS, entries: null })
         : a.p_event === LIVE_ID ? ok(get())
         : a.p_event === PINS_ID ? ok(PINS_EVENT) : a.p_event === HAQ_ID ? ok(HAQ_EVENT)
+        : a.p_event === LIGHTS_ID ? ok(LIGHTS_EVENT)                                   // R2b-2
         : a.p_event === DAY_ID ? day.rpc.jc_event_get() : raise("NOT_FOUND"),
       // event day (5b) — /shot can open events/?id=6666… and tap the switch
       jc_entry_live_set: (a) => day.rpc.jc_entry_live_set(a),
@@ -253,7 +270,7 @@ function adminBackend(opts = {}) {
       { id: ADMIN_LIVE_ID, slug: "test-event", title_en: opts.liveTitle || "Test Event", title_ar: null, description_en: "Practice", description_ar: null,
         starts_at: opts.liveStartsAt || "2026-11-04T04:40:00Z", ends_at: "2026-12-04T04:40:00Z", status: "live", signups_open: true,
         features: opts.liveFeatures || { giant_switch: true }, theme: {}, payload_schema: { fields: { treats: { type: "enum", values: ["candy"], required: true } } },
-        safety: {}, entries: 3, ...(opts.liveLook ? { look: opts.liveLook } : {}) },
+        safety: opts.liveSafety || {}, entries: 3, ...(opts.liveLook ? { look: opts.liveLook } : {}) },
       ...(opts.extraEvents || []),
       { id: ADMIN_PAST_ID, slug: "halloween-2026", title_en: "Halloween 2026", status: "archived", signups_open: false,
         starts_at: "2026-10-31T00:00:00Z", features: { giant_switch: true }, payload_schema: { fields: {} }, entries: 124 },
@@ -433,5 +450,5 @@ async function signIn(page) {
 }
 
 module.exports = { eventsBackend, adminBackend, signIn, LIVE_ID, PAST_ID, SCHEMA, LIVE, PAST, ENTRIES, STATS,
-  PIN_SCHEMA, home, pinEvent, PINS_ID, HAQ_ID, DAY_ID, dayBackend, healthReport, NOTICES,
+  PIN_SCHEMA, home, pinEvent, PINS_ID, HAQ_ID, DAY_ID, LIGHTS_ID, LIGHTS_EVENT, LIGHTS_SAFETY, dayBackend, healthReport, NOTICES,
   ADMIN_DRAFT_ID, ADMIN_LIVE_ID, ADMIN_PAST_ID, ADMIN_MARKET_ID, ADMIN_MARKET };
