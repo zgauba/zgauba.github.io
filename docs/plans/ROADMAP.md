@@ -14,7 +14,7 @@
 pre-launch phases below — and the launch gate (R8) passes. The launch gate is the **last** step.
 The `e2e` test community stays the place to try everything; Jubail's modules stay OFF until R8.
 
-## Done (as of 2026-11-06)
+## Done (as of 2026-11-08)
 
 | Phase | What shipped |
 |---|---|
@@ -25,6 +25,9 @@ The `e2e` test community stays the place to try everything; Jubail's modules sta
 | R0 | WebKit e2e lane in CI (non-blocking until green ×2); its first catch fixed (map buttons over pin popups) — PR #62 |
 | R1 | Organizer Tools → Community → **Households**: list by village, invite Approve / Decline, home edit, directory hide, member remove, admin log, notice → home — PR #63 |
 | R2a | Events audit fixes: events end + auto-close 24 h later (stats always taken), vacated homes start clean, treat-night templates, homes events need a date, hidden households told, banners go with their event — PR #64 (DB `r2a_events_audit`) |
+| R1.1 | Households: fix / set a home's pin (map + confirm naming the home + Undo) — PR #67 |
+| R2b-1 | Organizer event-night acts (mark a home done / open, set or clear its supply, remove a no-show; household told, never who) + event page polish (Admin button on the title line, full-screen map) — PR #68 (DB `r2b_1_organizer_acts`) |
+| R2b-2 | Per-event safety box (security line + lost-child meeting point), holiday lights look + template, clean event text on write — PR #69 (DB `r2b_2_safety_lights`). **R2 complete.** |
 
 Detail: `docs/architecture.md` (Stack Manifest) and the reviews in `docs/qa/`.
 
@@ -49,18 +52,18 @@ household's member limit currently have nowhere to go.
 - Admin log (`jc_admin_log_list`); links from App Health notices ("household left", "pin far away") to the home.
 - Verify each RPC's live shape before building (they date from S1, never exercised by a screen).
 
-### R1.1 — Households: fix a home's pin  ·  app only  ·  in progress
+### R1.1 — Households: fix a home's pin  ·  app only  ·  ✓ done 2026-11-06 (PR #67)
 - Zee 2026-11-06: "Fix pin" / "Set pin" per home in Households, reusing the Sign-ups tab pin move (map +
   confirm naming the home + Undo) and the existing `jc_admin_home_pin_set` (clears pin flags, resolves the
-  "pin far away" notice). Parked WIP on `feat/r1-1-household-pin` (e177013).
+  "pin far away" notice).
 
-### Event page polish  ·  app only  ·  queued after R1.1
+### Event page polish  ·  app only  ·  ✓ done 2026-11-07 (shipped inside R2b-1, PR #68)
 - **Admin button on the title line**, not its own row (Zee 2026-11-06 screenshot: it pushes the title down).
 - **Full-screen map button** — a CSS expand with a close ✕ (iOS Safari has no element Fullscreen API);
   Leaflet `invalidateSize` after resize; pins, popups, Find Me, Map Labels / Street keep working.
 - Check the thin horizontal line across the map in iOS Safari (likely a tile seam); fix if it reproduces.
 
-### R2 — Event-night extras + Events audit fixes  ·  DB (R2a ✓ done 2026-11-06, PR #64; then R2b-1, R2b-2)
+### R2 — Event-night extras + Events audit fixes  ·  DB  ·  ✓ done 2026-11-07 (R2a PR #64, R2b-1 PR #68, R2b-2 PR #69)
 **R2a — Events audit fixes** (`docs/qa/events-qa-2026-11-06.md`; Zee 2026-11-06: fix all of them). Ships first:
 it changes existing behaviour, and R2b builds on the same functions.
 - **D1 + L1** — when a household leaves a home, its sign-ups lose the organizer's "hidden" flag and their spot,
@@ -94,6 +97,9 @@ R2b-2 = safety block, holiday lights, clean text)
   path; stored text left as is.
 
 ### R3 — App shell: your navigation, your start page, "Save as an app"  ·  app only
+Plan: `docs/plans/R3-app-shell.md` (approved 2026-11-08). Three PRs: **R3b** "Save as an app" (static: manifest,
+icons, head tags; installed name "Commons"; no service worker) → **R3a** bar + start page + Settings → **R3c**
+accessibility.
 - **Settings (My Home → Account):** choose which buttons appear in the bottom bar and their order
   (My Home always stays — Settings lives there); choose the **start page** the app opens on. Saved to the
   account (`jc_accounts.prefs` via `jc_prefs_set`, ≤ 2 KB — exists, unused), so it follows the person
@@ -103,6 +109,10 @@ R2b-2 = safety block, holiday lights, clean text)
 - **Accessibility pass** (synthesis S3) — first a11y audit (`design:accessibility-review`: hub, events, My Home,
   Organizer Tools); fix the tab rows (role=tab without tabpanel / arrow keys, focus lost on re-render — T5.2
   polish #6) as part of the nav rebuild, not before it.
+
+### News on the Commons home  ·  sequenced after R3a
+- Zee 2026-11-08 (R3 Decision 2): a **News** section on the Commons home (hub) for community and household
+  information. Needs its own `/plan-change` (who may post, how long items stay, EN + AR, zero-PII default).
 
 ### R4 — Courts: tennis + basketball  ·  DB
 Zee 2026-11-06: **no padel**; households book; **no outside coaches** for now; **community admins add the
