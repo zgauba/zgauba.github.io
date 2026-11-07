@@ -42,7 +42,9 @@ declare
     -- T5.4 (coming soon)
     'jc_admin_event_announce',
     -- R2a (events audit)
-    'jc_admin_broadcast_set_event'];
+    'jc_admin_broadcast_set_event',
+    -- R2b-1 (organizer event-night actions)
+    'jc_admin_entry_live_set', 'jc_admin_entry_withdraw', 'jc_entry_supply_clear'];
 begin
   -- Pre-launch suite: fixtures are written into 'jubail' and rolled back. Refuse to run
   -- once real residents exist — post-launch tests must move to a test community.

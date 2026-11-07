@@ -1357,9 +1357,21 @@ function answersOf(x){
   });
 }
 
+/* R2b-1: event-night actions on one sign-up. Treat nights say "out of treats" (as the household's own switch). */
+var TREAT_LOOKS = { halloween: true, haq_al_laila: true };
+function treatK(e, k){ return TREAT_LOOKS[e.look] === true ? k + "_treats" : k; }
+function evFeat(e, k){ return !!(e && e.features && e.features[k] === true); }
+/* the switch + supply: from 2 h before the start (when the household gets its own) until the close —
+   organizers may still correct the night after it ends (Zee, 2026-11-06) */
+function nightOn(e){ return e.status === "live" && !!e.starts_at && Date.now() >= Date.parse(e.starts_at) - 2 * 3600e3; }
+var SU_LEVELS = [3, 2, 1, 0];       /* Plenty · Some left · Running low · Almost out — the household's order */
+
 function entryCard(x, ro){
   var e = su.ev, venue = e.kind === "venue";
   var flags = [];
+  if (x.live_state === "done") flags.push(jcT(TREAT_LOOKS[e.look] === true ? "ev_out_treats" : "ev_pin_done"));
+  else if (evFeat(e, "supply") && SU_LEVELS.indexOf(x.supply_level) >= 0) flags.push(jcFmt("ev_supply_line", { s: jcT("ev_supply_" + x.supply_level) }));
+  if (x.org_adjusted_at) flags.push(jcT("adm_su_adjusted"));
   if (x.hidden) flags.push(jcT("adm_su_hidden"));
   if (x.spot) flags.push(jcFmt("adm_su_spot", { s: x.spot }));
   if (!venue) flags.push(jcT(x.event_lat != null ? "adm_su_event_pin" : x.home_lat != null ? "adm_su_home_pin" : "adm_su_no_pin"));
@@ -1368,12 +1380,26 @@ function entryCard(x, ro){
   function b(a, label, cls){
     return '<button class="mini' + (cls ? ' ' + cls : '') + '" type="button" data-su="' + a + '" data-id="' + esc(x.id) + '">' + esc(label) + '</button>';
   }
+  var night = !venue && nightOn(e), done = x.live_state === "done";
   var acts = ro ? '' : '<div class="acts">' +
+    /* R2b-1: the household's switch and supply, set for them (a no-show, a mistake) */
+    (night && evFeat(e, "giant_switch")
+      ? (done ? b("open", jcT(treatK(e, "adm_su_mark_open"))) : b("done", jcT(treatK(e, "adm_su_mark_done")))) : '') +
+    (night && evFeat(e, "supply") && !done ? b("supply", jcT("adm_su_supply")) : '') +
     b("note", jcT(x.org_note ? "adm_su_note_edit" : "adm_su_note")) +
     (x.hidden ? b("show", jcT("adm_su_restore")) : b("hide", jcT("adm_su_hide"), "danger")) +
     (venue ? '' : b("pin", jcT("adm_su_move_pin"))) +
-    (venue && e.spots ? b("spot", jcT(x.spot ? "adm_su_spot_change" : "adm_su_spot_set")) : '') + '</div>';
+    (venue && e.spots ? b("spot", jcT(x.spot ? "adm_su_spot_change" : "adm_su_spot_set")) : '') +
+    b("withdraw", jcT("adm_su_withdraw"), "danger") + '</div>';
   var form = '';
+  /* R2b-1: the four levels, the current one pressed, and Clear */
+  if (open === "supply") form = '<div class="suform" data-supply-panel data-id="' + esc(x.id) + '">' +
+    '<p class="help">' + esc(jcFmt("adm_su_supply_label", { h: jcHomeLabel(x) })) + '</p>' +
+    '<div class="seg4" role="group" aria-label="' + esc(jcFmt("adm_su_supply_label", { h: jcHomeLabel(x) })) + '">' + SU_LEVELS.map(function(n){
+      return '<button type="button" class="mini" data-level="' + n + '" aria-pressed="' + (x.supply_level === n) + '">' + esc(jcT("ev_supply_" + n)) + '</button>';
+    }).join("") + '</div>' +
+    '<div class="row">' + (SU_LEVELS.indexOf(x.supply_level) >= 0 ? '<button class="btn ghost small" type="button" data-supclear>' + esc(jcT("adm_su_supply_clear")) + '</button>' : '') +
+    '<button class="btn ghost small" type="button" data-cancel>' + esc(jcT("ev_cancel")) + '</button></div></div>';
   if (open === "note") form = '<form class="suform" data-form="note" data-id="' + esc(x.id) + '" novalidate>' +
     '<label>' + esc(jcT("adm_su_note_label")) + '<textarea maxlength="280" dir="auto" data-in></textarea></label>' +
     '<p class="help">' + esc(jcT("adm_su_note_help")) + '</p>' +
@@ -1396,10 +1422,15 @@ function entryCard(x, ro){
 }
 
 function byEntry(id){ return ((su && su.list) || []).filter(function(x){ return x.id === id; })[0]; }
-/* a write that returns the whole list (moderate / spot / event pin) → redraw, then say so */
+/* a write that returns the whole list (moderate / spot / event pin) → redraw, then say so.
+   One at a time across every card (code review L6): a second tap while one is in flight is ignored
+   (returns false = "not started", which keeps an Undo button usable). */
+var suBusy = false;
 function suWrite(name, args, okText, undo){
+  if (suBusy) return false;
+  suBusy = true;
   var id = su.ev.id, from = screenKey();
-  return rpc(name, args).then(function(list){
+  return rpc(name, args).finally(function(){ suBusy = false; }).then(function(list){
     if (!su || su.ev.id !== id) return;
     su.list = list || [];
     if (screenKey() !== from) return;       /* a late answer: keep the data, don't pull them off another screen (review) */
@@ -1412,6 +1443,17 @@ function screenKey(){ return current + (pm ? ":" + pm.x.id : ""); }
 /* any failed write: buttons usable again (a re-render would drop what was typed), then say why */
 function suFail(err){
   Array.prototype.forEach.call(document.querySelectorAll("#view button"), function(n){ n.disabled = false; });
+  /* R2b-1 (db review L3): the sign-up changed meanwhile (a double tap, another organizer, the household) —
+     re-read the list and say so, instead of a bare "not available" over a stale card */
+  if (err && err.code === "NOT_FOUND" && su && current === "signups") {
+    var id = su.ev.id;
+    return refreshList(id).then(null, function(){}).then(function(){
+      if (!su || su.ev.id !== id || current !== "signups") return;
+      su.open = null; show("signups");
+      var m = el("msg");
+      if (m) { m.className = "msg err"; m.textContent = jcT("adm_su_err_NOT_FOUND"); }
+    });
+  }
   fail(err);
 }
 /* the ok message, with an Undo button when the change can be put back */
@@ -1430,7 +1472,7 @@ function wireEntries(){
     b.addEventListener("click", function(){
       var x = byEntry(b.dataset.id), a = b.dataset.su;
       if (!x) return;
-      if (a === "note" || a === "spot") {
+      if (a === "note" || a === "spot" || a === "supply") {
         su.open = su.open && su.open.id === x.id && su.open.what === a ? null : { id: x.id, what: a };
         show("signups");
         var f = document.querySelector('[data-form] [data-in]');
@@ -1438,6 +1480,19 @@ function wireEntries(){
         return;
       }
       if (a === "pin") { pm = { x: x }; return show("pinmove"); }
+      if (suBusy) return;                     /* another card's write is still in flight */
+      var h = jcHomeLabel(x);
+      /* R2b-1: no Undo for a removal — the confirm names the home; before the end the household can sign up again */
+      if (a === "withdraw") {
+        if (!window.confirm(jcFmt("adm_su_withdraw_confirm", { h: h }))) return;
+        b.disabled = true;
+        return suWrite("jc_admin_entry_withdraw", { p_entry: x.id }, jcFmt("adm_su_withdrawn_ok", { h: h }));
+      }
+      if (a === "done" || a === "open") {
+        b.disabled = true;
+        return suWrite("jc_admin_entry_live_set", { p_entry: x.id, p_state: a === "done" ? "done" : "active", p_supply: null, p_supply_clear: false },
+          jcFmt(treatK(su.ev, a === "done" ? "adm_su_done_ok" : "adm_su_open_ok"), { h: h }));
+      }
       b.disabled = true;
       var hide = a === "hide";
       suWrite("jc_admin_entry_moderate", { p_entry: x.id, p_hidden: hide, p_org_note: null },
@@ -1445,9 +1500,30 @@ function wireEntries(){
         function(){ suWrite("jc_admin_entry_moderate", { p_entry: x.id, p_hidden: !hide, p_org_note: null }, jcT("adm_undone")); });
     });
   });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-supply-panel]"), function(p){
+    var x = byEntry(p.dataset.id);
+    if (!x) return;
+    var h = jcHomeLabel(x);
+    function send(level){
+      if (suBusy) return;
+      Array.prototype.forEach.call(p.querySelectorAll("button"), function(n){ n.disabled = true; });
+      suWrite("jc_admin_entry_live_set", { p_entry: x.id, p_state: null, p_supply: level, p_supply_clear: level === null },
+        level === null ? jcFmt("adm_su_supply_cleared", { h: h }) : jcFmt("adm_su_supply_ok", { h: h, s: jcT("ev_supply_" + level) }));
+    }
+    Array.prototype.forEach.call(p.querySelectorAll("[data-level]"), function(n){
+      n.addEventListener("click", function(){
+        if (n.getAttribute("aria-pressed") === "true") return;   /* already that level: Clear Supply removes it */
+        send(Number(n.dataset.level));
+      });
+    });
+    var clr = p.querySelector("[data-supclear]");
+    if (clr) clr.addEventListener("click", function(){ send(null); });
+    p.querySelector("[data-cancel]").addEventListener("click", function(){ su.open = null; show("signups"); });
+  });
   Array.prototype.forEach.call(document.querySelectorAll("[data-form]"), function(f){
     var x = byEntry(f.dataset.id), what = f.dataset.form, inp = f.querySelector("[data-in]");
     function send(v){
+      if (suBusy) return;
       Array.prototype.forEach.call(f.querySelectorAll("button"), function(n){ n.disabled = true; });
       what === "note"
         ? suWrite("jc_admin_entry_moderate", { p_entry: x.id, p_hidden: null, p_org_note: v },
@@ -1520,7 +1596,8 @@ function downloadCsv(){
     .concat(e.spots ? [jcT("csv_spot")] : [])
     .concat(e.kind === "venue" ? [] : [jcT("csv_pin"), jcT("csv_lat"), jcT("csv_lng")])
     .concat(keys.map(function(k){ return questionText(k, fields[k]); }))
-    .concat([jcT("csv_note"), jcT("csv_org_note"), jcT("csv_reports"), jcT("csv_signed_up"), jcT("csv_updated")]);
+    .concat([jcT("csv_note"), jcT("csv_org_note"), jcT("csv_reports"), jcT("csv_signed_up"), jcT("csv_updated"),
+             jcT("csv_org_adjusted"), jcT("csv_org_withdrawn")]);                                     /* R2b-1 */
   var rows = su.list.map(function(x){
     var evPin = x.event_lat != null;
     return [jcVillageName(cfg, x.village), jcHomeLabel(x), jcT("csv_st_" + x.status) === "csv_st_" + x.status ? x.status : jcT("csv_st_" + x.status),
@@ -1529,7 +1606,8 @@ function downloadCsv(){
       .concat(e.kind === "venue" ? [] : [jcT(evPin ? "csv_pin_event" : x.home_lat != null ? "csv_pin_home" : "csv_pin_none"),
         evPin ? x.event_lat : x.home_lat, evPin ? x.event_lng : x.home_lng])
       .concat(keys.map(function(k){ var p = x.payload || {}; return k in p ? answerText(fields[k], p[k]) : ""; }))
-      .concat([x.note || "", x.org_note || "", x.reports_open || 0, x.created_at || "", x.updated_at || ""]);
+      .concat([x.note || "", x.org_note || "", x.reports_open || 0, x.created_at || "", x.updated_at || "",
+               x.org_adjusted_at || "", x.org_withdrawn_at || ""]);
   });
   /* BOM: Excel reads the file as UTF-8 (Arabic village names, notes) */
   var text = "﻿" + [head].concat(rows).map(function(r){ return r.map(csvCell).join(","); }).join("\r\n");
