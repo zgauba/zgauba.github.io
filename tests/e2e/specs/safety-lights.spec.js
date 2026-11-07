@@ -44,6 +44,7 @@ test("event page in Arabic: the box is translated, shows the Arabic meeting poin
 test("event page: only the meeting point in the other language — it falls back rather than hiding", async ({ page }) => {
   await openLights(page, { safety: { meeting_ar: "بوابة النادي" } });
   await expect(page.locator("#safety")).toContainText("Lost child? Meet at: بوابة النادي");
+  await expect(page.locator("#safety b")).toHaveAttribute("lang", "ar");          // marked as the other language
   await expect(page.locator('#safety a[href^="tel:"]')).toHaveCount(0);
 });
 
@@ -69,11 +70,36 @@ test("event page: a hostile stored value is text — never a link, never markup"
   expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
 });
 
-test("holiday lights: the page wears the look and its mark", async ({ page }) => {
+test("holiday lights: the page wears the look and its mark; pins carry the ring + icon questions", async ({ page }) => {
   await openLights(page);
   await expect(page.locator("html")).toHaveAttribute("data-look", "holiday_lights");
   await expect(page.locator(".evtitle h1 .mark")).toHaveText("✨");
   await expect(page.locator(".evtitle h1")).toContainText("Holiday Lights");
+  const pin = (i) => page.locator("#map .leaflet-marker-icon .pin").nth(i);
+  await expect(pin(0)).toHaveText("💡");                                      // warm white = the icon question
+  await expect(pin(0)).toHaveClass(/\br0\b/);                                // the street = first ring colour
+  await expect(pin(1)).toHaveText("🌈");
+  await expect(pin(1)).toHaveClass(/\br1\b/);                                // the garden
+  // the fill is the look's string-light gold
+  expect(await pin(0).evaluate((n) => getComputedStyle(n).backgroundColor)).toBe("rgb(255, 207, 102)");
+});
+
+test("holiday lights: the events list card wears the look", async ({ page }) => {
+  const eb = eventsBackend({ rpc: { jc_events_list: () => ok([Object.assign({}, LIGHTS_EVENT.event, { homes_in: 6, my_status: null })]) } });
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/");
+  const card = page.locator('[data-event="holiday-lights-2026"]');
+  await expect(card).toHaveAttribute("data-look", "holiday_lights");
+  await expect(card).toContainText("✨");
+});
+
+test("Arabic: an event with no Arabic title (stored null) shows the English one", async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem("jc_lang", "ar"); } catch (e) {} });
+  await openLights(page, { title_ar: null, description_ar: null });
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect(page.locator(".evtitle h1")).toContainText("Holiday Lights");
+  await expect(page.locator("#desc")).toContainText("Walk the lit streets");
 });
 
 // ---------- editor ----------
@@ -156,6 +182,18 @@ test("editor: clearing a field sends the block without it", async ({ page }) => 
     safety: { phone: "+971 2 555 0100", meeting_en: "The clubhouse gate" } } });
 });
 
+test("editor: a pasted number with direction marks, dashes and brackets saves as numerals and spaces", async ({ page }) => {
+  const ab = adminBackend({ scopes: ["events"] });
+  const { calls } = await stubBackend(page, { rpc: ab.rpc });
+  await signIn(page);
+  await page.goto("admin/");
+  await page.locator('li[data-event="test-event"] [data-act="edit"]').click();
+  await page.locator("#safety_phone").fill("\u202A+971 (2) 555-0100\u202C\u200E");
+  await page.locator("#save").click();
+  await expect(page.locator("#msg")).toHaveText("Saved.");
+  expect(lastCall(calls, "jc_admin_event_save").args).toEqual({ p_event: ADMIN_LIVE_ID, p_fields: { safety: { phone: "+971 2 555 0100" } } });
+});
+
 test("editor: ticked with nothing filled in, or a number that isn't one, says so and sends nothing", async ({ page }) => {
   const ab = adminBackend({ scopes: ["events"] });
   const { calls } = await stubBackend(page, { rpc: ab.rpc });
@@ -165,7 +203,7 @@ test("editor: ticked with nothing filled in, or a number that isn't one, says so
   await page.locator("#f_safety").check();
   await page.locator("#save").click();
   await expect(page.locator("#msg")).toHaveText("Add the security number or the meeting point, or untick the safety box.");
-  for (const bad of ["050-123-4567", "12", "tel:999", "+971 50 1234 5678 901"]) {
+  for (const bad of ["050-123-456x", "12", "tel:999", "+971 50 1234 5678 901"]) {
     await page.locator("#safety_phone").fill(bad);
     await page.locator("#save").click();
     await expect(page.locator("#msg")).toHaveText("Security number: digits and spaces only, with an optional + at the start (3 to 15 digits).");

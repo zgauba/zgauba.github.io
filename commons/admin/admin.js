@@ -1902,7 +1902,11 @@ function markMissing(miss){
    { err, at }. Arabic-Indic numerals become 0-9 and whitespace runs one space; the phone rule is the server's. */
 function safetyFields(){
   function one(id){ var t = el(id).value.replace(/\s+/g, " ").trim(); return t === "" ? undefined : t; }
+  /* a pasted number often carries invisible direction marks, dashes, brackets or dots: marks go, the
+     separators become spaces (code review L1) — the server's rule itself is unchanged */
   var phone = one("safety_phone");
+  if (phone) phone = phone.replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, "").replace(/[-().]/g, " ")
+                          .replace(/\s+/g, " ").trim() || undefined;
   if (phone) phone = phone.replace(/[\u0660-\u0669]/g, function(d){ return String(d.charCodeAt(0) - 0x660); })
                           .replace(/[\u06F0-\u06F9]/g, function(d){ return String(d.charCodeAt(0) - 0x6F0); });
   var v = { phone: phone, meeting_en: one("safety_meeting_en"), meeting_ar: one("safety_meeting_ar") };

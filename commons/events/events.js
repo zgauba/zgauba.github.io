@@ -815,13 +815,15 @@ function popupHtml(e){
 function safetyHtml(ev){
   var sf = ev.safety, on = ev.features && ev.features.safety === true;
   if (!on || !sf || typeof sf !== "object" || ev.status === "archived") return "";
-  var phone = jcOwn(sf, "phone"), meet = jcOwn(sf, ar() ? "meeting_ar" : "meeting_en") || jcOwn(sf, ar() ? "meeting_en" : "meeting_ar");
+  var phone = jcOwn(sf, "phone"), mine = jcOwn(sf, ar() ? "meeting_ar" : "meeting_en");
+  var meet = mine || jcOwn(sf, ar() ? "meeting_en" : "meeting_ar");
+  var meetLang = mine ? "" : ' lang="' + (ar() ? "en" : "ar") + '"';         /* the other language's text (review) */
   if (!phone && !meet) return "";
   return '<div class="safety" id="safety" role="note" aria-label="' + esc(jcT("ev_safety")) + '">' +
     (phone ? '<p><span aria-hidden="true">🛡️</span> ' + esc(jcT("ev_safety_call")) + ': ' +
       (typeof jcSafetyPhoneOk === "function" && jcSafetyPhoneOk(phone) ? '<a href="tel:' + phone.replace(/[^0-9+]/g, "") + '" dir="ltr">' + esc(phone) + '</a>'
                               : '<bdi dir="ltr">' + esc(phone) + '</bdi>') + '</p>' : '') +
-    (meet ? '<p><span aria-hidden="true">📍</span> ' + esc(jcT("ev_safety_meet")) + ': <b dir="auto">' + esc(meet) + '</b></p>' : '') +
+    (meet ? '<p><span aria-hidden="true">📍</span> ' + esc(jcT("ev_safety_meet")) + ': <b dir="auto"' + meetLang + '>' + esc(meet) + '</b></p>' : '') +
     '</div>';
 }
 

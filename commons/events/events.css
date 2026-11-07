@@ -27,7 +27,8 @@ h2.group{font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:v
 .evhead .safety{margin:8px 0 0; padding:8px 12px; border:1px solid var(--jc-line); border-radius:12px;
   background:var(--jc-surface); font-size:14px; line-height:1.45}
 .evhead .safety p{margin:0; overflow-wrap:anywhere}
-.evhead .safety a, .evhead .safety a:visited{color:var(--jc-accent); font-weight:800; text-decoration:none; unicode-bidi:isolate}
+.evhead .safety a, .evhead .safety a:visited{color:var(--jc-accent); font-weight:800; text-decoration:none; unicode-bidi:isolate;
+  display:inline-block; padding-block:10px; margin-block:-8px; min-height:44px; box-sizing:border-box; vertical-align:middle}   /* a 44px tap target, same line height (review) */
 .evhead .safety b{font-weight:700}
 /* the map screen: no spare padding, and no "100vh" minimum (taller than the visible area on iOS) */
 body.evfit{min-height:0}

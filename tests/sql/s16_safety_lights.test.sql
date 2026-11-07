@@ -118,6 +118,11 @@ begin
   execute 'reset role';
   if (select safety from jc_events where id = ev) <> '{}'::jsonb then raise exception 'FAIL S03a blank values were stored'; end if;
   execute 'set local role authenticated';
+  perform jc_admin_event_save(ev, jsonb_build_object('safety', jsonb_build_object('meeting_en', E'Gate B\nkiosk', 'meeting_ar', E'البوابة\t\tب')));
+  execute 'reset role';
+  if (select safety from jc_events where id = ev) <> jsonb_build_object('meeting_en', 'Gate B kiosk', 'meeting_ar', 'البوابة ب') then
+    raise exception 'FAIL S03d a newline / tab between words was not a space: %', (select safety from jc_events where id = ev); end if;
+  execute 'set local role authenticated';
   perform jc_admin_event_save(ev, '{"safety": {"phone": "800 123"}}');
   perform jc_admin_event_save(ev, '{"description_en": "Walk the lights"}');
   execute 'reset role';
@@ -128,7 +133,7 @@ begin
   execute 'reset role';
   if (select safety from jc_events where id = ev) <> '{}'::jsonb then raise exception 'FAIL S03c {} did not clear the block'; end if;
   execute 'set local role authenticated';
-  k := k + 3;
+  k := k + 4;
 
   -- ---------- S04 who may set it: the event's admin yes; a resident and another community no ----------
   perform pg_temp.s16_as(c1);
@@ -170,6 +175,15 @@ begin
       (select row(title_en, title_ar, description_en, description_ar)::text from jc_events where id = ev_b); end if;
   execute 'set local role authenticated';
   k := k + 5;
+
+  perform jc_admin_event_save(ev_b, jsonb_build_object('description_en', E'\n\t\n ', 'description_ar', E'\nسطر\n\nسطر\n'));
+  execute 'reset role';
+  if (select description_en from jc_events where id = ev_b) is not null then
+    raise exception 'FAIL C01f a description of only newlines / tabs was stored'; end if;
+  if (select description_ar from jc_events where id = ev_b) <> E'سطر\n\nسطر' then
+    raise exception 'FAIL C01g outer newlines kept or inner newlines lost'; end if;
+  execute 'set local role authenticated';
+  k := k + 2;
 
   -- ---------- C02 a title that cleans to nothing is no title; null still means unchanged ----------
   if pg_temp.s16_err(format('select jc_admin_event_save(%L, %L)', ev_b, jsonb_build_object('title_en', E'  ‮ '))) is distinct from 'BAD_FIELDS' then

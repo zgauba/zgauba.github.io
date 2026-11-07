@@ -6,7 +6,8 @@
 -- The replaced body starts from the live definition (pg_get_functiondef, 2026-11-07, after R2b-1 — identical to
 -- 20261106120000_r2a_events_audit.sql); changes marked "R2b-2".
 --   (a) safety: only phone / meeting_en / meeting_ar; phone = digits, optional leading +, single spaces, 3–15 digits,
---       ≤ 24 chars, else BAD_PHONE; meeting points jc_clean_line, ≤ 200 chars; blanks dropped; stored normalised.
+--       ≤ 24 chars, else BAD_PHONE; meeting points: whitespace runs → one space, then jc_clean_line, ≤ 200 chars;
+--       blanks dropped; stored normalised.
 --       Shown on the event page only when features.safety is on (client). Stores nothing about people.
 --   (b) holiday_lights joins jc_events_look_check (one ALTER: no window without the check)
 --   (c) jc_clean_text on title_en / title_ar / description_en / description_ar on write (titles are one line:
@@ -70,8 +71,9 @@ begin
     end if;
     v_safety := jsonb_strip_nulls(jsonb_build_object(
       'phone', v_phone,
-      'meeting_en', jc_clean_line(p_fields -> 'safety' ->> 'meeting_en'),
-      'meeting_ar', jc_clean_line(p_fields -> 'safety' ->> 'meeting_ar')));
+      -- one line: a newline between words becomes a space, not nothing (db review L1)
+      'meeting_en', jc_clean_line(regexp_replace(p_fields -> 'safety' ->> 'meeting_en', '\s+', ' ', 'g')),
+      'meeting_ar', jc_clean_line(regexp_replace(p_fields -> 'safety' ->> 'meeting_ar', '\s+', ' ', 'g'))));
     if char_length(coalesce(v_safety ->> 'meeting_en', '')) > 200
        or char_length(coalesce(v_safety ->> 'meeting_ar', '')) > 200 then
       raise exception 'BAD_FIELDS';
@@ -149,8 +151,11 @@ begin
       title_en       = coalesce(v_title, title_en),
       title_ar       = case when p_fields ? 'title_ar' then jc_clean_text(regexp_replace(p_fields ->> 'title_ar', '\s+', ' ', 'g'))
                             else title_ar end,
-      description_en = case when p_fields ? 'description_en' then jc_clean_text(p_fields ->> 'description_en') else description_en end,
-      description_ar = case when p_fields ? 'description_ar' then jc_clean_text(p_fields ->> 'description_ar') else description_ar end,
+      -- (only newlines / tabs → null too; inner newlines kept — db review L2)
+      description_en = case when p_fields ? 'description_en'
+                            then nullif(btrim(jc_clean_text(p_fields ->> 'description_en'), E' \n\t'), '') else description_en end,
+      description_ar = case when p_fields ? 'description_ar'
+                            then nullif(btrim(jc_clean_text(p_fields ->> 'description_ar'), E' \n\t'), '') else description_ar end,
       starts_at      = case when p_fields ? 'starts_at' then (p_fields ->> 'starts_at')::timestamptz else starts_at end,
       ends_at        = case when p_fields ? 'ends_at' then (p_fields ->> 'ends_at')::timestamptz else ends_at end,
       theme          = coalesce(p_fields -> 'theme', theme),
