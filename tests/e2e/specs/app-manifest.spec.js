@@ -6,9 +6,11 @@ const { stubBackend } = require("./stub");
 
 const PAGES = ["./", "account/", "admin/", "events/", "home/"];
 
-// Pixel size straight from the PNG header (IHDR width/height, bytes 16–23).
+// Pixel size straight from the PNG header (IHDR width/height, bytes 16–23). Also asserts the icon is
+// opaque: IHDR colour type (byte 25) 4 or 6 = alpha, which iOS fills black and Android masks badly.
 function pngSize(buf) {
   expect(buf.subarray(1, 4).toString("latin1")).toBe("PNG");
+  expect([0, 2, 3]).toContain(buf[25]);
   return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
 }
 
@@ -47,7 +49,7 @@ test("manifest icons: each is a 200 PNG at its declared size; maskable 512 + any
 });
 
 for (const path of PAGES) {
-  test(`head tags on ${path}: one manifest link + iOS tags, all resolving; no CSP violation`, async ({ page, request, baseURL, browserName }) => {
+  test(`head tags on ${path}: one manifest link + iOS tags, all resolving; no CSP violation (Chromium: manifest fetched + parsed under CSP)`, async ({ page, request, baseURL, browserName }) => {
     // read the served head, not the live DOM: some pages send a signed-out visitor elsewhere
     const served = await request.get(path);
     expect(served.status()).toBe(200);
@@ -56,6 +58,7 @@ for (const path of PAGES) {
     expect(doc.count(/<link rel="manifest"/g)).toBe(1);
     expect(doc.count(/<link rel="apple-touch-icon"/g)).toBe(1);
     expect(html).toContain('<meta name="theme-color" content="#141210">');
+    expect(html).toContain('<meta name="mobile-web-app-capable" content="yes">');
     expect(html).toContain('<meta name="apple-mobile-web-app-capable" content="yes">');
     expect(html).toContain('<meta name="apple-mobile-web-app-title" content="Commons">');
     // not black-translucent: that would draw every page under the iPhone status bar
