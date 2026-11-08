@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(shasum *)",
+      "Bash(gh run watch *)",
+      "Bash(supabase projects list)",
+      "mcp__claude_ai_Supabase__get_advisors",
+      "mcp__claude-artifacts__guide",
+      "mcp__claude_ai_Supabase__query_logs",
+      "mcp__claude-artifacts__read_artifact",
+      "mcp__claude_ai_Supabase__list_migrations"
+    ]
+  }
+}
