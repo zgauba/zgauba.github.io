@@ -36,6 +36,13 @@ async function openSettings(page) {
   await page.goto("home/?tab=account");
   await expect(page.locator("#shellSec")).toBeVisible();
 }
+// Pretend the not-yet-built pages exist (the registry's page:false → true), served from the real nav.js.
+async function allPagesExist(target) {
+  await target.route("**/assets/nav.js", async (route) => {
+    const res = await route.fetch();
+    route.fulfill({ response: res, body: (await res.text()).replace(/page: false/g, "page: true") });
+  });
+}
 // A NEW visit: a fresh tab has its own sessionStorage but shares the signed-in session (localStorage).
 async function newVisit(context, rpc) {
   const p = await context.newPage();
@@ -95,8 +102,7 @@ test("Settings: hide, reorder, start page → exact merged jc_prefs_set → bar 
 test("at most 4 middle buttons: a 5th can't be switched on", async ({ page }) => {
   const b = shellBackend({ extra: { is_owner: true } });
   // pretend more pages exist so 5 destinations are on offer
-  await page.addInitScript(() => { document.addEventListener("DOMContentLoaded", () => {
-    JC_DEST.forEach((d) => { if (d.page === false) d.page = true; }); }); });
+  await allPagesExist(page);
   b.st.modules = { events: { enabled: true }, bookings: { enabled: true }, pets: { enabled: true } };
   await stubBackend(page, { rpc: b.rpc });
   await signIn(page);
@@ -139,7 +145,7 @@ test("module off drops a saved button and the start page; switched back on, they
   await expect(page.locator("#shellMsg")).toHaveText("Saved. Your bar is updated.");
   // the switched-off module's choice is kept (R4 C3) and the start page too
   expect(calls.find((c) => c.name === "jc_prefs_set").args.p_prefs.shell).toEqual(
-    { v: 1, tabs: ["commons", "events"], start: "events", known: ["commons", "events"] });
+    { v: 1, tabs: ["events", "commons"], start: "events", known: ["commons", "events"] });   // in its old place
   const v1 = await newVisit(context, b.rpc);
   await v1.p.goto("./");
   await expect(v1.p.locator("#hub")).toBeVisible();                          // start page unavailable → the hub
@@ -148,7 +154,33 @@ test("module off drops a saved button and the start page; switched back on, they
   const v2 = await newVisit(context, b.rpc);
   await v2.p.goto("./");
   await expect(v2.p).toHaveURL(/\/commons\/events\/$/);                      // start page back with its module
-  await expect.poll(() => bar(v2.p)).toEqual(["commons", "events", "home"]);
+  await expect.poll(() => bar(v2.p)).toEqual(["events", "commons", "home"]);
+});
+
+test("a full bar keeps a switched-off button in its place; tapping the checked Commons clears a switched-off start page", async ({ context, page }) => {
+  // pretend every page exists so 4 other destinations are on offer while Events is off
+  await allPagesExist(context);
+  const all = ["commons", "events", "bookings", "pets", "community", "admin"];
+  const b = shellBackend({ extra: { is_owner: true },
+    prefs: { shell: { v: 1, tabs: ["events", "commons", "bookings", "pets"], start: "events", known: all } } });
+  b.st.modules = { events: { enabled: false }, bookings: { enabled: true }, pets: { enabled: true } };
+  const { calls } = await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openSettings(page);
+  await expect(page.locator("#start-commons")).toBeChecked();
+  await page.locator('#shellSec li[data-dest="admin"] [data-act="toggle"]').click();
+  await page.locator("#start-commons").click();                             // already checked: still a choice
+  await page.locator("#saveShell").click();
+  await expect(page.locator("#shellMsg")).toHaveText("Saved. Your bar is updated.");
+  await expect(page.locator("#saveShell")).toBeFocused();                   // the reader keeps their place
+  expect(calls.find((c) => c.name === "jc_prefs_set").args.p_prefs.shell).toEqual(
+    { v: 1, tabs: ["events", "commons", "bookings", "pets", "admin"], start: "commons",
+      known: ["commons", "bookings", "pets", "community", "admin", "events"] });
+  b.st.modules = { events: { enabled: true }, bookings: { enabled: true }, pets: { enabled: true } };
+  const v = await newVisit(context, b.rpc);
+  await v.p.goto("./");
+  await expect(v.p.locator("#hub")).toBeVisible();                          // no stale start page
+  await expect.poll(() => bar(v.p)).toEqual(["events", "commons", "bookings", "pets", "home"]);
 });
 
 test("a destination switched on after a save is added to a customised bar (known)", async ({ page }) => {

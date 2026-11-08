@@ -407,10 +407,14 @@ function wireShell(){
     if (again) again.focus();                /* keyboard and screen-reader users stay on the row */
   });
   Array.prototype.forEach.call(sec.querySelectorAll('input[name="startPage"]'), function(r){
-    r.addEventListener("change", function(){
+    /* click as well as change: a saved start page that's switched off shows Commons checked, and
+       tapping the already-checked Commons fires no change — it must still clear it (review) */
+    var pick = function(){
       shellDraft.start = r.value;
       if (shellDirty()) sec.setAttribute("data-no-autoreload", ""); else sec.removeAttribute("data-no-autoreload");
-    });
+    };
+    r.addEventListener("change", pick);
+    r.addEventListener("click", pick);
   });
   on("saveShell", saveShell);
 }
@@ -422,10 +426,13 @@ function saveShell(){
   busy("saveShell", true);
   rpc("jc_me_get").then(function(fresh){
     var prefs = fresh && fresh.account && fresh.account.prefs, next = {};
-    if (prefs && typeof prefs === "object" && !Array.isArray(prefs)) Object.keys(prefs).forEach(function(k){ next[k] = prefs[k]; });
+    if (prefs && typeof prefs === "object" && !Array.isArray(prefs)) Object.keys(prefs).forEach(function(k){
+      if (k !== "__proto__") next[k] = prefs[k];        /* an own "__proto__" key would re-prototype `next` (security review) */
+    });
     var old = jcShellSaved(fresh), offered = shellOffered(fresh), tabs = shellPicked(d).tabs, known = offered.slice();
     if (old) {
-      old.tabs.forEach(function(k){ if (offered.indexOf(k) < 0 && tabs.indexOf(k) < 0) tabs.push(k); });
+      /* back in its old place, so a full bar doesn't push it off the end when it returns (review) */
+      old.tabs.forEach(function(k, i){ if (offered.indexOf(k) < 0 && tabs.indexOf(k) < 0) tabs.splice(Math.min(i, tabs.length), 0, k); });
       old.known.forEach(function(k){ if (known.indexOf(k) < 0) known.push(k); });
     }
     next.shell = { v: 1, tabs: tabs, start: d.start, known: known };
@@ -433,10 +440,13 @@ function saveShell(){
   }).then(function(m){
     state.me = JC_ME = m;
     shellDraft = null;
-    if (el("dname")) draftName = el("dname").value;
     paint();                                  /* the bar, redrawn from what was saved */
-    show("myhome");
+    var sec = el("shellSec");
+    if (!sec) return;
+    sec.outerHTML = shellHtml();              /* only this section: the reader keeps their place (review) */
+    wireShell();
     shellMsg(true, jcT("set_saved"));
+    el("saveShell").focus();
   }, function(e){ busy("saveShell", false); shellMsg(false, jcErrText(e)); });
 }
 
