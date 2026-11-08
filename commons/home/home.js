@@ -155,6 +155,7 @@ var VIEWS = {
           '<button class="btn ghost" type="button" id="saveName">' + esc(jcT("mh_save")) + '</button>' +
           '<button class="btn ghost" type="button" id="signOut">' + esc(jcT("acct_sign_out")) + '</button>' +
         '</div>' +
+        shellHtml() +
         /* T5.3 feedback: goes to the person who runs Commons, with this home (said up front) */
         '<div class="section" id="feedback"><h2>' + esc(jcT("fb_title")) + '</h2><form class="panel" id="fbForm" novalidate>' +
           '<div class="opts" role="group" aria-label="' + esc(jcT("fb_kind")) + '">' + ["idea", "problem", "other"].map(function(k){
@@ -217,6 +218,7 @@ var VIEWS = {
       }, function(e){ busy("saveName", false); showErr(e.code); });
     });
     wireFeedback();
+    wireShell();
     on("signOut", function(){ jcDb.auth.signOut().then(function(){ location.href = "../"; }); });
     on("leave", function(){
       if (!window.confirm(jcFmt("mh_leave_confirm", { h: homeTitle() }))) return;
@@ -332,6 +334,110 @@ function loadHistory(){
       : '<p class="help">' + esc(jcT("mh_history_none")) + '</p>';
     el("historySec").hidden = false;
   }, function(){ /* module off or offline: nothing to show */ });
+}
+
+/* ---------- R3a: bottom bar + start page (Account tab) ----------
+   The draft lives here, not in the DOM: the switches are buttons, so unsaved choices must survive a
+   tab switch and a language toggle by hand (like draftName). While unsaved, the section carries
+   data-no-autoreload, so an update shows the banner instead of reloading. */
+var shellDraft = null;   /* { order: [keys], on: [keys], start: key } */
+function shellOffered(m){ return JC_DEST.filter(function(d){ return jcDestOk(d.key, m, cfg); }).map(function(d){ return d.key; }); }
+function shellFromSaved(){
+  var sh = jcShell(me(), cfg), order = sh.tabs.slice();
+  shellOffered(me()).forEach(function(k){ if (order.indexOf(k) < 0) order.push(k); });
+  /* a saved start page that's unavailable right now is kept (it comes back with its module) */
+  return { order: order, on: sh.tabs.slice(), start: sh.saved ? sh.saved.start : "commons" };
+}
+function shellPicked(d){ return { tabs: d.order.filter(function(k){ return d.on.indexOf(k) >= 0; }), start: d.start }; }
+function shellDirty(){ return !!shellDraft && JSON.stringify(shellPicked(shellDraft)) !== JSON.stringify(shellPicked(shellFromSaved())); }
+function shellLi(k, i, d){
+  var dest = jcDest(k), name = jcT(dest.label), on = d.on.indexOf(k) >= 0;
+  return '<li data-dest="' + esc(k) + '"><span class="nm">' + jcIcon(dest.icon, 20) + '<span>' + esc(name) + '</span></span>' +
+    '<button type="button" class="sw" role="switch" data-act="toggle" aria-checked="' + on + '" aria-label="' +
+      esc(jcFmt("set_show", { x: name })) + '"' + (!on && d.on.length >= JC_BAR_MAX ? ' disabled' : '') + '>' +
+      esc(jcT(on ? "set_on" : "set_off")) + '</button>' +
+    '<button type="button" class="mv" data-act="up" aria-label="' + esc(jcFmt("set_up", { x: name })) + '"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
+    '<button type="button" class="mv" data-act="down" aria-label="' + esc(jcFmt("set_down", { x: name })) + '"' + (i === d.order.length - 1 ? ' disabled' : '') + '>↓</button></li>';
+}
+function shellHtml(){
+  if (!shellDraft) shellDraft = shellFromSaved();
+  var d = shellDraft, starts = shellOffered(me()).concat("home");
+  var checked = jcDestOk(d.start, me(), cfg) ? d.start : "commons";
+  var bold = function(k){ return esc(jcT(k)).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>"); };
+  return '<div class="section" id="shellSec"' + (shellDirty() ? ' data-no-autoreload' : '') + '><h2>' + esc(jcT("set_title")) + '</h2>' +
+    '<div class="panel"><p class="help">' + esc(jcT("set_help")) + '</p>' +
+      '<ol class="shellrows">' + d.order.map(function(k, i){ return shellLi(k, i, d); }).join("") +
+        '<li class="fixed"><span class="nm">' + jcIcon("house", 20) + '<span>' + esc(jcT("tab_my_home")) + '</span></span>' +
+          '<span class="help">' + esc(jcT("set_home_fixed")) + '</span></li></ol>' +
+      (d.on.length >= JC_BAR_MAX ? '<p class="help" id="shellFull">' + esc(jcT("set_full")) + '</p>' : '') +
+      '<fieldset class="starts"><legend>' + esc(jcT("set_start")) + '</legend>' + starts.map(function(k){
+        return '<label class="radio"><input type="radio" name="startPage" id="start-' + esc(k) + '" value="' + esc(k) + '"' +
+          (k === checked ? ' checked' : '') + '>' + esc(jcT(jcDest(k).label)) + '</label>';
+      }).join("") + '</fieldset>' +
+      '<p class="help">' + esc(jcT("set_start_help")) + '</p>' +
+      '<p class="msg" id="shellMsg" role="alert"></p>' +
+      '<button class="btn" type="button" id="saveShell">' + esc(jcT("set_save")) + '</button>' +
+      '<details class="install" id="install"><summary>' + esc(jcT("inst_title")) + '</summary><ul class="helplist">' +
+        ["inst_iphone", "inst_android", "inst_signin", "inst_reset"].map(function(k){ return '<li>' + bold(k) + '</li>'; }).join("") +
+      '</ul></details>' +
+    '</div></div>';
+}
+function shellMsg(ok, text){ var m = el("shellMsg"); if (m) { m.className = "msg " + (ok ? "ok" : "err"); m.textContent = text; } }
+function wireShell(){
+  var sec = el("shellSec");
+  if (!sec) return;
+  sec.addEventListener("click", function(e){
+    var b = e.target.closest ? e.target.closest("button[data-act]") : null;
+    if (!b || b.disabled) return;
+    var d = shellDraft, k = b.closest("li").dataset.dest, act = b.dataset.act, i = d.order.indexOf(k), j;
+    if (act === "toggle") {
+      j = d.on.indexOf(k);
+      if (j >= 0) d.on.splice(j, 1); else if (d.on.length < JC_BAR_MAX) d.on.push(k);
+    } else {
+      j = act === "up" ? i - 1 : i + 1;
+      if (j < 0 || j >= d.order.length) return;
+      d.order[i] = d.order[j]; d.order[j] = k;
+    }
+    var open = el("install") && el("install").open;
+    sec.outerHTML = shellHtml();             /* only this section: typed text elsewhere is untouched */
+    if (open) el("install").open = true;
+    wireShell();
+    var again = document.querySelector('#shellSec li[data-dest="' + k + '"] [data-act="' + act + '"]');
+    if (again && again.disabled) again = document.querySelector('#shellSec li[data-dest="' + k + '"] [data-act="toggle"]');
+    if (again) again.focus();                /* keyboard and screen-reader users stay on the row */
+  });
+  Array.prototype.forEach.call(sec.querySelectorAll('input[name="startPage"]'), function(r){
+    r.addEventListener("change", function(){
+      shellDraft.start = r.value;
+      if (shellDirty()) sec.setAttribute("data-no-autoreload", ""); else sec.removeAttribute("data-no-autoreload");
+    });
+  });
+  on("saveShell", saveShell);
+}
+/* jc_prefs_set replaces the WHOLE prefs object: read it fresh, change only `shell`, keep every
+   other key as it is (premortem #1). Saved choices that aren't offered right now (a module
+   switched off) stay saved and come back with the module (R4 C3). */
+function saveShell(){
+  var d = shellDraft;
+  busy("saveShell", true);
+  rpc("jc_me_get").then(function(fresh){
+    var prefs = fresh && fresh.account && fresh.account.prefs, next = {};
+    if (prefs && typeof prefs === "object" && !Array.isArray(prefs)) Object.keys(prefs).forEach(function(k){ next[k] = prefs[k]; });
+    var old = jcShellSaved(fresh), offered = shellOffered(fresh), tabs = shellPicked(d).tabs, known = offered.slice();
+    if (old) {
+      old.tabs.forEach(function(k){ if (offered.indexOf(k) < 0 && tabs.indexOf(k) < 0) tabs.push(k); });
+      old.known.forEach(function(k){ if (known.indexOf(k) < 0) known.push(k); });
+    }
+    next.shell = { v: 1, tabs: tabs, start: d.start, known: known };
+    return rpc("jc_prefs_set", { p_prefs: next });
+  }).then(function(m){
+    state.me = JC_ME = m;
+    shellDraft = null;
+    if (el("dname")) draftName = el("dname").value;
+    paint();                                  /* the bar, redrawn from what was saved */
+    show("myhome");
+    shellMsg(true, jcT("set_saved"));
+  }, function(e){ busy("saveShell", false); shellMsg(false, jcErrText(e)); });
 }
 
 /* ---------- feedback (T5.3) ---------- */

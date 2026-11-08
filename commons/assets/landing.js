@@ -114,6 +114,20 @@ function renderHub(){
   el("bcast").style.display = b ? "block" : "none";
 }
 
+/* R3a start page: the path to open instead of the hub, or null. Only on the FIRST page of this
+   visit (api.js JC_FIRST_PAGE) and only on the plain hub URL (?community= aside): any other link
+   that lands here, a reload, a tap on Commons or a sign-in return always shows the hub. Before
+   the hub paints (no flash); location.replace, so Back doesn't loop. A start page that isn't
+   available now (module off, config failed) → the hub. */
+function startPage(me){
+  if (!JC_FIRST_PAGE || location.hash) return null;
+  var extra = false;
+  new URLSearchParams(location.search).forEach(function(v, k){ if (k !== "community") extra = true; });
+  if (extra) return null;
+  var start = jcShell(me, cfgs[hubCommunity]).start;    /* the loaded config only, never the defaults */
+  return start === "commons" ? null : jcDest(start).path;
+}
+
 function render(){
   el("langBtn").textContent = jcT("toggle_label");
   el("credit").innerHTML = esc(jcT("credit_before")) +
@@ -176,7 +190,11 @@ jcState().then(function(s){
     hubCommunity = s.me.community;
     hubHome = s.me.home;
     return (cfgs[hubCommunity] ? Promise.resolve() : loadConfig(hubCommunity))
-      .then(function(){ setMode("hub"); });
+      .then(function(){
+        var go = startPage(s.me);
+        if (go) { location.replace(go); return; }
+        setMode("hub");
+      });
   }
   return listedLoaded.then(function(){ setMode("picker"); });
 }, function(){

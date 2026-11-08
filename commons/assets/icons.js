@@ -36,6 +36,12 @@ var JC_ICONS = {
     '<circle cx="18" cy="54" r="8.76"/><circle cx="102" cy="54" r="8.76"/><circle cx="30" cy="80" r="8.76"/>' +
     '<circle cx="90" cy="80" r="8.76"/><circle cx="30" cy="106" r="8.76"/><circle cx="90" cy="106" r="8.76"/>' +
     '<circle cx="60" cy="96" r="13.63"/>' },
+  /* NEW in R3a (not in the wireframes — review): Organizer Tools in the bar. Dots only: three
+     slider rows, each with one larger dot as its knob. */
+  tools: { vb: "2.5 0.5 95 95", body:
+    '<circle cx="14" cy="18" r="7.6"/><circle cx="38" cy="18" r="7.6"/><circle cx="62" cy="18" r="11.5"/><circle cx="86" cy="18" r="7.6"/>' +
+    '<circle cx="14" cy="48" r="11.5"/><circle cx="38" cy="48" r="7.6"/><circle cx="62" cy="48" r="7.6"/><circle cx="86" cy="48" r="7.6"/>' +
+    '<circle cx="14" cy="78" r="7.6"/><circle cx="38" cy="78" r="7.6"/><circle cx="62" cy="78" r="7.6"/><circle cx="86" cy="78" r="11.5"/>' },
   community: { vb: "7.52 7.52 80.95 80.95", body:
     '<circle cx="48" cy="48" r="11.87"/><g opacity=".55"><circle cx="48" cy="14" r="6.48"/><circle cx="78" cy="31" r="6.48"/>' +
     '<circle cx="78" cy="65" r="6.48"/><circle cx="48" cy="82" r="6.48"/><circle cx="18" cy="65" r="6.48"/>' +

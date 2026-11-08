@@ -1,15 +1,90 @@
-/* Bottom tab bar (wireframe v4.1 band 04). Commons first and My Home last are
-   fixed anchors; the middle holds live modules — default Events + Courts (the
-   user-chosen slots setting arrives with account prefs later). A module whose flag
-   is off drops out for everyone (the flag is the compliance kill switch).
-   root = relative path to the Commons root from the current page ("" or "../"). */
+/* Bottom tab bar (wireframe v4.1 band 04; R3a: the resident chooses it, docs/plans/R3-app-shell.md).
+   A REGISTRY of destinations; each is offered only while available, re-checked on EVERY render
+   against the live config the page just loaded (a module flag is the compliance kill switch):
+   - a module destination needs its flag on AND its page to exist (page: false = not built yet;
+     R4c flips bookings to true when bookings/ ships — the only change Courts needs);
+   - Organizer Tools needs some admin role (any admin scope, an event, or owner). Display only:
+     every admin RPC is still gated by the server.
+   My Home is never stored and never filtered: it is always the last button. */
+var JC_DEST = [
+  { key: "commons",   path: "",           icon: "mark",      label: "tab_home",         auto: true },
+  { key: "events",    path: "events/",    icon: "events",    label: "module_events",    auto: true, module: "events",   page: true },
+  { key: "bookings",  path: "bookings/",  icon: "bookings",  label: "module_bookings",  auto: true, module: "bookings", page: false },
+  { key: "pets",      path: "pets/",      icon: "pets",      label: "feat_pets",        auto: true, module: "pets",     page: false },
+  { key: "community", path: "community/", icon: "community", label: "module_community", auto: true,                     page: false },
+  { key: "admin",     path: "admin/",     icon: "tools",     label: "tab_admin",        admin: true }
+];
+var JC_HOME_DEST = { key: "home", path: "home/", icon: "house", label: "tab_my_home" };
+var JC_BAR_MAX = 4;                         /* middle buttons; + My Home = 5 (44 px targets) */
+
+function jcDest(key){
+  if (key === "home") return JC_HOME_DEST;
+  for (var i = 0; i < JC_DEST.length; i++) if (JC_DEST[i].key === key) return JC_DEST[i];
+  return null;
+}
+function jcIsAdmin(me){
+  me = me || {};
+  return (Array.isArray(me.admin_scopes) && me.admin_scopes.length > 0) ||
+         (Array.isArray(me.admin_events) && me.admin_events.length > 0) || me.is_owner === true;
+}
+function jcDestOk(key, me, cfg){
+  var d = jcDest(key);
+  if (!d) return false;
+  if (key === "home") return true;
+  if (d.admin) return jcIsAdmin(me);
+  if (d.page === false) return false;
+  if (d.module) {
+    var mods = (cfg && cfg.modules) || {};
+    var m = Object.prototype.hasOwnProperty.call(mods, d.module) ? mods[d.module] : null;
+    return !!(m && m.enabled === true);
+  }
+  return true;
+}
+
+/* The saved choices, strictly read (prefs is stored JSON: never trusted, never rendered —
+   only matched against the registry). Shape: account.prefs.shell =
+   { v: 1, tabs: [key…], start: key, known: [key…] }. Anything unexpected → null (= the default
+   bar). Unknown keys inside tabs/known are dropped one by one (a newer client may know more). */
+function jcShellSaved(me){
+  var p = me && me.account && me.account.prefs;
+  if (!p || typeof p !== "object" || Array.isArray(p) || !Object.prototype.hasOwnProperty.call(p, "shell")) return null;
+  var s = p.shell;
+  if (!s || typeof s !== "object" || Array.isArray(s) || s.v !== 1) return null;
+  function keys(a){
+    if (!Array.isArray(a) || a.length > 12) return null;
+    var out = [];
+    a.forEach(function(k){ if (typeof k === "string" && k !== "home" && jcDest(k) && out.indexOf(k) < 0) out.push(k); });
+    return out;
+  }
+  var tabs = keys(s.tabs);
+  if (!tabs) return null;
+  return { tabs: tabs, known: keys(s.known) || [],
+           start: typeof s.start === "string" && jcDest(s.start) ? s.start : "commons" };
+}
+
+/* What to draw now: { tabs: middle keys in order (≤ 4), start: a key available now, saved }.
+   No saved choice = Commons · live modules (today's bar). Saved: the chosen ones still available,
+   plus any destination that became available since the save (not in `known`) while there is room,
+   so a customised bar never hides a module switched on later. A saved Courts while Courts is off
+   stays saved and comes back with the module. */
+function jcShell(me, cfg){
+  var saved = jcShellSaved(me);
+  var ok = function(k){ return jcDestOk(k, me, cfg); };
+  var tabs;
+  if (!saved) tabs = JC_DEST.filter(function(d){ return d.auto && ok(d.key); }).map(function(d){ return d.key; });
+  else {
+    tabs = saved.tabs.filter(ok);
+    JC_DEST.forEach(function(d){
+      if (d.auto && ok(d.key) && saved.known.indexOf(d.key) < 0 && tabs.indexOf(d.key) < 0) tabs.push(d.key);
+    });
+  }
+  return { tabs: tabs.slice(0, JC_BAR_MAX), start: saved && ok(saved.start) ? saved.start : "commons", saved: saved };
+}
+
+/* root = relative path to the Commons root from the current page ("" or "../"). */
 function jcTabBar(root, active, cfg){
-  var mods = (cfg && cfg.modules) || {};
-  var items = [{ key: "commons", href: root || "./", icon: "mark", label: jcT("tab_home") }];
-  ["events", "bookings"].forEach(function(k){
-    if (mods[k] && mods[k].enabled) items.push({ key: k, href: root + k + "/", icon: k, label: jcT("module_" + k) });
-  });
-  items.push({ key: "home", href: root + "home/", icon: "house", label: jcT("tab_my_home") });
+  var items = jcShell(JC_ME, cfg).tabs.map(jcDest);
+  items.push(JC_HOME_DEST);                  /* outside every filter: the bar is never empty */
 
   var nav = el("tabbar");
   if (!nav) {
@@ -21,9 +96,9 @@ function jcTabBar(root, active, cfg){
   }
   nav.setAttribute("aria-label", jcT("tab_home"));
   nav.innerHTML = items.map(function(it){
-    return '<a href="' + esc(it.href) + '" data-tab="' + esc(it.key) + '"' +
+    return '<a href="' + esc((root + it.path) || "./") + '" data-tab="' + esc(it.key) + '"' +
       (it.key === active ? ' aria-current="page"' : '') + '>' +
-      jcIcon(it.icon, 20) + '<span>' + esc(it.label) + '</span></a>';
+      jcIcon(it.icon, 20) + '<span>' + esc(jcT(it.label)) + '</span></a>';
   }).join("");
   jcBanner(cfg);
   var back = el("jcBackBtn");                 /* language switch: the back label follows (review) */
