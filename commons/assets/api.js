@@ -72,6 +72,11 @@ function jcStandalone(){
 var jcDb = supabase.createClient(JC_URL, JC_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "pkce" }
 });
+/* R4b-1a (security review L3): an admin invite kept for this tab (admin.js) never outlives the session
+   that opened it — on a shared phone the next person must not be asked to accept it */
+jcDb.auth.onAuthStateChange(function(ev){
+  if (ev === "SIGNED_OUT") { try { sessionStorage.removeItem("jc_admin_invite"); } catch(e){} }
+});
 
 function el(id){ return document.getElementById(id); }
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }

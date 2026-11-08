@@ -109,19 +109,19 @@ test("community invite link: fragment URL, shown once, says 24 h + full control;
   await signIn(page);
   await openAdmins(page);
   await page.locator('[data-admake="community"]').click();
-  await expect(page.locator("#adLinkUrl")).toHaveText("http://localhost:4173/commons/admin/#admininvite=TOKEN_community_1abcdefghijklm&role=community");
+  await expect(page.locator('[data-adurl="community"]')).toHaveText("http://localhost:4173/commons/admin/#admininvite=TOKEN_community_1abcdefghijklm");
   expect(lastCall(calls, "jc_module_admin_link_create").args).toEqual({ p_scope: "community" });
   const box = page.locator('[data-scope="community"] .codebox');
   await expect(box).toContainText("24 hours");
   await expect(box).toContainText("full control of the community");
   await expect(page.locator('[data-scope="community"] .adminlist li')).toHaveCount(2);   // + the unused link
   await page.locator("#langBtn").click();
-  await expect(page.locator("#adLinkUrl")).toContainText("#admininvite=TOKEN_community_1");
+  await expect(page.locator('[data-adurl="community"]')).toContainText("#admininvite=TOKEN_community_1");
   await page.locator("#langBtn").click();
   await page.locator("#jcBackBtn").click();                                   // leaving drops it: it is never shown again
   await page.locator("#adOpen").click();
   await expect(page.locator('[data-scope="community"] .adminlist li')).toHaveCount(2);
-  await expect(page.locator("#adLinkUrl")).toHaveCount(0);
+  await expect(page.locator("[data-adurl]")).toHaveCount(0);
 });
 
 test("an events link says 3 days; shown even when the list refresh fails", async ({ page }) => {
@@ -132,7 +132,7 @@ test("an events link says 3 days; shown even when the list refresh fails", async
   await signIn(page);
   await openAdmins(page);
   await page.locator('[data-admake="events"]').click();
-  await expect(page.locator("#adLinkUrl")).toContainText("&role=events");
+  await expect(page.locator('[data-adurl="events"]')).toContainText("#admininvite=TOKEN_events_1");
   await expect(page.locator('[data-scope="events"] .codebox')).toContainText("for 3 days");
 });
 
@@ -193,13 +193,14 @@ test("removing yourself while another community admin remains: re-reads who you 
   await expect(page.locator("#code")).toBeVisible();                        // no admin right left → the code box
 });
 
-test("invite link: token dropped from the URL, asks first (role named), accepts once; a courts admin gets in", async ({ page }) => {
+test("invite link: token dropped from the URL, asks first (names no level), accepts once and names it; a courts admin gets in", async ({ page }) => {
   const b = backend({ scopes: [], acceptable: { [TOKEN]: "bookings" } });
   const { calls } = await stubBackend(page, { rpc: b.rpc });
   await signIn(page);
-  await page.goto("admin/#admininvite=" + TOKEN + "&role=bookings");
+  await page.goto("admin/#admininvite=" + TOKEN);
   await expect(page.locator("h1")).toHaveText("Help Run Your Community");
-  await expect(page.locator(".panel p").first()).toHaveText("You've been invited to join the Courts admins of your community.");
+  await expect(page.locator(".acclist")).toContainText("You'll see it named as soon as you accept");
+  await expect(page.locator(".acclist")).not.toContainText("Courts");
   await expect(page.locator(".acclist li")).toHaveCount(3);
   expect(new URL(page.url()).hash).toBe("");
   expect(calls.some((c) => c.name === "jc_module_admin_accept")).toBe(false);
@@ -218,7 +219,7 @@ test("invite link used / expired: explained, no second Accept, forgotten; Arabic
   const b = backend({ scopes: [] });
   await stubBackend(page, { rpc: b.rpc });
   await signIn(page);
-  await page.goto("admin/#admininvite=" + TOKEN + "&role=community");
+  await page.goto("admin/#admininvite=" + TOKEN);
   await page.locator("#langBtn").click();
   await expect(page.locator("h1")).toHaveText("ساعد في إدارة مجتمعك");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
@@ -233,7 +234,7 @@ test("invite link used / expired: explained, no second Accept, forgotten; Arabic
 test("invite while signed out: the token never reaches the sign-in URL; back to the question after signing in", async ({ page }) => {
   const b = backend({ scopes: [], acceptable: { [TOKEN]: "events" } });
   await stubBackend(page, { rpc: b.rpc });
-  await page.goto("admin/#admininvite=" + TOKEN + "&role=events");
+  await page.goto("admin/#admininvite=" + TOKEN);
   await expect(page).toHaveURL(/\/commons\/account\/\?next=/);
   expect(page.url()).not.toContain(TOKEN);
   expect(new URL(page.url()).searchParams.get("next")).toBe("../admin/");
@@ -241,16 +242,16 @@ test("invite while signed out: the token never reaches the sign-in URL; back to 
   await page.locator("#password").fill("correct-horse");
   await page.locator("#go").click();
   await expect(page).toHaveURL(/\/commons\/admin\/$/);
-  await expect(page.locator(".panel p").first()).toHaveText("You've been invited to join the Event organizers of your community.");
+  await expect(page.locator("#invYes")).toBeVisible();
   await page.locator("#invYes").click();
   await expect(page.locator("#msg")).toHaveText("Done. You've joined the Event organizers.");
 });
 
-test("a malformed invite fragment is dropped and ignored", async ({ page }) => {
+test("a malformed invite fragment (incl. a role hint) is dropped and ignored", async ({ page }) => {
   const b = backend({ scopes: [] });
   const { calls } = await stubBackend(page, { rpc: b.rpc });
   await signIn(page);
-  await page.goto("admin/#admininvite=<script>&role=community");
+  await page.goto("admin/#admininvite=" + TOKEN + "&role=community");   // the old role hint: not a valid link
   await expect(page.locator("#code")).toBeVisible();
   expect(new URL(page.url()).hash).toBe("");
   expect(calls.some((c) => c.name === "jc_module_admin_accept")).toBe(false);
@@ -284,10 +285,124 @@ for (const lang of ["en", "ar"]) {
     await page.goto("admin/?tab=community");
     await page.locator("#adOpen").click();
     await page.locator('[data-admake="community"]').click();
-    await expect(page.locator("#adLinkUrl")).toBeVisible();
+    await expect(page.locator('[data-adurl="community"]')).toBeVisible();
     expect(await axeClean(page)).toEqual([]);
-    await page.goto("admin/#admininvite=" + TOKEN + "&role=community");
+    await page.goto("admin/#admininvite=" + TOKEN);
     await expect(page.locator("#invYes")).toBeVisible();
     expect(await axeClean(page)).toEqual([]);
   });
 }
+
+// ── review fixes (docs/qa/R4b-1a-review-2026-11-08.md) ──
+test("code review M1: a shown link survives another level's Make and Remove; leaving drops both", async ({ page }) => {
+  const b = backend();
+  await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openAdmins(page);
+  await page.locator('[data-admake="community"]').click();
+  await expect(page.locator('[data-adurl="community"]')).toBeVisible();
+  await page.locator('[data-admake="bookings"]').click();
+  await expect(page.locator('[data-adurl="bookings"]')).toBeVisible();
+  page.once("dialog", (d) => d.accept());
+  await page.locator('[data-adrm="events"][data-user="u-7"]').click();
+  await expect(page.locator("#msg")).toHaveText("Removed.");
+  await expect(page.locator('[data-adurl="community"]')).toContainText("TOKEN_community_1");
+  await expect(page.locator('[data-adurl="bookings"]')).toContainText("TOKEN_bookings_2");
+  await page.locator("#jcBackBtn").click();
+  await page.locator("#adOpen").click();
+  await expect(page.locator('[data-scope="bookings"] .adminlist li')).toHaveCount(1);
+  await expect(page.locator("[data-adurl]")).toHaveCount(0);
+});
+
+test("a double tap on Make makes one link", async ({ page }) => {
+  const b = backend();
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const rpc = Object.assign({}, b.rpc, { jc_module_admin_link_create: async (a, c) => { await gate; return b.rpc.jc_module_admin_link_create(a, c); } });
+  const { calls } = await stubBackend(page, { rpc });
+  await signIn(page);
+  await openAdmins(page);
+  await page.locator('[data-admake="events"]').dblclick();
+  await page.locator('[data-admake="community"]').click({ force: true });   // another level while one is in flight
+  release();
+  await expect(page.locator('[data-adurl="events"]')).toBeVisible();
+  expect(calls.filter((c) => c.name === "jc_module_admin_link_create").length).toBe(1);
+});
+
+test("code review L1: lists that can't be read say so, with Try Again", async ({ page }) => {
+  let fails = true;
+  const b = backend({ listFails: () => fails });
+  await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await page.goto("admin/?tab=community");
+  await page.locator("#adOpen").click();
+  await expect(page.locator("#adRetry")).toBeVisible();
+  await expect(page.locator("#msg")).toHaveText("Something went wrong. Try again in a moment.");
+  await expect(page.locator("#view")).not.toContainText("Working");
+  fails = false;
+  await page.locator("#adRetry").click();
+  await expect(page.locator("h2.group")).toHaveCount(3);
+});
+
+test("NOT_ADMIN while on Admins goes back through the re-check (no stale screen)", async ({ page }) => {
+  const b = backend();
+  await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openAdmins(page);
+  b.st.scopes = [];                                                       // the grant ended elsewhere
+  await page.locator('[data-admake="events"]').click();
+  await expect(page.locator("#code")).toBeVisible();
+  await expect(page.locator("#msg")).toContainText(/./);
+});
+
+test("removing another community admin stays on Admins and re-reads every level", async ({ page }) => {
+  const b = backend({ lists: { community: [ME, Object.assign({}, OMAR, { user_id: "u-8" })] } });
+  const { calls } = await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openAdmins(page);
+  const before = calls.filter((c) => c.name === "jc_module_admins_list").length;
+  page.once("dialog", (d) => d.accept());
+  await page.locator('[data-adrm="community"][data-user="u-8"]').click();
+  await expect(page.locator("#msg")).toHaveText("Removed.");
+  await expect(page.locator("h1")).toHaveText("Admins");
+  expect(calls.filter((c) => c.name === "jc_module_admins_list").length).toBe(before + 3);
+});
+
+test("code review L3: an accepted level with no screens here yet says it worked and offers the way out", async ({ page }) => {
+  const b = backend({ scopes: [], acceptable: { [TOKEN]: "pets" } });
+  await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await page.goto("admin/#admininvite=" + TOKEN);
+  await page.locator("#invYes").click();
+  await expect(page.locator("#msg")).toHaveText("Done. You've joined the Pets admins.");
+  await expect(page.locator('#view a[href="../"]')).toBeVisible();
+});
+
+test("code review L2: No Thanks is off while the answer is on its way", async ({ page }) => {
+  const b = backend({ scopes: [], acceptable: { [TOKEN]: "events" } });
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const rpc = Object.assign({}, b.rpc, { jc_module_admin_accept: async (a, c) => { await gate; return b.rpc.jc_module_admin_accept(a, c); } });
+  await stubBackend(page, { rpc });
+  await signIn(page);
+  await page.goto("admin/#admininvite=" + TOKEN);
+  await page.locator("#invYes").click();
+  await expect(page.locator("#invNo")).toBeDisabled();
+  release();
+  await expect(page.locator("#msg")).toHaveText("Done. You've joined the Event organizers.");
+});
+
+test("security L3: a kept invite older than an hour is forgotten; signing out forgets it too", async ({ page }) => {
+  const b = backend({ scopes: [], acceptable: { [TOKEN]: "events" } });
+  await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await page.evaluate((t) => sessionStorage.setItem("jc_admin_invite", JSON.stringify({ token: t, at: Date.now() - 3601e3 })), TOKEN);
+  await page.goto("admin/");
+  await expect(page.locator("#code")).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem("jc_admin_invite"))).toBeNull();
+  await page.evaluate((t) => sessionStorage.setItem("jc_admin_invite", JSON.stringify({ token: t, at: Date.now() })), TOKEN);
+  await page.goto("account/");
+  await page.locator("#signOut").click();
+  await expect(page.locator("#email")).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem("jc_admin_invite"))).toBeNull();
+});
