@@ -18,7 +18,7 @@ declare
   o1 uuid := '00000000-0000-4000-8000-000000001910';  -- testville19b: community by invite
   o2 uuid := '00000000-0000-4000-8000-000000001911';  -- testville19b: community code, gone stale
   ow uuid := '00000000-0000-4000-8000-000000001912';  -- testville19b member who is a platform owner
-  v jsonb; k int := 0; msg text; q text; s text; tok text; tok2 text; l_id uuid; evt uuid; evt2 uuid; n int;
+  v jsonb; k int := 0; msg text; q text; s text; tok text; tok2 text; tok3 text; l_id uuid; evt uuid; evt2 uuid; n int; i int;
 begin
   execute $f$create function pg_temp.s19_as(u uuid) returns void language sql as
     $b$ select set_config('request.jwt.claims', json_build_object('sub', u, 'role', 'authenticated')::text, true) $b$$f$;
@@ -63,7 +63,11 @@ begin
   perform pg_temp.s19_as(c1);
   foreach s in array array['community', 'events', 'bookings', 'pets'] loop
     v := jc_module_admin_link_create(s);
-    if v ->> 'scope' is distinct from s or length(v ->> 'token') < 20 then raise exception 'FAIL UA01a % link: %', s, v; end if;
+    if v ->> 'scope' is distinct from s or length(v ->> 'token') < 20
+       or (v ->> 'expires_at')::timestamptz not between
+            now() + (case when s = 'community' then interval '23 hours' else interval '71 hours' end)
+        and now() + (case when s = 'community' then interval '25 hours' else interval '73 hours' end) then
+      raise exception 'FAIL UA01a % link: %', s, v; end if;
     v := jc_module_admins_list(s);
     if v ->> 'scope' is distinct from s or jsonb_array_length(v -> 'links') is distinct from 1 then
       raise exception 'FAIL UA01b % list: %', s, v; end if;
@@ -337,23 +341,100 @@ begin
   if (select (metrics ->> 'admins')::int from jc_snapshots
        where community_id = 'testville19b' and module = 'accounts' and bucket = date_trunc('hour', now())) is distinct from 1 then
     raise exception 'FAIL UA12c snapshot admins 19b'; end if;
-  -- testville19: c1 (code + invite), ca (invite), ev (invite), bk (invite), ec (lapsed code: not counted) = 4
+  -- testville19: c1 (community code + invite), ca (community invite), ev (events invite), bk (bookings invite) = 4;
+  -- not counted: ec (code lapsed 61 days), pe (per-event only), mx (removed), r2 (none)
   if (select (metrics ->> 'admins')::int from jc_snapshots
        where community_id = 'testville19' and module = 'accounts' and bucket = date_trunc('hour', now())) is distinct from 4 then
     raise exception 'FAIL UA12d snapshot admins 19: %', (select metrics from jc_snapshots
        where community_id = 'testville19' and module = 'accounts' and bucket = date_trunc('hour', now())); end if;
   k := k + 4;
 
+  -- ---------- UA13 review fixes: links die with their maker, community link cap, both-held revoke, lock, unlock log ----------
+  execute 'set local role authenticated';
+  -- community links: at most 3 open (2 open now: UA01 + UA10 leftovers are used/open — count first)
+  perform pg_temp.s19_as(ca);
+  n := jsonb_array_length(jc_module_admins_list('community') -> 'links');
+  for i in 1..(3 - n) loop perform jc_module_admin_link_create('community'); end loop;
+  if pg_temp.s19_err('select jc_module_admin_link_create(''community'')') is distinct from 'TOO_MANY_LINKS' then
+    raise exception 'FAIL UA13a 4th open community link'; end if;
+  if jc_module_admin_link_create('events') ->> 'token' is null then raise exception 'FAIL UA13b the community cap leaked to events'; end if;
+  -- cancel the open community links by link id (community scope, p_link path) and check BAD_FIELDS
+  for l_id in select (x ->> 'id')::uuid from jsonb_array_elements(jc_module_admins_list('community') -> 'links') x loop
+    perform jc_module_admin_revoke('community', null, l_id);
+  end loop;
+  if jsonb_array_length(jc_module_admins_list('community') -> 'links') is distinct from 0
+     or pg_temp.s19_err('select jc_module_admin_revoke(''community'', null, null)') is distinct from 'BAD_FIELDS' then
+    raise exception 'FAIL UA13c community link revoke / BAD_FIELDS'; end if;
+  -- bk back to community (to remove others later); ca mints community + bookings + per-event links, then is removed
+  perform pg_temp.s19_as(c1); tok := jc_module_admin_link_create('community') ->> 'token';
+  perform pg_temp.s19_as(bk); perform jc_module_admin_accept(tok);
+  perform pg_temp.s19_as(ca);
+  tok := jc_module_admin_link_create('community') ->> 'token';
+  tok2 := jc_module_admin_link_create('bookings') ->> 'token';
+  tok3 := jc_event_admin_link_create(evt) ->> 'token';
+  perform pg_temp.s19_as(c1);
+  v := jc_module_admin_revoke('community', ca, null);
+  if jsonb_array_length(v -> 'links') is distinct from 0 then raise exception 'FAIL UA13d removed admin''s links still listed: %', v -> 'links'; end if;
+  perform pg_temp.s19_as(r2);
+  if pg_temp.s19_err(format('select jc_module_admin_accept(%L)', tok)) is distinct from 'BAD_LINK'
+     or pg_temp.s19_err(format('select jc_module_admin_accept(%L)', tok2)) is distinct from 'BAD_LINK'
+     or pg_temp.s19_err(format('select jc_event_admin_accept(%L)', tok3)) is distinct from 'BAD_LINK' then
+    raise exception 'FAIL UA13e a removed admin''s link still works'; end if;
+  if jc_me_get() -> 'admin_scopes' is distinct from '[]'::jsonb then raise exception 'FAIL UA13f r2 gained a scope'; end if;
+  -- a link whose maker silently stopped being an admin (code lapse; nothing cancelled it) fails at accept
+  perform pg_temp.s19_as(o2); tok := jc_module_admin_link_create('community') ->> 'token';
+  execute 'reset role';
+  update jc_admin_grants set last_used_at = now() - interval '61 days' where user_id = o2 and scope = 'community';
+  execute 'set local role authenticated';
+  perform pg_temp.s19_as(o1);
+  if pg_temp.s19_err(format('select jc_module_admin_accept(%L)', tok)) is distinct from 'BAD_LINK' then
+    raise exception 'FAIL UA13g a lapsed maker''s link worked'; end if;
+  -- removing someone who holds community by code AND invite ends both
+  perform pg_temp.s19_as(bk);
+  perform jc_module_admin_revoke('community', c1, null);
+  perform pg_temp.s19_as(c1);
+  if pg_temp.s19_err('select jc_admin_homes_list()') is distinct from 'NOT_ADMIN' then raise exception 'FAIL UA13h c1 kept community'; end if;
+  execute 'reset role';
+  if exists (select 1 from jc_module_admins where user_id = c1 and scope = 'community')
+     or exists (select 1 from jc_admin_grants where user_id = c1 and scope = 'community')
+     or not exists (select 1 from jc_admin_log where action = 'module_admin_revoke' and actor = bk
+                     and (target ->> 'user_id')::uuid = c1 and (target ->> 'grant_removed')::boolean
+                     and (target ->> 'code_unlock_removed')::boolean) then
+    raise exception 'FAIL UA13i both-held revoke'; end if;
+  if not exists (select 1 from jc_admin_log where action = 'module_admin_revoke' and actor = c1
+                  and (target ->> 'user_id')::uuid = ca and (target ->> 'links_cancelled')::int = 6) then   -- tok, tok2, tok3 + UA03c pets + evt2 links + UA13b events
+    raise exception 'FAIL UA13j links_cancelled log: %', (select target from jc_admin_log where action = 'module_admin_revoke' and actor = c1 and (target ->> 'user_id')::uuid = ca); end if;
+  -- the community-admin advisory lock is held by this transaction (taken by revoke 'community' in testville19b,
+  -- where no member_remove ran)
+  if not exists (select 1 from pg_locks where locktype = 'advisory' and pid = pg_backend_pid()
+                  and classid::bigint = (hashtext('jc_community_admins')::bigint & 4294967295)
+                  and objid::bigint = (hashtext('testville19b')::bigint & 4294967295)) then
+    raise exception 'FAIL UA13k revoke did not take the community-admin lock'; end if;
+  -- a code unlock is logged (scopes only, never the code)
+  if not exists (select 1 from jc_admin_log where action = 'admin_unlock' and actor = ec and community_id = 'testville19'
+                  and target = '{"scopes": ["events"]}'::jsonb)
+     or exists (select 1 from jc_admin_log where action = 'admin_unlock' and target::text ilike '%S19%') then
+    raise exception 'FAIL UA13l unlock log'; end if;
+  -- link log carries link id + expiry
+  if exists (select 1 from jc_admin_log where action = 'module_admin_link' and community_id = 'testville19'
+              and (target ->> 'link_id' is null or target ->> 'expires_at' is null)) then
+    raise exception 'FAIL UA13m link log'; end if;
+  k := k + 13;
+
   -- ---------- G01 helpers stay internal; gates unchanged in kind ----------
   if has_function_privilege('authenticated', 'public.jc_community_admin_count(text)', 'execute')
      or has_function_privilege('anon', 'public.jc_community_admin_count(text)', 'execute')
      or has_function_privilege('authenticated', 'public.jc_admins_payload(text, text)', 'execute')
      or has_function_privilege('anon', 'public.jc_admins_payload(text, text)', 'execute')
+     or has_function_privilege('authenticated', 'public.jc_community_admin_is(uuid, text)', 'execute')
+     or has_function_privilege('anon', 'public.jc_community_admin_is(uuid, text)', 'execute')
+     or has_function_privilege('authenticated', 'public.jc_admin_links_cancel_by(uuid, text)', 'execute')
+     or has_function_privilege('anon', 'public.jc_admin_links_cancel_by(uuid, text)', 'execute')
      or has_function_privilege('authenticated', 'public.jc_events_organizer()', 'execute') then
     raise exception 'FAIL G01a an internal helper is callable'; end if;
   if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace
-        and p.proname in ('jc_community_admin_count', 'jc_admins_payload')
-        and p.prosecdef and 'search_path=public, pg_temp' = any(p.proconfig)) <> 2 then
+        and p.proname in ('jc_community_admin_count', 'jc_community_admin_is', 'jc_admins_payload', 'jc_admin_links_cancel_by')
+        and p.prosecdef and 'search_path=public, pg_temp' = any(p.proconfig)) <> 4 then
     raise exception 'FAIL G01b helpers not definer / pinned'; end if;
   if (select string_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', ', ' order by p.proname)
         from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'jc\_module\_admin%')

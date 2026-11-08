@@ -325,7 +325,8 @@ begin
                      and actor = c1 and (target ->> 'user_id')::uuid = bk) then
     raise exception 'FAIL MA12a audit log'; end if;
   if exists (select 1 from jc_admin_log l, jsonb_object_keys(l.target) key
-              where l.action like 'module_admin%' and key not in ('scope', 'link_id', 'user_id', 'code_unlock_removed')) then   -- R4a-3: + code_unlock_removed
+              where l.action like 'module_admin%' and key not in ('scope', 'link_id', 'user_id', 'code_unlock_removed', 'grant_removed',
+                                 'links_cancelled', 'expires_at')) then   -- R4a-3: + these
     raise exception 'FAIL MA12b the log holds more than scope / link / user (a token?)'; end if;
   delete from auth.users where id = b2;
   if exists (select 1 from jc_module_admins where user_id = b2) then raise exception 'FAIL MA12c grant outlived the account'; end if;
