@@ -31,7 +31,7 @@ begin
   insert into jc_events (community_id, slug, title_en, status) values ('testville6', 'later', 'Later', 'draft') returning id into v_ev;
   insert into jc_event_entries (event_id, community_id, home_id) values (v_ev, 'testville6', v_h1);
   -- bookings: one in 2 h, one in 3 days, one cancelled, one past
-  insert into jc_facilities (community_id, kind, name_en, status) values ('testville6', 'padel', 'Court 1', 'published') returning id into v_fac;
+  insert into jc_facilities (community_id, kind, name_en, status) values ('testville6', 'tennis', 'Court 1', 'published') returning id into v_fac;
   insert into jc_bookings (community_id, facility_id, home_id, starts_at, ends_at) values
     ('testville6', v_fac, v_h1, v_at + interval '2 hours', v_at + interval '3 hours'),
     ('testville6', v_fac, v_h1, v_at + interval '3 days', v_at + interval '3 days 1 hour'),

@@ -45,7 +45,7 @@ begin
   v := jc_admin_event_save(null, '{"slug": "lights", "title_en": "Holiday Lights", "look": "holiday_lights",
                                    "features": {"giant_switch": true}, "starts_at": "2099-12-20T16:00:00Z"}');
   ev := pg_temp.s16_ev(v, 'lights');
-  if ev is null or (v -> 0 ->> 'look') is distinct from 'holiday_lights' then
+  if ev is null or (select e ->> 'look' from jsonb_array_elements(v) e where (e ->> 'id')::uuid = ev) is distinct from 'holiday_lights' then
     raise exception 'FAIL L01a a holiday lights event was not saved with its look'; end if;
   if pg_temp.s16_err(format('select jc_admin_event_save(%L, %L)', ev, '{"look": "disco"}')) is distinct from 'BAD_FIELDS' then
     raise exception 'FAIL L01b an unknown look is still refused'; end if;
