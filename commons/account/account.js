@@ -116,6 +116,9 @@ var VIEWS = {
   forgot: function(){
     el("view").innerHTML =
       '<h1>' + esc(jcT("forgot_title")) + '</h1>' +
+      /* R3a: the app saved to the Home Screen can't finish a reset — the emailed link opens in the
+         browser, which doesn't hold this app's PKCE verifier (R3 premortem 6a) */
+      (jcStandalone() ? '<p class="sub" id="standaloneNote">' + esc(jcT("forgot_standalone")) + '</p>' : '') +
       '<form class="panel" id="form" novalidate>' +
         field("email", "acct_email", "email", "email") +
         msgBox() +

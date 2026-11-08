@@ -34,3 +34,20 @@ legend{font-size:13px; font-weight:700; color:var(--jc-muted); margin-bottom:6px
 #fbForm .opts button[aria-pressed="true"]{border-color:var(--jc-accent); box-shadow:inset 0 0 0 1px var(--jc-accent)}
 #fbForm textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-surface-2); border:1px solid var(--jc-line);
   border-radius:10px; padding:10px 12px; width:100%; min-height:110px; resize:vertical}
+
+/* R3a: bottom bar + start page (Account tab). Buttons, not drag: keyboard / screen reader / RTL alike. */
+.shellrows{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
+.shellrows li{display:flex; align-items:center; gap:6px; background:var(--jc-surface-2); border:1px solid var(--jc-line);
+  border-radius:10px; padding-block:4px; padding-inline:12px 6px; min-height:52px}
+.shellrows .nm{flex:1; display:flex; align-items:center; gap:10px; font-weight:700; min-width:0}
+.shellrows .nm .ico{color:var(--jc-accent); flex:0 0 auto}
+.shellrows li.fixed .help{margin:0; font-size:12.5px}
+.shellrows button{font:inherit; font-size:14px; font-weight:700; cursor:pointer; color:var(--jc-ink); background:var(--jc-surface);
+  border:1px solid var(--jc-line); border-radius:10px; min-width:44px; min-height:44px; padding:0 10px}
+.shellrows .sw{min-width:76px}
+.shellrows .sw[aria-checked="true"]{border-color:var(--jc-accent); box-shadow:inset 0 0 0 1px var(--jc-accent); color:var(--jc-accent)}
+.shellrows button[disabled]{opacity:.4; cursor:not-allowed}
+.starts label.radio{flex-direction:row; align-items:center; gap:10px; font-size:15px; color:var(--jc-ink); min-height:44px}
+.starts input[type=radio]{width:20px; height:20px; accent-color:var(--jc-accent); margin:0}
+.install summary{cursor:pointer; font-weight:700; color:var(--jc-accent); min-height:44px; display:flex; align-items:center}
+.install .helplist{font-size:14px}

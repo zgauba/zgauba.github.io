@@ -45,6 +45,25 @@ function jcCommunityName(cfg, id){
 var JC_URL_HASH = location.hash;
 var JC_URL_SEARCH = location.search;
 
+/* R3a start page: true only on the first Commons page of this browser tab / app launch
+   (sessionStorage is per tab and per launch). Set on every page, so a reload, a tap on
+   Commons, a sign-in return or an auto-update reload is never "first". No storage → false
+   (never redirect). */
+var JC_FIRST_PAGE = (function(){
+  try { var f = !sessionStorage.getItem("jc_seen"); sessionStorage.setItem("jc_seen", "1"); return f; }
+  catch(e){ return false; }
+})();
+/* The last jc_me_get this page saw (jcState, or a write that returns it). The bar reads its
+   saved choices from here, so its callers never pass them in. */
+var JC_ME = null;
+
+/* Running as the app saved to the Home Screen (R3b): iPhone (navigator.standalone) or a
+   standalone display mode. */
+function jcStandalone(){
+  try { return navigator.standalone === true || !!(window.matchMedia && matchMedia("(display-mode: standalone)").matches); }
+  catch(e){ return false; }
+}
+
 /* flowType 'pkce' (PR #18 review): the default implicit flow adopts ANY session
    handed to it in a URL fragment — a crafted link could silently swap a resident's
    session for an attacker's (login CSRF). PKCE only exchanges a ?code= when THIS
@@ -99,6 +118,7 @@ function jcState(){
     if (!session) return { status: "signed_out" };
     var email = session.user && session.user.email;
     return rpc("jc_me_get").then(function(me){
+      JC_ME = me;
       return { status: "member", email: email, me: me };
     }, function(e){
       if (e.code === "NOT_MEMBER") return { status: "not_member", email: email };
