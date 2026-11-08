@@ -67,13 +67,16 @@ begin
   if v_err is distinct from 'MODULE_OFF' then raise exception 'FAIL C01b: %', v_err; end if;
   execute 'reset role';
   update jc_communities set modules = jsonb_set(modules, '{bookings,enabled}', 'true') where id = 'jubail';
+  -- R4a: w4's household joined before today. In one transaction joined_at = cancelled_at = now(), which
+  -- jc_my_bookings' "cancelled since you joined" filter rightly hides; C10b / C11e used to pass on a NULL.
+  update jc_home_members set joined_at = now() - interval '1 day' where user_id = w4;
   if (select modules -> 'bookings' ->> 'per_home_per_day' from jc_communities where id = 'jubail') <> '1' then
     raise exception 'FAIL C01c quota rule missing from config'; end if;
   execute 'set local role authenticated';
   k := k + 3;
 
   -- ---------- C02 admin gates + validation ----------
-  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "padel", "name_en": "X"}'); exception when others then v_err := sqlerrm; end;
+  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "tennis", "name_en": "X"}'); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'NOT_ADMIN' then raise exception 'FAIL C02a resident: %', v_err; end if;
   perform set_config('request.jwt.claims', json_build_object('sub', w7, 'role', 'authenticated')::text, true);
   v_err := null; begin perform jc_admin_facilities_list(); exception when others then v_err := sqlerrm; end;
@@ -81,21 +84,21 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', w6, 'role', 'authenticated')::text, true);
   v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "squash", "name_en": "X"}'); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'BAD_FIELDS' then raise exception 'FAIL C02c kind: %', v_err; end if;
-  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "padel", "name_en": "X", "colour": "red"}'); exception when others then v_err := sqlerrm; end;
+  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "tennis", "name_en": "X", "colour": "red"}'); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'BAD_FIELDS' then raise exception 'FAIL C02d unknown key: %', v_err; end if;
-  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "padel", "name_en": "X", "slot_minutes": 50}'); exception when others then v_err := sqlerrm; end;
+  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "tennis", "name_en": "X", "slot_minutes": 50}'); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'BAD_FIELDS' then raise exception 'FAIL C02e slot length: %', v_err; end if;
-  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "padel", "name_en": "X", "open_time": "22:00", "close_time": "07:00"}'); exception when others then v_err := sqlerrm; end;
+  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "tennis", "name_en": "X", "open_time": "22:00", "close_time": "07:00"}'); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'BAD_FIELDS' then raise exception 'FAIL C02f hours: %', v_err; end if;
-  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "padel", "name_en": "X", "open_time": "07:00:30"}'); exception when others then v_err := sqlerrm; end;
+  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "tennis", "name_en": "X", "open_time": "07:00:30"}'); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'BAD_FIELDS' then raise exception 'FAIL C02h seconds in hours: %', v_err; end if;
-  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "padel", "name_en": "X", "close_time": "24:00"}'); exception when others then v_err := sqlerrm; end;
+  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "tennis", "name_en": "X", "close_time": "24:00"}'); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'BAD_FIELDS' then raise exception 'FAIL C02i midnight close: %', v_err; end if;
-  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "padel", "name_en": "X", "open_time": "10:00", "close_time": "10:30"}'); exception when others then v_err := sqlerrm; end;
+  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "tennis", "name_en": "X", "open_time": "10:00", "close_time": "10:30"}'); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'BAD_FIELDS' then raise exception 'FAIL C02j hours shorter than a slot: %', v_err; end if;
-  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "padel", "name_en": "   "}'); exception when others then v_err := sqlerrm; end;
+  v_err := null; begin perform jc_admin_facility_save(null, '{"kind": "tennis", "name_en": "   "}'); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'BAD_FIELDS' then raise exception 'FAIL C02k blank name: %', v_err; end if;
-  v := jc_admin_facility_save(null, '{"kind": "padel", "name_en": "Padel 1", "location_note": "Behind the souk"}');
+  v := jc_admin_facility_save(null, '{"kind": "tennis", "name_en": "Padel 1", "location_note": "Behind the souk"}');
   select (x ->> 'id')::uuid into v_fac from jsonb_array_elements(v) x where x ->> 'name_en' = 'Padel 1';
   if v_fac is null then raise exception 'FAIL C02g create: %', v; end if;
   k := k + 11;
@@ -109,8 +112,11 @@ begin
   if v_err is distinct from 'NOT_FOUND' then raise exception 'FAIL C03c booked a draft: %', v_err; end if;
   perform set_config('request.jwt.claims', json_build_object('sub', w6, 'role', 'authenticated')::text, true);
   perform jc_admin_facility_status(v_fac, 'published');
-  v_err := null; begin perform jc_admin_facility_status(v_fac, 'draft'); exception when others then v_err := sqlerrm; end;
-  if v_err is distinct from 'BAD_STATE' then raise exception 'FAIL C03d unpublish: %', v_err; end if;
+  -- R4a: Unpublish (published -> draft) is allowed; publishing twice is not
+  perform jc_admin_facility_status(v_fac, 'draft');
+  perform jc_admin_facility_status(v_fac, 'published');
+  v_err := null; begin perform jc_admin_facility_status(v_fac, 'published'); exception when others then v_err := sqlerrm; end;
+  if v_err is distinct from 'BAD_STATE' then raise exception 'FAIL C03d publish twice: %', v_err; end if;
   k := k + 4;
 
   -- ---------- C04 the day grid + window ----------
@@ -147,8 +153,9 @@ begin
   if v_err is distinct from 'OUT_OF_WINDOW' then raise exception 'FAIL C05f beyond window: %', v_err; end if;
   v := jc_booking_create(v_fac, (v_d1 + time '09:00') at time zone tz, 'Omar ' || chr(8238) || '— join in');
   v_b1 := (v ->> 'booking_id')::uuid;
-  if (select x ->> 'state' from jsonb_array_elements(v -> 'day' -> 'slots') x
-       where (x ->> 'starts_at')::timestamptz = (v_d1 + time '09:00') at time zone tz) <> 'mine' then
+  -- R4a: 'day' is the slot array itself (this read v -> 'day' -> 'slots', NULL, and passed vacuously)
+  if (select x ->> 'state' from jsonb_array_elements(v -> 'day') x
+       where (x ->> 'starts_at')::timestamptz = (v_d1 + time '09:00') at time zone tz) is distinct from 'mine' then
     raise exception 'FAIL C05g: %', v; end if;
   k := k + 7;
 
@@ -167,8 +174,9 @@ begin
   v := jc_facility_day(v_fac, v_d1);
   select x into v from jsonb_array_elements(v -> 'slots') x
    where (x ->> 'starts_at')::timestamptz = (v_d1 + time '09:00') at time zone tz;
-  if v ->> 'state' <> 'booked' or v ->> 'display_name' <> 'Omar — join in'
-     or v -> 'booking_id' <> 'null'::jsonb or v -> 'home' <> 'null'::jsonb then
+  -- R4a: never a name; the booking home's label (not its id) unless the booking is private
+  if v ->> 'state' <> 'booked' or v ? 'display_name'
+     or v -> 'booking_id' <> 'null'::jsonb or v -> 'home' ->> 'number' is distinct from '21' or v -> 'home' ? 'id' then
     raise exception 'FAIL C07b resident view of another booking: %', v; end if;
   k := k + 2;
 
@@ -186,7 +194,7 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', w6, 'role', 'authenticated')::text, true);
   v := jc_admin_facility_day(v_fac, v_d1);
   if (select x -> 'home' ->> 'number' from jsonb_array_elements(v -> 'slots') x
-       where (x ->> 'starts_at')::timestamptz = (v_d1 + time '09:00') at time zone tz) <> '23' then
+       where (x ->> 'starts_at')::timestamptz = (v_d1 + time '09:00') at time zone tz) is distinct from '23' then
     raise exception 'FAIL C09: %', v; end if;
   k := k + 1;
 
@@ -195,7 +203,7 @@ begin
   if v_err is distinct from 'REASON_REQUIRED' then raise exception 'FAIL C10a: %', v_err; end if;
   perform jc_admin_booking_cancel(v_b4, 'Court repair');
   perform set_config('request.jwt.claims', json_build_object('sub', w4, 'role', 'authenticated')::text, true);
-  if (select x ->> 'cancel_reason' from jsonb_array_elements(jc_my_bookings()) x where (x ->> 'id')::uuid = v_b4) <> 'Court repair' then
+  if (select x ->> 'cancel_reason' from jsonb_array_elements(jc_my_bookings()) x where (x ->> 'id')::uuid = v_b4) is distinct from 'Court repair' then
     raise exception 'FAIL C10b reason not shown'; end if;
   k := k + 2;
 
@@ -209,12 +217,12 @@ begin
   v := jc_admin_block_create(v_fac, (v_d1 + time '12:00') at time zone tz, (v_d1 + time '14:00') at time zone tz, 'Tournament');
   if (v ->> 'bookings_cancelled')::int <> 1 then raise exception 'FAIL C11b: %', v; end if;
   execute 'reset role';
-  if (select status from jc_bookings where id = v_b1) <> 'booked' then raise exception 'FAIL C11c adjacent 14:00 booking cancelled'; end if;
+  if (select status from jc_bookings where id = v_b1) is distinct from 'booked' then raise exception 'FAIL C11c adjacent 14:00 booking cancelled'; end if;
   if not exists (select 1 from jc_admin_log where action = 'block_create' and target -> 'bookings_cancelled' ? v_b4::text) then
     raise exception 'FAIL C11d cancelled ids not logged'; end if;
   execute 'set local role authenticated';
   perform set_config('request.jwt.claims', json_build_object('sub', w4, 'role', 'authenticated')::text, true);
-  if (select x ->> 'cancel_reason' from jsonb_array_elements(jc_my_bookings()) x where (x ->> 'id')::uuid = v_b4) <> 'Court blocked: Tournament' then
+  if (select x ->> 'cancel_reason' from jsonb_array_elements(jc_my_bookings()) x where (x ->> 'id')::uuid = v_b4) is distinct from 'Court blocked: Tournament' then
     raise exception 'FAIL C11e'; end if;
   perform set_config('request.jwt.claims', json_build_object('sub', w6, 'role', 'authenticated')::text, true);
   v_err := null; begin perform jc_booking_create(v_fac, (v_d1 + time '13:00') at time zone tz, null); exception when others then v_err := sqlerrm; end;
@@ -227,13 +235,15 @@ begin
   v_err := null; begin perform jc_admin_block_remove(v_block); exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'NOT_FOUND' then raise exception 'FAIL C11h double remove: %', v_err; end if;
   perform jc_booking_create(v_fac, (v_d1 + time '13:00') at time zone tz, null);
-  -- an impersonating name: admin clears it, the booking stays
-  perform jc_admin_booking_name_clear(v_b1);
-  perform set_config('request.jwt.claims', json_build_object('sub', w3, 'role', 'authenticated')::text, true);
-  if (select x -> 'display_name' from jsonb_array_elements(jc_facility_day(v_fac, v_d1) -> 'slots') x
-       where (x ->> 'starts_at')::timestamptz = (v_d1 + time '14:00') at time zone tz) <> 'null'::jsonb then
-    raise exception 'FAIL C11i name not cleared'; end if;
-  k := k + 9;
+  -- R4a: the name sent with 'JICM Official' was never stored, so there is nothing for name_clear to clear
+  -- (dead, left for R7's grant audit)
+  v_err := null; begin perform jc_admin_booking_name_clear(v_b1); exception when others then v_err := sqlerrm; end;
+  if v_err is distinct from 'NOT_FOUND' then raise exception 'FAIL C11j name_clear found a name: %', v_err; end if;
+  execute 'reset role';
+  if (select display_name from jc_bookings where id = v_b1) is not null then
+    raise exception 'FAIL C11i a name was stored'; end if;
+  execute 'set local role authenticated';
+  k := k + 10;
 
   -- ---------- C12 the grid is locked while future bookings exist ----------
   perform set_config('request.jwt.claims', json_build_object('sub', w6, 'role', 'authenticated')::text, true);
@@ -258,7 +268,7 @@ begin
   if (select status || ':' || coalesce(cancel_reason, '') || ':' || coalesce(display_name, '-') from jc_bookings where id = v_b3)
      <> 'cancelled:Household left:-' then
     raise exception 'FAIL C14a: %', (select row(status, cancel_reason, display_name) from jc_bookings where id = v_b3); end if;
-  if (select status from jc_bookings where id = v_b1) <> 'booked' then raise exception 'FAIL C14b another home''s booking released'; end if;
+  if (select status from jc_bookings where id = v_b1) is distinct from 'booked' then raise exception 'FAIL C14b another home''s booking released'; end if;
   begin perform jc_bookings_cancel_range(null, null, now(), now() + interval '1 day', 'x'); v_err := null;
   exception when others then v_err := sqlerrm; end;
   if v_err is distinct from 'BAD_SCOPE' then raise exception 'FAIL C14c unscoped bulk cancel: %', v_err; end if;

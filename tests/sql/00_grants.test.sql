@@ -44,7 +44,9 @@ declare
     -- R2a (events audit)
     'jc_admin_broadcast_set_event',
     -- R2b-1 (organizer event-night actions)
-    'jc_admin_entry_live_set', 'jc_admin_entry_withdraw', 'jc_entry_supply_clear'];
+    'jc_admin_entry_live_set', 'jc_admin_entry_withdraw', 'jc_entry_supply_clear',
+    -- R4a (courts to spec: private bookings, effective rules)
+    'jc_booking_book', 'jc_booking_privacy_set', 'jc_admin_booking_rules'];
 begin
   -- Pre-launch suite: fixtures are written into 'jubail' and rolled back. Refuse to run
   -- once real residents exist — post-launch tests must move to a test community.
@@ -136,6 +138,28 @@ begin
      and pr.prosrc ~* '\mcron\.' and pr.proname not in ('jc_admin_report', 'jc_admin_report_core', 'jc_health');
   if n <> 0 then raise exception 'FAIL G18 % unexpected public functions reference cron.', n; end if;
   k := k + 8;
+
+  -- R4a: courts RPC signatures are frozen (create or replace only, never an overload)
+  if (select string_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', ', ' order by p.proname)
+        from pg_proc p where p.pronamespace = 'public'::regnamespace
+         and (p.proname in ('jc_facilities_list', 'jc_facility_day', 'jc_booking_create', 'jc_booking_cancel',
+                            'jc_my_bookings', 'jc_booking_book', 'jc_booking_privacy_set')
+              or p.proname like 'jc\_admin\_facilit%' or p.proname like 'jc\_admin\_block\_%'
+              or p.proname like 'jc\_admin\_booking\_%'))
+     <> 'jc_admin_block_create(p_facility uuid, p_starts timestamp with time zone, p_ends timestamp with time zone, p_reason text), '
+        'jc_admin_block_remove(p_block uuid), jc_admin_booking_cancel(p_booking uuid, p_reason text), '
+        'jc_admin_booking_name_clear(p_booking uuid), jc_admin_booking_rules(), jc_admin_facilities_list(), '
+        'jc_admin_facility_day(p_facility uuid, p_date date), jc_admin_facility_save(p_facility uuid, p_fields jsonb), '
+        'jc_admin_facility_status(p_facility uuid, p_status text), '
+        'jc_booking_book(p_facility uuid, p_starts timestamp with time zone, p_private boolean), '
+        'jc_booking_cancel(p_booking uuid), '
+        'jc_booking_create(p_facility uuid, p_starts timestamp with time zone, p_display_name text), '
+        'jc_booking_privacy_set(p_booking uuid, p_private boolean), jc_facilities_list(), '
+        'jc_facility_day(p_facility uuid, p_date date), jc_my_bookings()' then
+    raise exception 'FAIL G19 a courts signature changed (or gained an overload): %',
+      (select string_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', ', ' order by p.proname)
+         from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'jc\_%book%'); end if;
+  k := k + 1;
 
   -- anything created after the migrations (next slice, or by hand) must start closed
   execute 'create function public.jc_zz_probe() returns int language sql as $f$ select 1 $f$';
