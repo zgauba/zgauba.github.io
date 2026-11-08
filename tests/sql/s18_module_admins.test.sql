@@ -72,7 +72,8 @@ begin
     if msg is distinct from 'NOT_ADMIN' then raise exception 'FAIL MA01c event admin: % -> %', q, msg; end if;
   end loop;
   perform pg_temp.s18_as(c1);
-  foreach s in array array['community', 'events', 'join', 'Bookings', ''] loop
+  -- R4a-3: 'community' and 'events' are now valid scopes (s19); 'join' is never an admin scope
+  foreach s in array array['join', 'Bookings', 'Community', 'owner', ''] loop
     if pg_temp.s18_err(format('select jc_module_admin_link_create(%L)', s)) is distinct from 'BAD_SCOPE'
        or pg_temp.s18_err(format('select jc_module_admins_list(%L)', s)) is distinct from 'BAD_SCOPE' then
       raise exception 'FAIL MA01d scope % accepted', s; end if;
@@ -204,7 +205,7 @@ begin
      or v ->> 'granted_at' is null or v ->> 'last_used_at' is null then
     raise exception 'FAIL MA07b admin row: %', v; end if;
   if (select array_agg(key order by key) from jsonb_object_keys(v) key)
-     is distinct from array['building', 'granted_at', 'last_used_at', 'name', 'number', 'type', 'user_id', 'village'] then
+     is distinct from array['building', 'granted_at', 'idle', 'last_used_at', 'name', 'number', 'type', 'user_id', 'via', 'village'] then   -- R4a-3: + idle, via
     raise exception 'FAIL MA07c admin row keys: %', v; end if;
   if jc_module_admins_list('bookings')::text like '%bk@s18.test%' then raise exception 'FAIL MA07d full email listed'; end if;
   v := jc_module_admins_list('pets');
@@ -324,16 +325,16 @@ begin
                      and actor = c1 and (target ->> 'user_id')::uuid = bk) then
     raise exception 'FAIL MA12a audit log'; end if;
   if exists (select 1 from jc_admin_log l, jsonb_object_keys(l.target) key
-              where l.action like 'module_admin%' and key not in ('scope', 'link_id', 'user_id')) then
+              where l.action like 'module_admin%' and key not in ('scope', 'link_id', 'user_id', 'code_unlock_removed')) then   -- R4a-3: + code_unlock_removed
     raise exception 'FAIL MA12b the log holds more than scope / link / user (a token?)'; end if;
   delete from auth.users where id = b2;
   if exists (select 1 from jc_module_admins where user_id = b2) then raise exception 'FAIL MA12c grant outlived the account'; end if;
   begin
-    insert into jc_module_admins (user_id, community_id, scope) values (r2, 'testville18', 'community');
+    insert into jc_module_admins (user_id, community_id, scope) values (r2, 'testville18', 'join');   -- R4a-3: community is now valid
     msg := null;
   exception when check_violation then msg := 'check';
   end;
-  if msg is distinct from 'check' then raise exception 'FAIL MA12d a per-person community grant was stored'; end if;
+  if msg is distinct from 'check' then raise exception 'FAIL MA12d a per-person join grant was stored'; end if;
   begin
     insert into jc_module_admins (user_id, community_id, scope) values (o1, 'testville18', 'pets');
     msg := null;
