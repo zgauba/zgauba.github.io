@@ -47,6 +47,12 @@ var adLinks = {};         /* scope → url: new invite links, shown until the pe
                              (code review M1: another level's Remove / Make never wipes one) */
 var adErr = null;         /* the lists couldn't be read (not NOT_ADMIN): shown with Try Again */
 var adBusy = false;       /* one admins write at a time */
+/* R4b-1b — the Courts tab (scope bookings or community; the server enforces jc_assert_admin('bookings')) */
+var ct = null;            /* { list (jc_admin_facilities_list), rules (jc_admin_booking_rules) } | { err } | null */
+var ctLoading = false;
+var ctNote = null;        /* an error code to show once the re-read list is drawn (a stale change) */
+var ctBusy = false;       /* a status change is in flight */
+var ctEd = null;          /* court editor: { f (original row) | null, draft (form values across a language switch) | null, pin {lat,lng} | null } */
 var adminEvents = [];     /* jc_me_get.admin_events — events this person runs (no code needed) */
 var admining = null;      /* id of the event whose Admins panel is open */
 var adminsData = null;    /* jc_event_admins_list for it */
@@ -75,6 +81,7 @@ var ADM_TABS = [
   { key: "events",    show: function(){ return isOrganizer() || isEventAdmin(); }, html: admEventsHtml },
   { key: "banner",    show: function(){ return isOrganizer() || events.some(function(e){ return e.status === "live"; }); },
     html: admBannerHtml },
+  { key: "courts",    show: isCourtsAdmin, html: admCourtsHtml },
   { key: "community", show: function(){ return true; }, html: admCommunityHtml }
 ];
 function adminTabs(){
@@ -190,6 +197,7 @@ function title(ev){ return ar() && ev.title_ar ? ev.title_ar : ev.title_en; }
 function has(s){ return scopes.indexOf(s) >= 0; }
 function isOrganizer(){ return has("events") || has("community"); }
 function isEventAdmin(){ return adminEvents.length > 0; }
+function isCourtsAdmin(){ return has("bookings") || has("community"); }
 /* R4b-1a: a courts (bookings) admin gets in too — Community tab now, the Courts tab in R4b-1b */
 function canEnter(){ return isOrganizer() || isEventAdmin() || owner || has("bookings"); }
 function byId(id){ return events.filter(function(e){ return e.id === id; })[0]; }
@@ -216,7 +224,7 @@ function fail(e){
   /* one event closing or one grant ending must not drop the others (code review PR B):
      re-read who this is, then land wherever they still belong */
   admining = null; adminsData = null; closing = null; su = null; pm = null; ad = null; adBusy = false;
-  hh = null; hlog = null; health = null;   /* a right that ended must not leave its data cached (security L5) */
+  hh = null; hlog = null; health = null; ct = null; ctEd = null; ctBusy = false;   /* a right that ended must not leave its data cached (security L5) */
   rpc("jc_me_get").then(function(me){
     scopes = me.admin_scopes || []; adminEvents = me.admin_events || []; owner = !!me.is_owner;
     if (!canEnter()) { show("lock"); return showErr("NOT_ADMIN"); }
@@ -235,6 +243,7 @@ function show(name){
        : name === "pinmove" ? function(){ pm = null; show("signups"); }
        : name === "feedback" || name === "health" || name === "households" || name === "admins" ? function(){ show("home"); }
        : name === "adminlog" ? function(){ show("households"); }
+       : name === "court" ? function(){ ctEd = null; show("home"); }
        : name === "hhpin" ? function(){ if (hhBusy) return; hhPin = null; show("households"); } : null, "back");
   jcHelp(name === "lock" ? null : "admin");
   var refocus = jcFocusKeep();
@@ -513,6 +522,7 @@ var VIEWS = {
     });
     wireAdmins();
     wireBanner();
+    wireCourts();
     var closeForm = el("closeForm");
     if (closeForm) closeForm.addEventListener("submit", function(e2){ e2.preventDefault(); closeEvent(); });
   },
@@ -800,6 +810,57 @@ var VIEWS = {
     if (invited < 2) html += '<div class="panel adwarn" id="adWarn" role="note">' + esc(jcT("adm_ad_warn_two")) + '</div>';
     el("view").innerHTML = html + AD_SCOPES.map(adScopeHtml).join("");
     wireAdminsView();
+  },
+
+  /* R4b-1b — add / edit one court */
+  court: function(){
+    var f = ctEd.f, locked = !!(f && f.upcoming > 0);
+    var v = ctEd.draft || courtValues(f);
+    el("view").innerHTML =
+      '<h1>' + esc(jcT(f ? "ct_edit" : "ct_new")) + '</h1>' +
+      '<form class="panel" id="ctForm" novalidate data-no-autoreload>' +
+        '<p class="help">' + REQ + ' ' + esc(jcT("ct_req_note")) + '</p>' +
+        '<label><span>' + esc(jcT("ct_name_en")) + REQ + '</span><input id="ct_name_en" type="text" maxlength="60" required aria-required="true" dir="ltr"></label>' +
+        '<label>' + esc(jcT("ct_name_ar")) + '<input id="ct_name_ar" type="text" maxlength="60" dir="rtl"></label>' +
+        '<fieldset id="ctKind"><legend>' + esc(jcT("ct_kind")) + REQ + '</legend>' +
+          ["tennis", "basketball"].map(function(k){
+            return '<label class="check"><input type="radio" name="ct_kind" value="' + k + '"> <span>' + esc(jcT("ct_kind_" + k)) + '</span></label>';
+          }).join("") + '</fieldset>' +
+        '<label>' + esc(jcT("ct_note")) + '<textarea id="ct_note" maxlength="200" dir="auto"></textarea></label>' +
+        '<p class="help">' + esc(jcT("ct_note_help")) + '</p>' +
+        '<fieldset><legend>' + esc(jcT("ct_pin")) + '</legend>' +
+          '<p class="help">' + esc(jcT("ct_pin_help")) + '</p>' + pinMapHtml() +
+          '<div class="row"><button type="button" class="btn ghost" id="ctPinHere">' + esc(jcT("ct_pin_here")) + '</button></div>' +
+          '<p class="help" id="ctPinState" role="status"></p></fieldset>' +
+        '<fieldset><legend>' + esc(jcT("ct_hours")) + '</legend>' +
+          (locked ? '<p class="notice" id="ctLocked">' + esc(jcFmt("ct_locked", { n: f.upcoming })) + '</p>' : '') +
+          '<label class="check"><input type="checkbox" id="ct_walk_on"' + (locked && !v.walk_on ? ' disabled' : '') + '> <span>' +
+            esc(jcT("ct_walk_on")) + '</span></label>' +
+          '<p class="help">' + esc(jcT("ct_walk_on_help")) + '</p>' +
+          '<span class="row"><label>' + esc(jcT("ct_open")) + '<input id="ct_open" type="time" step="60"' + (locked ? ' disabled' : '') + '></label>' +
+          '<label>' + esc(jcT("ct_close")) + '<input id="ct_close" type="time" step="60"' + (locked ? ' disabled' : '') + '></label></span>' +
+          '<div id="ctGrid"><label>' + esc(jcT("ct_slot")) + '<select id="ct_slot"' + (locked ? ' disabled' : '') + '>' +
+            [30, 45, 60, 90, 120].map(function(m){ return '<option value="' + m + '">' + esc(jcFmt("ct_slot_n", { n: m })) + '</option>'; }).join("") +
+          '</select></label>' +
+          '<label>' + esc(jcT("ct_window")) + '<input id="ct_window" type="number" inputmode="numeric" min="1" max="30" step="1"></label>' +
+          '<p class="help">' + esc(jcT("ct_window_help")) + '</p></div></fieldset>' +
+        msgBox() +
+        '<div class="row"><button class="btn" id="ctSave" type="submit">' + esc(jcT("ct_save")) + '</button>' +
+        '<button class="btn ghost" id="ctCancel" type="button">' + esc(jcT("ct_cancel")) + '</button></div>' +
+      '</form>';
+    el("ct_name_en").value = v.name_en; el("ct_name_ar").value = v.name_ar; el("ct_note").value = v.location_note;
+    var kr = document.querySelector('input[name="ct_kind"][value="' + v.kind + '"]'); if (kr) kr.checked = true;
+    el("ct_walk_on").checked = v.walk_on; el("ct_open").value = v.open_time; el("ct_close").value = v.close_time;
+    el("ct_slot").value = String(v.slot_minutes); el("ct_window").value = String(v.window_days);
+    if (!ctEd.draft) ctEd.pin = f && f.lat != null ? { lat: f.lat, lng: f.lng } : null;
+    ctEd.draft = null;
+    function syncWalk(){ el("ctGrid").hidden = el("ct_walk_on").checked; }
+    el("ct_walk_on").addEventListener("change", syncWalk); syncWalk();
+    drawCourtPin();
+    vmap = initPinMap(ctEd.pin ? [ctEd.pin.lat, ctEd.pin.lng] : null);
+    on("ctPinHere", function(){ if (vmap) { ctEd.pin = centerOf(vmap); drawCourtPin(); } });
+    on("ctCancel", function(){ ctEd = null; show("home"); });
+    el("ctForm").addEventListener("submit", function(e){ e.preventDefault(); saveCourt(); });
   },
 
   households: function(){
@@ -1311,6 +1372,150 @@ function wireAdmins(){
         .then(function(d){ if (admining !== id) return; adminsData = d; show("home"); showOk(jcT("adm_admins_removed")); },
               function(err){ b.disabled = false; fail(err); });
     });
+  });
+}
+
+/* ---------- courts (R4b-1b; server S3 + R4a) ---------- */
+function loadCourts(){
+  if (ctLoading) return;
+  ctLoading = true;
+  Promise.all([rpc("jc_admin_facilities_list"), rpc("jc_admin_booking_rules")]).then(function(r){
+    ctLoading = false;
+    ct = { list: Array.isArray(r[0]) ? r[0].filter(hObj) : [], rules: hObj(r[1]) || {} };
+    var note = ctNote; ctNote = null;
+    if (current === "home" && admTab === "courts") {
+      /* the list lands after the page: a message already on screen ("Done…", "Saved.") must survive the redraw */
+      var m = el("msg"), keep = m && m.textContent ? { c: m.className, t: m.textContent } : null;
+      show("home");
+      if (note) ctMsg(note);
+      else if (keep && el("msg")) { el("msg").className = keep.c; el("msg").textContent = keep.t; }
+    }
+  }, function(e){
+    ctLoading = false;
+    if (e.code === "NOT_ADMIN") return fail(e);
+    ct = { err: e.code || "UNKNOWN" };
+    if (current === "home" && admTab === "courts") { show("home"); showErr(ct.err); }
+  });
+}
+function hm(t){ return typeof t === "string" ? t.slice(0, 5) : ""; }
+function courtStatus(f){ return f.status === "published" || f.status === "retired" ? f.status : "draft"; }
+function courtRow(f){
+  var st = courtStatus(f), n = f.upcoming || 0;
+  var name = ar() && f.name_ar ? f.name_ar : f.name_en;
+  var meta = [jcT("ct_kind_" + (f.kind === "basketball" ? "basketball" : "tennis")),
+              "⁦" + hm(f.open_time) + "–" + hm(f.close_time) + "⁩",
+              f.walk_on ? jcT("ct_walk_on_short") : jcFmt("ct_slot_n", { n: f.slot_minutes }) + " · " + jcFmt("ct_window_n", { n: f.window_days })];
+  var acts = st === "retired" ? [] : [["edit", "ct_act_edit"]]
+    .concat(st === "draft" ? [["published", "ct_act_publish"]] : st === "published" ? [["draft", "ct_act_unpublish"]] : [])
+    .concat([["retired", "ct_act_retire"]]);
+  return '<li data-court="' + esc(f.id) + '" class="' + st + '"><b dir="auto">' + esc(name) + '</b>' +
+    '<div class="ctchips"><span class="chip">' + esc(jcT("ct_st_" + st)) + '</span>' +
+    (f.lat == null && st !== "retired" ? '<span class="chip">' + esc(jcT("ct_no_pin")) + '</span>' : '') + '</div>' +
+    '<div class="meta">' + esc(meta.join(" · ")) + '</div>' +
+    (st !== "retired" && !f.walk_on ? '<div class="meta">' + esc(jcFmt("ct_upcoming", { n: n })) + '</div>' : '') +
+    (acts.length ? '<div class="acts">' + acts.map(function(a){
+      return '<button class="mini' + (a[0] === "retired" ? ' danger' : '') + '" type="button" data-ct="' + a[0] + '" data-id="' + esc(f.id) + '">' +
+        esc(jcT(a[1])) + '</button>';
+    }).join("") + '</div>' : '') + '</li>';
+}
+function admCourtsHtml(){
+  if (!ct) { loadCourts(); return '<p class="help">' + esc(jcT("working")) + '</p>'; }
+  if (ct.err) return '<div class="row"><button class="btn ghost" type="button" id="ctRetry">' + esc(jcT("adm_ad_retry")) + '</button></div>';
+  var r = ct.rules;
+  var live = ct.list.filter(function(f){ return courtStatus(f) !== "retired"; });
+  var gone = ct.list.filter(function(f){ return courtStatus(f) === "retired"; });
+  return (r.enabled === true ? '' : '<p class="notice" id="ctOff">' + esc(jcT("ct_module_off")) + '</p>') +
+    '<p class="help" id="ctRules">' + esc(jcFmt("ct_rules", { d: r.per_home_per_day, a: r.per_home_active, k: r.retention_days || 90 })) + '</p>' +
+    '<div class="row"><button class="btn" type="button" id="ctNew">' + esc(jcT("ct_new")) + '</button></div>' +
+    '<h2 class="group">' + esc(jcT("ct_list")) + '</h2>' +
+    (live.length ? '<ul class="sulist ctlist">' + live.map(courtRow).join("") + '</ul>' : '<p class="help">' + esc(jcT("ct_none")) + '</p>') +
+    (gone.length ? '<h2 class="group">' + esc(jcT("ct_retired")) + '</h2><ul class="sulist ctlist">' + gone.map(courtRow).join("") + '</ul>' : '');
+}
+function courtById(id){ return ((ct && ct.list) || []).filter(function(f){ return f.id === id; })[0]; }
+function wireCourts(){
+  on("ctRetry", function(){ ct = null; show("home"); });
+  on("ctNew", function(){ ctEd = { f: null, draft: null, pin: null }; show("court"); });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-ct]"), function(b){
+    b.addEventListener("click", function(){
+      var f = courtById(b.dataset.id);
+      if (!f) return showErr("NOT_FOUND");
+      var to = b.dataset.ct;
+      if (to === "edit") { ctEd = { f: f, draft: null, pin: null }; return show("court"); }
+      if (ctBusy) return;
+      var name = ar() && f.name_ar ? f.name_ar : f.name_en, n = f.upcoming || 0;
+      var ask = to === "published" ? jcFmt("ct_confirm_publish", { c: name })
+        : jcFmt(to === "draft" ? "ct_confirm_unpublish" : "ct_confirm_retire", { c: name }) +
+          (n > 0 ? " " + jcFmt(to === "draft" ? "ct_confirm_cancels_draft" : "ct_confirm_cancels_retire", { n: n }) : "");
+      if (!window.confirm(ask)) return;
+      ctBusy = true; b.disabled = true;
+      rpc("jc_admin_facility_status", { p_facility: f.id, p_status: to }).then(function(list){
+        ctBusy = false;
+        ct.list = Array.isArray(list) ? list.filter(hObj) : ct.list;
+        if (current !== "home") return;
+        show("home");
+        showOk(jcT(to === "published" ? "ct_done_publish" : to === "draft" ? "ct_done_unpublish" : "ct_done_retire"));
+      }, function(e){
+        ctBusy = false; b.disabled = false;
+        if (e.code === "NOT_ADMIN") return fail(e);
+        if (e.code === "BAD_STATE" || e.code === "NOT_FOUND") { ct = null; ctNote = e.code; return show("home"); }
+        ctMsg(e.code);
+      });
+    });
+  });
+}
+function ctMsg(code){
+  var t = jcT("ct_err_" + code);
+  if (t === "ct_err_" + code) return showErr(code);
+  var m = el("msg"); if (!m) return;
+  m.className = "msg err"; m.textContent = t;
+  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
+}
+/* the form's starting values: the court as stored, or the server's defaults for a new one */
+function courtValues(f){
+  f = f || {};
+  return { name_en: f.name_en || "", name_ar: f.name_ar || "", kind: f.kind || "", location_note: f.location_note || "",
+           walk_on: f.walk_on === true, open_time: hm(f.open_time) || "07:00", close_time: hm(f.close_time) || "22:00",
+           slot_minutes: f.slot_minutes || 60, window_days: f.window_days || 7 };
+}
+function courtForm(){
+  var k = document.querySelector('input[name="ct_kind"]:checked');
+  return { name_en: el("ct_name_en").value.trim(), name_ar: el("ct_name_ar").value.trim(), kind: k ? k.value : "",
+           location_note: el("ct_note").value.trim(), walk_on: el("ct_walk_on").checked,
+           open_time: el("ct_open").value, close_time: el("ct_close").value,
+           slot_minutes: parseInt(el("ct_slot").value, 10), window_days: Number(el("ct_window").value) };
+}
+function drawCourtPin(){
+  var n = el("ctPinState");
+  if (n) n.textContent = jcT(ctEd.pin ? "ct_pin_set" : "ct_pin_unset");
+}
+function minutes(t){ var m = /^(\d\d):(\d\d)$/.exec(t || ""); return m ? +m[1] * 60 + +m[2] : null; }
+/* Mirrors the table's checks (S3): name 1–60, whole-minute same-day hours with room for one slot, window 1–30.
+   An edit sends ONLY what changed — an untouched grid never trips RULES_LOCKED. */
+function saveCourt(){
+  var v = courtForm(), f = ctEd.f;
+  if (!v.name_en) return ctMsg("NO_NAME");
+  if (!v.kind) return ctMsg("NO_KIND");
+  var o = minutes(v.open_time), c = minutes(v.close_time);
+  if (o == null || c == null || c - o < v.slot_minutes) return ctMsg("BAD_HOURS");
+  if (!(Number.isInteger(v.window_days) && v.window_days >= 1 && v.window_days <= 30)) return ctMsg("BAD_WINDOW");
+  var was = courtValues(f), fields = {};
+  ["name_en", "name_ar", "kind", "location_note", "walk_on", "open_time", "close_time", "slot_minutes", "window_days"].forEach(function(k){
+    if (!f || v[k] !== was[k]) fields[k] = v[k];
+  });
+  var pinWas = f && f.lat != null ? f.lat + "," + f.lng : null, pinNow = ctEd.pin ? ctEd.pin.lat + "," + ctEd.pin.lng : null;
+  if (ctEd.pin && (!f || pinNow !== pinWas)) { fields.lat = ctEd.pin.lat; fields.lng = ctEd.pin.lng; }
+  if (f && !Object.keys(fields).length) { ctEd = null; show("home"); return showOk(jcT("ct_saved")); }
+  busy("ctSave", true);
+  rpc("jc_admin_facility_save", { p_facility: f ? f.id : null, p_fields: fields }).then(function(list){
+    if (current !== "court") return;
+    if (ct && Array.isArray(list)) ct.list = list.filter(hObj); else ct = null;
+    ctEd = null; admTab = "courts";
+    try { history.replaceState(null, "", "?tab=courts"); } catch(e){}
+    show("home"); showOk(jcT("ct_saved"));
+  }, function(e){
+    busy("ctSave", false);
+    if (e.code === "NOT_ADMIN") return fail(e);
+    ctMsg(e.code);
   });
 }
 
@@ -2298,6 +2503,7 @@ el("langBtn").addEventListener("click", function(){
   if (current === "editor") return drawQuestions();   /* never throw away the form */
   if (current === "accept") return acceptView(GRANT);   /* same link, other language */
   if (current === "invite") return inviteView();
+  if (current === "court" && ctEd) { ctEd.draft = courtForm(); return show("court"); }   /* never throw away the form */
   if (current === "admins" && ad) return VIEWS.admins();   /* keeps a just-made invite link on screen */
   /* keep what's half-done: the banner draft, an open note / spot, where the pin map was moved */
   var keep = Array.prototype.map.call(document.querySelectorAll("#bannerText, [data-form] [data-in]"), function(n){ return n.value; });

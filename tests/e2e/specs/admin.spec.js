@@ -887,12 +887,12 @@ test("My Home → Account: a pets-only code doesn't get the Organizer Tools butt
   await expect(page.locator("a#toAdmin.btn")).toHaveText("Organizer Tools");
 });
 
-test("Organizer Tools sub-menu: Events · Banner · Community, each with its own part; ?tab= remembered", async ({ page }) => {
+test("Organizer Tools sub-menu: Events · Banner · Courts · Community, each with its own part; ?tab= remembered", async ({ page }) => {
   const ab = adminBackend({ scopes: ["community"], owner: true });
   await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await page.goto("admin/");
-  await expect(page.locator(".subtabs [role=tab]")).toHaveText(["Events", "Banner", "Community"]);
+  await expect(page.locator(".subtabs [role=tab]")).toHaveText(["Events", "Banner", "Courts", "Community"]);
   await expect(page.locator("#newEv")).toBeVisible();
   await expect(page.locator("#bannerForm, [data-rotate], #healthOpen")).toHaveCount(0);
   await page.locator("#atab-banner").click();
