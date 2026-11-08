@@ -94,7 +94,7 @@ function jcTabBar(root, active, cfg){
     document.body.appendChild(nav);
     document.body.classList.add("has-tabbar");
   }
-  nav.setAttribute("aria-label", jcT("tab_home"));
+  nav.setAttribute("aria-label", jcT("tab_bar_label"));   /* not "Commons": that is its first button (P2) */
   nav.innerHTML = items.map(function(it){
     return '<a href="' + esc((root + it.path) || "./") + '" data-tab="' + esc(it.key) + '"' +
       (it.key === active ? ' aria-current="page"' : '') + '>' +
@@ -103,6 +103,69 @@ function jcTabBar(root, active, cfg){
   jcBanner(cfg);
   var back = el("jcBackBtn");                 /* language switch: the back label follows (review) */
   if (back) back.setAttribute("aria-label", jcT(back.dataset.key));
+}
+
+/* Sub-tab rows (R3c, WAI-ARIA tabs): event Map · List · Sign-Up, My Home, Organizer Tools.
+   jcTabsHtml → the row; the page wraps its content in jcTabPanel(...) and calls jcTabsWire after
+   setting innerHTML. Selecting a tab re-renders the page (pick), then focus goes back to the new
+   selected tab. Keys: ←/→ (mirrored in right-to-left), Home/End; selection follows focus. One tab
+   is in the Tab order (roving tabindex). prefix + key = each tab's id. */
+function jcTabsHtml(prefix, keys, selected, labelOf, name, panelId){
+  return '<div class="subtabs" role="tablist" aria-label="' + esc(name) + '">' + keys.map(function(k){
+    var on = k === selected;
+    return '<button type="button" role="tab" id="' + esc(prefix + k) + '" aria-selected="' + on + '"' +
+      ' aria-controls="' + esc(panelId) + '" tabindex="' + (on ? 0 : -1) + '">' + esc(labelOf(k)) + '</button>';
+  }).join("") + '</div>';
+}
+function jcTabPanel(prefix, selected, panelId){
+  return 'id="' + esc(panelId) + '" role="tabpanel" aria-labelledby="' + esc(prefix + selected) + '"';
+}
+function jcTabsWire(prefix, keys, pick){
+  function go(k){
+    pick(k);                                       /* a click on the selected tab still redraws (as before) */
+    if (el(prefix + k)) el(prefix + k).focus();   /* the row was redrawn: keyboard focus stays on the tab */
+  }
+  keys.forEach(function(k, i){
+    var b = el(prefix + k);
+    if (!b) return;
+    b.addEventListener("click", function(){ go(k); });
+    b.addEventListener("keydown", function(e){
+      var rtl = document.documentElement.getAttribute("dir") === "rtl";
+      var n = keys.length, j = null;
+      if (e.key === "ArrowRight") j = rtl ? i - 1 : i + 1;
+      else if (e.key === "ArrowLeft") j = rtl ? i + 1 : i - 1;
+      else if (e.key === "Home") j = 0;
+      else if (e.key === "End") j = n - 1;
+      if (j === null) return;
+      e.preventDefault();
+      j = (j + n) % n;
+      if (j !== i) go(keys[j]);
+    });
+  });
+}
+
+/* P5 (R3c): a whole-view redraw (innerHTML) drops keyboard / screen-reader focus to <body>.
+   var done = jcFocusKeep(); …redraw…; done(): if nothing in the new view took focus, put it back on
+   the same control (by id) when it still exists, else on the selected tab or the view's heading.
+   Does nothing when focus wasn't in use (a page load, a tap in Safari long ago). */
+var jcFocusLast = null;
+document.addEventListener("focusin", function(e){
+  if (e.target && e.target !== document.body) jcFocusLast = { id: e.target.id || null, t: Date.now() };
+});
+function jcFocusKeep(){
+  var a = document.activeElement;
+  var had = a && a !== document.body ? { id: a.id || null }
+          : jcFocusLast && Date.now() - jcFocusLast.t < 20000 ? jcFocusLast : null;
+  return function(){
+    var now = document.activeElement;
+    if (!had || (now && now !== document.body && document.contains(now))) return;
+    var t = had.id && el(had.id);
+    if (!t || t.disabled || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || !t.offsetParent)
+      t = document.querySelector('#view [role="tab"][aria-selected="true"]') || document.querySelector("#view h1, #view h2");
+    if (!t) return;
+    if (!/^(A|BUTTON)$/.test(t.tagName) && !t.hasAttribute("tabindex")) t.setAttribute("tabindex", "-1");
+    try { t.focus({ preventScroll: true }); } catch (e) { t.focus(); }
+  };
 }
 
 /* The organizers' banner (jc_admin_broadcast_set) on every member page (T5.2 PR 4).

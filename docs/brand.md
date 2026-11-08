@@ -63,7 +63,7 @@ Deep mangrove green on warm sand neutrals. Dark is the product default.
 | `--jc-line` | `#3B352C` | `#E2D8C6` |
 | `--jc-ink` | `#F6F2E9` | `#1B1A16` |
 | `--jc-muted` | `#A9A294` | `#6A6456` |
-| `--jc-faint` | `#878072` | `#7A6C50` |
+| `--jc-faint` | `#9A9384` (R3c; was `#878072`) | `#7A6C50` |
 | `--jc-accent` | `#3E9B76` | `#1C6B52` |
 | `--jc-accent-ink` | `#06231B` | `#FBF7EF` |
 | `--jc-brand-deep` | `#14453A` | (same) |
@@ -97,8 +97,10 @@ rather than trusting the row (`applyBrandTokens` in `commons/index.html`).
 - Contrast (WCAG AA, 2026-11-02 check): the proposal's faint values failed
   for fine print and were adjusted (dark `#7A7365`→`#878072`, light
   `#8A7A5C`→`#7A6C50`); `#06231B` fails on the light theme's deep-green
-  accent, so light sets `--jc-accent-ink:#FBF7EF`. Faint text belongs on
-  `--jc-bg` only — on `surface-2` it drops below 4.5:1.
+  accent, so light sets `--jc-accent-ink:#FBF7EF`. R3c (2026-11-08): faint
+  text was in fact used on both surfaces (help lines in panels, Settings), so
+  the dark value moved again `#878072`→`#9A9384`: 6.12 / 5.56 / 4.93:1 on
+  bg / surface / surface-2, and ≥ 4.85:1 on every event look's surfaces.
 - Voice: plain, warm, bilingual-first; signed **"your neighbor in Ain Al
   Maha"**.
 - Never place `·` directly after Arabic-Indic digits (reads as `٠`); use

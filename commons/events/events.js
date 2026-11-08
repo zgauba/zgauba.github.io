@@ -191,7 +191,9 @@ function show(name){
   jcBack(name === "list" ? null : "./", "ev_back");   /* back to the events list, in the top bar */
   jcHelp(name === "detail" ? "event" : "events");
   document.body.classList.remove("evfit");
+  var refocus = jcFocusKeep();
   VIEWS[name]();
+  refocus();
 }
 
 /* "2 Dec · Sign-ups open · 37 homes in" — redrawn on each event-day refresh */
@@ -287,23 +289,19 @@ var VIEWS = {
         (desc(ev) ? '<div class="desc rich" id="desc" dir="auto">' + jcRich(desc(ev)) + '</div>' +
           '<button type="button" class="more" id="descMore" hidden>' + esc(jcT("ev_more")) + '</button>' : '') +
         safetyHtml(ev) + '</div>' +
-      '<div class="subtabs" role="tablist">' + tabs.map(function(t){
-        /* my own entry: "Sign Up" until this home is in, then "My Sign-Up" (Zee, 2026-11-05) */
-        var key = t !== "mine" ? "ev_tab_" + t : (data.mine && data.mine.status === "in" ? "ev_tab_mine" : "ev_tab_signup");
-        return '<button type="button" role="tab" id="tab-' + t + '" aria-selected="' + (tab === t) + '">' +
-          esc(jcT(key)) + '</button>';
-      }).join("") + '</div>' +
+      /* my own entry: "Sign Up" until this home is in, then "My Sign-Up" (Zee, 2026-11-05) */
+      jcTabsHtml("tab-", tabs, tab, function(t){
+        return jcT(t !== "mine" ? "ev_tab_" + t : (data.mine && data.mine.status === "in" ? "ev_tab_mine" : "ev_tab_signup"));
+      }, title(ev), "body") +
       '<div id="banner"></div>' +                                   /* event day (5b) */
       '<p class="upd" id="upd" aria-live="polite" hidden></p>' +
       msgBox() +
-      '<div id="body"></div>';
+      '<div ' + jcTabPanel("tab-", tab, "body") + '></div>';
     paintDay();
-    tabs.forEach(function(t){
-      on("tab-" + t, function(){
-        tab = t; editing = false;
-        try { history.replaceState(null, "", "?id=" + encodeURIComponent(ev.id) + "&tab=" + t); } catch(e){}
-        show("detail");
-      });
+    jcTabsWire("tab-", tabs, function(t){
+      tab = t; editing = false;
+      try { history.replaceState(null, "", "?id=" + encodeURIComponent(ev.id) + "&tab=" + t); } catch(e){}
+      show("detail");
     });
     wireDesc();
     if (tab === "map") renderMap(entries);

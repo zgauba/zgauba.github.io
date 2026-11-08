@@ -43,7 +43,9 @@ function show(name, arg){
   if (map) { keepCenter = name === "pin" ? map.getCenter() : null; map.remove(); map = null; }
   else keepCenter = null;
   current = name;
+  var refocus = jcFocusKeep();
   VIEWS[name](arg);
+  refocus();
 }
 
 /* Re-render the current view in the other language without losing typed input. */
@@ -188,18 +190,14 @@ var VIEWS = {
         '<div class="section" id="historySec" hidden><h2>' + esc(jcT("mh_history")) + '</h2><div class="panel" id="history"></div></div>';
     }
     el("view").innerHTML =
-      '<div class="subtabs" role="tablist">' + MH_TABS.map(function(t){
-        return '<button type="button" role="tab" id="mh-' + t + '" aria-selected="' + (mhTab === t) + '">' +
-          esc(jcT("mh_tab_" + t)) + '</button>';
-      }).join("") + '</div>' +
-      msgBox() + body;
-    MH_TABS.forEach(function(t){
-      on("mh-" + t, function(){
-        if (el("dname")) draftName = el("dname").value;   /* an unsaved name survives a tab switch */
-        mhTab = t;
-        try { history.replaceState(null, "", t === "home" ? location.pathname : "?tab=" + t); } catch(e){}
-        show("myhome");
-      });
+      '<h1 class="sr-only">' + esc(jcT("mh_title")) + '</h1>' +     /* the screen's name for screen readers */
+      jcTabsHtml("mh-", MH_TABS, mhTab, function(t){ return jcT("mh_tab_" + t); }, jcT("mh_title"), "mhPanel") +
+      msgBox() + '<div ' + jcTabPanel("mh-", mhTab, "mhPanel") + '>' + body + '</div>';
+    jcTabsWire("mh-", MH_TABS, function(t){
+      if (el("dname")) draftName = el("dname").value;   /* an unsaved name survives a tab switch */
+      mhTab = t;
+      try { history.replaceState(null, "", t === "home" ? location.pathname : "?tab=" + t); } catch(e){}
+      show("myhome");
     });
 
     /* defaultValue too: a prefilled field is not "being typed in" (update.js busy()) */
