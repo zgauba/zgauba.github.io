@@ -46,7 +46,9 @@ declare
     -- R2b-1 (organizer event-night actions)
     'jc_admin_entry_live_set', 'jc_admin_entry_withdraw', 'jc_entry_supply_clear',
     -- R4a (courts to spec: private bookings, effective rules)
-    'jc_booking_book', 'jc_booking_privacy_set', 'jc_admin_booking_rules'];
+    'jc_booking_book', 'jc_booking_privacy_set', 'jc_admin_booking_rules',
+    -- R4a-2 (per-person module admins by invite link)
+    'jc_module_admin_link_create', 'jc_module_admin_accept', 'jc_module_admins_list', 'jc_module_admin_revoke'];
 begin
   -- Pre-launch suite: fixtures are written into 'jubail' and rolled back. Refuse to run
   -- once real residents exist — post-launch tests must move to a test community.
