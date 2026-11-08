@@ -515,7 +515,7 @@ var VIEWS = {
     on("exit", function(){
       busy("exit", true);
       rpc("jc_admin_exit").then(function(){
-        scopes = []; admining = null; adminsData = null;
+        scopes = []; admining = null; adminsData = null; ct = null; ctEd = null;   /* nothing of the code's stays cached */
         if (isEventAdmin() || owner) return loadHome();   /* still runs their own events / reads feedback */
         events = []; show("lock");
       }, function(e){ busy("exit", false); fail(e); });
@@ -849,9 +849,10 @@ var VIEWS = {
         '<button class="btn ghost" id="ctCancel" type="button">' + esc(jcT("ct_cancel")) + '</button></div>' +
       '</form>';
     el("ct_name_en").value = v.name_en; el("ct_name_ar").value = v.name_ar; el("ct_note").value = v.location_note;
-    var kr = document.querySelector('input[name="ct_kind"][value="' + v.kind + '"]'); if (kr) kr.checked = true;
+    var kr = v.kind === "tennis" || v.kind === "basketball" ? document.querySelector('input[name="ct_kind"][value="' + v.kind + '"]') : null;
+    if (kr) kr.checked = true;
     el("ct_walk_on").checked = v.walk_on; el("ct_open").value = v.open_time; el("ct_close").value = v.close_time;
-    el("ct_slot").value = String(v.slot_minutes); el("ct_window").value = String(v.window_days);
+    el("ct_slot").value = String(v.slot_minutes); el("ct_window").value = v.window_days == null ? "" : String(v.window_days);
     if (!ctEd.draft) ctEd.pin = f && f.lat != null ? { lat: f.lat, lng: f.lng } : null;
     ctEd.draft = null;
     function syncWalk(){ el("ctGrid").hidden = el("ct_walk_on").checked; }
@@ -1381,6 +1382,7 @@ function loadCourts(){
   ctLoading = true;
   Promise.all([rpc("jc_admin_facilities_list"), rpc("jc_admin_booking_rules")]).then(function(r){
     ctLoading = false;
+    if (!isCourtsAdmin()) return;                     /* the right ended while it was on its way (review L2 / L4) */
     ct = { list: Array.isArray(r[0]) ? r[0].filter(hObj) : [], rules: hObj(r[1]) || {} };
     var note = ctNote; ctNote = null;
     if (current === "home" && admTab === "courts") {
@@ -1443,14 +1445,16 @@ function wireCourts(){
       if (to === "edit") { ctEd = { f: f, draft: null, pin: null }; return show("court"); }
       if (ctBusy) return;
       var name = ar() && f.name_ar ? f.name_ar : f.name_en, n = f.upcoming || 0;
+      /* the server cancels every booking not yet over — a slot being played now too (security review L3) */
+      var why = to === "draft" ? "ct_confirm_cancels_draft" : "ct_confirm_cancels_retire";
       var ask = to === "published" ? jcFmt("ct_confirm_publish", { c: name })
         : jcFmt(to === "draft" ? "ct_confirm_unpublish" : "ct_confirm_retire", { c: name }) +
-          (n > 0 ? " " + jcFmt(to === "draft" ? "ct_confirm_cancels_draft" : "ct_confirm_cancels_retire", { n: n }) : "");
+          (f.walk_on || (n === 0 && courtStatus(f) !== "published") ? "" : " " + jcFmt(n > 0 ? why : why + "_now", { n: n }));
       if (!window.confirm(ask)) return;
       ctBusy = true; b.disabled = true;
       rpc("jc_admin_facility_status", { p_facility: f.id, p_status: to }).then(function(list){
         ctBusy = false;
-        ct.list = Array.isArray(list) ? list.filter(hObj) : ct.list;
+        if (ct && Array.isArray(list)) ct.list = list.filter(hObj);
         if (current !== "home") return;
         show("home");
         showOk(jcT(to === "published" ? "ct_done_publish" : to === "draft" ? "ct_done_unpublish" : "ct_done_retire"));
@@ -1482,7 +1486,8 @@ function courtForm(){
   return { name_en: el("ct_name_en").value.trim(), name_ar: el("ct_name_ar").value.trim(), kind: k ? k.value : "",
            location_note: el("ct_note").value.trim(), walk_on: el("ct_walk_on").checked,
            open_time: el("ct_open").value, close_time: el("ct_close").value,
-           slot_minutes: parseInt(el("ct_slot").value, 10), window_days: Number(el("ct_window").value) };
+           slot_minutes: parseInt(el("ct_slot").value, 10),
+           window_days: el("ct_window").value.trim() === "" ? null : Number(el("ct_window").value) };
 }
 function drawCourtPin(){
   var n = el("ctPinState");
@@ -1496,9 +1501,17 @@ function saveCourt(){
   if (!v.name_en) return ctMsg("NO_NAME");
   if (!v.kind) return ctMsg("NO_KIND");
   var o = minutes(v.open_time), c = minutes(v.close_time);
-  if (o == null || c == null || c - o < v.slot_minutes) return ctMsg("BAD_HOURS");
-  if (!(Number.isInteger(v.window_days) && v.window_days >= 1 && v.window_days <= 30)) return ctMsg("BAD_WINDOW");
   var was = courtValues(f), fields = {};
+  if (v.walk_on) {
+    /* slot + days ahead are hidden for a walk-on court (review M2): keep what's stored, but the table still needs
+       the hours to hold one slot — a short day takes the shortest slot instead of failing on a field nobody sees */
+    if (o == null || c == null || c - o < 30) return ctMsg("BAD_HOURS_WALK");
+    if (!(Number.isInteger(v.window_days) && v.window_days >= 1 && v.window_days <= 30)) v.window_days = was.window_days;
+    if (c - o < v.slot_minutes) v.slot_minutes = 30;
+  } else {
+    if (o == null || c == null || c - o < v.slot_minutes) return ctMsg("BAD_HOURS");
+    if (!(Number.isInteger(v.window_days) && v.window_days >= 1 && v.window_days <= 30)) return ctMsg("BAD_WINDOW");
+  }
   ["name_en", "name_ar", "kind", "location_note", "walk_on", "open_time", "close_time", "slot_minutes", "window_days"].forEach(function(k){
     if (!f || v[k] !== was[k]) fields[k] = v[k];
   });
@@ -1506,9 +1519,11 @@ function saveCourt(){
   if (ctEd.pin && (!f || pinNow !== pinWas)) { fields.lat = ctEd.pin.lat; fields.lng = ctEd.pin.lng; }
   if (f && !Object.keys(fields).length) { ctEd = null; show("home"); return showOk(jcT("ct_saved")); }
   busy("ctSave", true);
+  var mine = ctEd;
   rpc("jc_admin_facility_save", { p_facility: f ? f.id : null, p_fields: fields }).then(function(list){
-    if (current !== "court") return;
+    /* the save landed: the list is right even if they already left the editor (review M1) */
     if (ct && Array.isArray(list)) ct.list = list.filter(hObj); else ct = null;
+    if (current !== "court" || ctEd !== mine) { if (current === "home" && admTab === "courts") show("home"); return; }
     ctEd = null; admTab = "courts";
     try { history.replaceState(null, "", "?tab=courts"); } catch(e){}
     show("home"); showOk(jcT("ct_saved"));
@@ -1641,7 +1656,7 @@ function wireAdminsView(){
       /* a community admin's removal also cancelled every link they made, at every level: re-read them all */
       if (what === "reload") { ad = null; return loadAdmins(function(){ showOk(jcT("adm_admins_removed")); }, adLinks); }
       if (what !== "self") return draw(jcT("adm_admins_removed"));
-      ad = null; hh = null; hlog = null; health = null; fb = null;   /* nothing of theirs stays cached (security L5) */
+      ad = null; hh = null; hlog = null; health = null; fb = null; ct = null; ctEd = null;   /* nothing of theirs stays cached (security L5) */
       if (!canEnter()) { events = []; show("lock"); return showOk(jcT("adm_ad_self_removed")); }
       return loadHome().then(function(){ showOk(jcT("adm_ad_self_removed")); });
     });

@@ -197,7 +197,7 @@ test("publish / unpublish / retire ask first and say what bookings they cancel",
   page.once("dialog", (d) => { asked = d.message(); d.accept(); });
   await page.locator('[data-ct="draft"][data-id="c2"]').click();
   await expect(page.locator("#msg")).toHaveText("Back to draft.");
-  expect(asked).toBe("Unpublish Court 2? It goes back to draft and residents stop seeing it. Its 4 upcoming bookings will be cancelled, and those homes will see \"Court temporarily unavailable\".");
+  expect(asked).toBe("Unpublish Court 2? It goes back to draft and residents stop seeing it. Its 4 upcoming bookings, and any slot being played right now, will be cancelled; those homes will see \"Court temporarily unavailable\".");
   expect(lastCall(calls, "jc_admin_facility_status").args).toEqual({ p_facility: "c2", p_status: "draft" });
 
   page.once("dialog", (d) => { asked = d.message(); d.accept(); });
@@ -275,3 +275,65 @@ for (const lang of ["en", "ar"]) {
     expect(await clean()).toEqual([]);
   });
 }
+
+// ── review fixes (docs/qa/R4b-1b-review-2026-11-08.md) ──
+test("security L3: a published court with no upcoming bookings still warns about a slot being played now", async ({ page }) => {
+  const b = backend({ courts: [COURT({ status: "published", upcoming: 0 })] });
+  await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openCourts(page);
+  let asked = "";
+  page.once("dialog", (d) => { asked = d.message(); d.dismiss(); });
+  await page.locator('[data-ct="retired"][data-id="c1"]').click();
+  await expect.poll(() => asked).toBe("Retire Court 1? This can't be undone. Any slot being played right now will be cancelled too.");
+});
+
+test("code review M1: a save that lands after leaving the editor still updates the list", async ({ page }) => {
+  const b = backend({ courts: [COURT()] });
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const rpc = Object.assign({}, b.rpc, { jc_admin_facility_save: async (a, c) => { await gate; return b.rpc.jc_admin_facility_save(a, c); } });
+  await stubBackend(page, { rpc });
+  await signIn(page);
+  await openCourts(page);
+  await page.locator('[data-ct="edit"][data-id="c1"]').click();
+  await page.locator("#ct_name_en").fill("Centre Court");
+  await page.locator("#ctSave").click();
+  await page.locator("#jcBackBtn").click();                               // leave before the answer
+  await expect(page.locator('[data-court="c1"] b')).toHaveText("Court 1");
+  release();
+  await expect(page.locator('[data-court="c1"] b')).toHaveText("Centre Court");
+});
+
+test("code review M2: a walk-on court never fails on the hidden slot / days ahead", async ({ page }) => {
+  const b = backend({ courts: [COURT()] });
+  const { calls } = await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openCourts(page);
+  await page.locator('[data-ct="edit"][data-id="c1"]').click();
+  await page.locator("#ct_window").fill("");
+  await page.locator("#ct_walk_on").check();
+  await page.locator("#ct_open").fill("07:00");
+  await page.locator("#ct_close").fill("07:20");
+  await page.locator("#ctSave").click();
+  await expect(page.locator("#msg")).toHaveText("Closing has to be at least 30 minutes after opening.");
+  await page.locator("#ct_close").fill("07:30");
+  await page.locator("#ctSave").click();
+  await expect(page.locator("#msg")).toHaveText("Saved.");
+  expect(lastCall(calls, "jc_admin_facility_save").args.p_fields).toEqual({ walk_on: true, close_time: "07:30", slot_minutes: 30 });
+});
+
+test("language switch keeps hours, slot and a blank days-ahead exactly", async ({ page }) => {
+  const b = backend({ courts: [COURT()] });
+  await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openCourts(page);
+  await page.locator('[data-ct="edit"][data-id="c1"]').click();
+  await page.locator("#ct_open").fill("06:30");
+  await page.locator("#ct_slot").selectOption("90");
+  await page.locator("#ct_window").fill("");
+  await page.locator("#langBtn").click();
+  await expect(page.locator("#ct_open")).toHaveValue("06:30");
+  await expect(page.locator("#ct_slot")).toHaveValue("90");
+  await expect(page.locator("#ct_window")).toHaveValue("");
+});
