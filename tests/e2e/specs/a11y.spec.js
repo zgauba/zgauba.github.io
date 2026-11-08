@@ -122,6 +122,16 @@ test("a one-place event (two tabs) still wires every key; Organizer Tools tab fo
   await page.keyboard.press("ArrowLeft");
   await expect(page.locator("#atab-banner")).toBeFocused();
   await expect(page.locator("#bannerText")).toBeVisible();
+  // a half-typed banner survives switching away and back by keyboard
+  await page.locator("#bannerText").fill("Road closed");
+  await page.locator("#atab-banner").focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator("#atab-community")).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.locator("#bannerText")).toHaveValue("Road closed");
+  // a modified arrow (e.g. Alt/Cmd+← = browser Back) is left to the browser
+  await page.keyboard.press("Shift+ArrowLeft");
+  await expect(page.locator("#atab-banner")).toHaveAttribute("aria-selected", "true");
 });
 
 // ── 3. names, focus ring, language, focus after an action ──

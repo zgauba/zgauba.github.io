@@ -130,6 +130,7 @@ function jcTabsWire(prefix, keys, pick){
     if (!b) return;
     b.addEventListener("click", function(){ go(k); });
     b.addEventListener("keydown", function(e){
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;   /* Alt/Cmd+← is the browser's Back */
       var rtl = document.documentElement.getAttribute("dir") === "rtl";
       var n = keys.length, j = null;
       if (e.key === "ArrowRight") j = rtl ? i - 1 : i + 1;
@@ -152,6 +153,10 @@ var jcFocusLast = null;
 document.addEventListener("focusin", function(e){
   if (e.target && e.target !== document.body) jcFocusLast = { id: e.target.id || null, t: Date.now() };
 });
+/* a tap on blank space means "I left that control": don't pull focus back on the next redraw (review L2) */
+document.addEventListener("pointerdown", function(e){
+  if (!(e.target && e.target.closest && e.target.closest("button, a, input, textarea, select, summary, [tabindex]"))) jcFocusLast = null;
+}, true);
 function jcFocusKeep(){
   var a = document.activeElement;
   var had = a && a !== document.body ? { id: a.id || null }
