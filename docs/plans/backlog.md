@@ -77,6 +77,9 @@ Last groomed: 2026-11-02
       palette; native-speaker review before launch.
 - [ ] December holiday-lights map re-skin (idea).
 
+- [ ] Per-event admin grant link `?eventadmin=` → fragment (`#eventadmin=`) like R4b-1a's invites, so the token stays out of logs / Referer and the sign-in `next` (Zee 2026-11-08, R4b-1 plan Q2: "later, own small PR").
+- [ ] Launch prep: move the SQL suite's fixtures off `jubail` (a test community) and drop the `00_grants` abort — required before any real Jubail account (R4b-1 plan, super-admin track).
+
 ## Done
 
 - [x] 2026-11-02 — Monorepo switchover: pushed, old repo Pages disabled +

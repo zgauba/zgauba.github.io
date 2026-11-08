@@ -1,6 +1,6 @@
 # R4b-1 — Admins screen + Courts editor (plan, /plan-change)
 
-Status: **PLAN — awaiting Zee's approval.** Branch `feat/r4b1-admins-ui`. Date 2026-11-08.
+Status: **APPROVED 2026-11-08** (split approved; Q1 hide Pets — yes; Q2 `?eventadmin=` → fragment later, own PR — yes; Q3 bookings on in `e2e` for the R4b-1b smoke — yes; super admin: option C now, A when community #2 is real). R4b-1a building. Branch `feat/r4b1-admins-ui`. Date 2026-11-08.
 Source: `docs/plans/R4-courts.md` (R4b-1 row, C5), manifest R4a-2 / R4a-3 entries, review deferrals in
 `docs/qa/R4a-2-review-2026-11-08.md` (S4, S9) and `docs/qa/R4a-3-review-2026-11-08.md` (D3, S10).
 

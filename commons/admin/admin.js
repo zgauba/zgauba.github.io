@@ -16,6 +16,33 @@ var OPEN_EVENT = new URLSearchParams(location.search).get("event");
 /* ?eventadmin=<token> — a community admin's grant link (T5.2 PR B): asked, never auto-accepted */
 var GRANT = new URLSearchParams(location.search).get("eventadmin");
 if (GRANT && !/^[A-Za-z0-9_-]{16,64}$/.test(GRANT)) GRANT = null;
+/* #admininvite=<token>&role=<scope> — R4b-1a: an invite to an admin level (R4a-3). The token rides in the
+   fragment (never sent to the server: no access log, no Referer — R4a-2 review S9), is dropped from the URL at
+   once, and is kept for this tab only (sessionStorage) across sign-in / joining. role is only a hint for the
+   question; the server decides the scope and the answer names it. */
+var INVITE_KEY = "jc_admin_invite";
+var INVITE_ROLES = { community: "y", events: "y", bookings: "y", pets: "y" };
+var INVITE = (function(){
+  var h = JC_URL_HASH || "";
+  var m = /^#admininvite=([A-Za-z0-9_-]{16,64})(?:&role=([a-z]{1,12}))?$/.exec(h);
+  if (/^#admininvite=/.test(h)) { try { history.replaceState(null, "", location.pathname + location.search); } catch(e){} }
+  var v = m ? { token: m[1], role: jcOwn(INVITE_ROLES, m[2]) ? m[2] : null } : null;
+  try {
+    if (v) sessionStorage.setItem(INVITE_KEY, JSON.stringify(v));
+    else {
+      var s = JSON.parse(sessionStorage.getItem(INVITE_KEY) || "null");
+      if (s && typeof s.token === "string" && /^[A-Za-z0-9_-]{16,64}$/.test(s.token))
+        v = { token: s.token, role: jcOwn(INVITE_ROLES, s.role) ? s.role : null };
+    }
+  } catch(e){}
+  return v;
+})();
+function inviteForget(){ try { sessionStorage.removeItem(INVITE_KEY); } catch(e){} }
+/* the levels on the Admins screen; pets stays off until pets has admin screens (R4b-1 plan Q1) */
+var AD_SCOPES = ["community", "events", "bookings"];
+var ad = null;            /* R4b-1a: { <scope>: { admins, links } } from jc_module_admins_list | null */
+var adLink = null;        /* {scope, url} — a new invite link, shown once (like newLink) */
+var adBusy = false;       /* one admins write at a time */
 var adminEvents = [];     /* jc_me_get.admin_events — events this person runs (no code needed) */
 var admining = null;      /* id of the event whose Admins panel is open */
 var adminsData = null;    /* jc_event_admins_list for it */
@@ -159,7 +186,8 @@ function title(ev){ return ar() && ev.title_ar ? ev.title_ar : ev.title_en; }
 function has(s){ return scopes.indexOf(s) >= 0; }
 function isOrganizer(){ return has("events") || has("community"); }
 function isEventAdmin(){ return adminEvents.length > 0; }
-function canEnter(){ return isOrganizer() || isEventAdmin() || owner; }
+/* R4b-1a: a courts (bookings) admin gets in too — Community tab now, the Courts tab in R4b-1b */
+function canEnter(){ return isOrganizer() || isEventAdmin() || owner || has("bookings"); }
 function byId(id){ return events.filter(function(e){ return e.id === id; })[0]; }
 function fmtDate(iso){
   if (!iso) return "";
@@ -183,7 +211,7 @@ function fail(e){
   if (e.code !== "NOT_ADMIN") return showErr(e.code);
   /* one event closing or one grant ending must not drop the others (code review PR B):
      re-read who this is, then land wherever they still belong */
-  admining = null; adminsData = null; closing = null; su = null; pm = null;
+  admining = null; adminsData = null; closing = null; su = null; pm = null; ad = null; adBusy = false;
   rpc("jc_me_get").then(function(me){
     scopes = me.admin_scopes || []; adminEvents = me.admin_events || []; owner = !!me.is_owner;
     if (!canEnter()) { show("lock"); return showErr("NOT_ADMIN"); }
@@ -195,11 +223,12 @@ function show(name){
   current = name;
   newCode = null;         /* only rotate() draws the code, once (review PR #26) */
   newLink = null;         /* same for a grant link */
+  adLink = null;          /* and an admin invite link */
   if (vmap) { vmap.remove(); vmap = null; }
   /* back, in the top bar: sign-ups → the events list; pin move → the sign-ups */
   jcBack(name === "signups" ? leaveSignups
        : name === "pinmove" ? function(){ pm = null; show("signups"); }
-       : name === "feedback" || name === "health" || name === "households" ? function(){ show("home"); }
+       : name === "feedback" || name === "health" || name === "households" || name === "admins" ? function(){ show("home"); }
        : name === "adminlog" ? function(){ show("households"); }
        : name === "hhpin" ? function(){ if (hhBusy) return; hhPin = null; show("households"); } : null, "back");
   jcHelp(name === "lock" ? null : "admin");
@@ -378,7 +407,9 @@ function admBannerHtml(){
 /* community: health + notices, the owner's feedback inbox, codes, add another code / lock */
 function admCommunityHtml(){
   var h =
-    (has("community") ? '<div class="panel fbentry"><button class="btn ghost" type="button" id="healthOpen">' +
+    (has("community") ? '<div class="panel fbentry"><button class="btn ghost" type="button" id="adOpen">' +
+      esc(jcT("adm_ad_open")) + '</button></div>' +
+      '<div class="panel fbentry"><button class="btn ghost" type="button" id="healthOpen">' +
       esc(jcT("adm_h_open")) + '</button></div>' +
       '<div class="panel fbentry"><button class="btn ghost" type="button" id="hhOpen">' +
       esc(jcT("adm_hh_open")) + '</button></div>' : '') +
@@ -454,6 +485,7 @@ var VIEWS = {
     on("fbOpen", function(){ show("feedback"); });
     on("healthOpen", function(){ health = null; show("health"); });
     on("hhOpen", function(){ hh = null; show("households"); });
+    on("adOpen", function(){ ad = null; show("admins"); });
     Array.prototype.forEach.call(document.querySelectorAll("[data-act]"), function(b){
       b.addEventListener("click", function(){ act(b.dataset.act, b.dataset.id, b); });
     });
@@ -744,6 +776,21 @@ var VIEWS = {
 
   /* R1 — Households (community admins): invites over a household's limit, then every home by
      village with its members. Names are what the server sends (display name or masked email). */
+  /* R4b-1a — admins at every level: named people, one-time invite links, one-tap Remove (community admins only;
+     the server enforces it) */
+  admins: function(){
+    var html = '<h1>' + esc(jcT("adm_ad_title")) + '</h1><p class="sub">' + esc(jcT("adm_ad_sub")) + '</p>' + msgBox();
+    if (!ad) {
+      el("view").innerHTML = html + '<p class="help">' + esc(jcT("working")) + '</p>';
+      return loadAdmins();
+    }
+    /* code unlocks are ephemeral (R4a-3 review D3): the durable floor is two people added by invite */
+    var invited = ad.community.admins.filter(function(a){ return a.via.indexOf("invite") >= 0; }).length;
+    if (invited < 2) html += '<div class="panel adwarn" id="adWarn" role="note">' + esc(jcT("adm_ad_warn_two")) + '</div>';
+    el("view").innerHTML = html + AD_SCOPES.map(adScopeHtml).join("");
+    wireAdminsView();
+  },
+
   households: function(){
     var html = '<h1>' + esc(jcT("adm_hh_title")) + '</h1>' + msgBox();
     if (!hh || !hh.data) {
@@ -1254,6 +1301,167 @@ function wireAdmins(){
               function(err){ b.disabled = false; fail(err); });
     });
   });
+}
+
+/* ---------- admins at every level (R4b-1a; server R4a-2 / R4a-3) ---------- */
+function adShape(d){
+  d = hObj(d) || {};
+  return {
+    admins: (Array.isArray(d.admins) ? d.admins : []).filter(hObj).map(function(a){
+      return Object.assign({}, a, { via: Array.isArray(a.via) ? a.via : [] });
+    }),
+    links: (Array.isArray(d.links) ? d.links : []).filter(hObj)
+  };
+}
+/* every level's list in one go; then() runs after the redraw (an error message drawn by the caller survives) */
+function loadAdmins(then){
+  return Promise.all(AD_SCOPES.map(function(s){ return rpc("jc_module_admins_list", { p_scope: s }); })).then(function(r){
+    if (current !== "admins") return;
+    ad = {};
+    AD_SCOPES.forEach(function(s, i){ ad[s] = adShape(r[i]); });
+    show("admins");
+    if (then) then();
+  }, function(e){ if (current === "admins") fail(e); });
+}
+function adMsg(code){
+  var t = jcT("adm_ad_err_" + code);
+  if (t === "adm_ad_err_" + code) return showErr(code);
+  var m = el("msg"); if (!m) return;
+  m.className = "msg err"; m.textContent = t;
+  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
+}
+function adScopeHtml(s){
+  var d = ad[s];
+  var rows = d.admins.map(function(a){
+    var home = a.number ? jcHomeLabel(a) : "";
+    var chips = [a.via.indexOf("invite") >= 0 ? jcT("adm_ad_via_invite") : null,
+                 a.via.indexOf("code") >= 0 ? jcT("adm_ad_via_code") : null,
+                 a.idle === true ? jcT("adm_ad_idle") : null].filter(Boolean);
+    return '<li data-admin="' + esc(a.user_id) + '"><span><b dir="auto">' + esc(a.name) + '</b>' +
+      (home ? '<small>' + esc(home) + '</small>' : '') +
+      (chips.length ? '<small class="chips">' + chips.map(function(t){ return '<span class="chip">' + esc(t) + '</span>'; }).join("") + '</small>' : '') +
+      '</span><button class="mini danger" type="button" data-adrm="' + s + '" data-user="' + esc(a.user_id) +
+      '" data-name="' + esc(a.name) + '">' + esc(jcT("adm_admins_remove")) + '</button></li>';
+  }).concat(d.links.map(function(l){
+    return '<li><span><small>' + esc(jcFmt("adm_admins_pending", { d: hDate(l.expires_at) })) + '</small></span>' +
+      '<button class="mini" type="button" data-adcancel="' + s + '" data-link="' + esc(l.id) + '">' +
+      esc(jcT("adm_admins_cancel_link")) + '</button></li>';
+  }));
+  var shown = adLink && adLink.scope === s;
+  return '<h2 class="group">' + esc(jcT("adm_ad_scope_" + s)) + '</h2>' +
+    '<div class="panel adminsbox" data-scope="' + s + '"><p class="help">' + esc(jcT("adm_ad_can_" + s)) + '</p>' +
+    (rows.length ? '<ul class="adminlist">' + rows.join("") + '</ul>' : '<p class="help">' + esc(jcT("adm_ad_none")) + '</p>') +
+    (shown
+      ? '<div class="codebox" role="status"><span>' + esc(jcT(s === "community" ? "adm_ad_link_help_community" : "adm_ad_link_help")) + '</span>' +
+        '<b class="linkbox" id="adLinkUrl">' + esc(adLink.url) + '</b>' +
+        '<button class="btn ghost small" type="button" id="adCopy">' + esc(jcT("adm_copy")) + '</button>' +
+        (navigator.share ? '<button class="btn ghost small" type="button" id="adShare">' + esc(jcT("mh_share")) + '</button>' : '') +
+        '</div>'
+      : '<button class="btn small" type="button" data-admake="' + s + '">' + esc(jcT("adm_ad_make")) + '</button>') +
+    '</div>';
+}
+function wireAdminsView(){
+  var keep = adLink;
+  function draw(link, okText){
+    if (current !== "admins") return;
+    adLink = link || null; VIEWS.admins();
+    if (okText) showOk(okText);
+  }
+  function err(b, e){
+    adBusy = false; if (b) b.disabled = false;
+    if (e.code === "NOT_ADMIN") return fail(e);
+    if (e.code === "NOT_FOUND") { ad = null; return loadAdmins(function(){ adMsg("NOT_FOUND"); }); }
+    adMsg(e.code);
+  }
+  each("[data-admake]", function(b){
+    var s = b.dataset.admake;
+    if (adBusy) return;
+    adBusy = true; b.disabled = true;
+    rpc("jc_module_admin_link_create", { p_scope: s }).then(function(r){
+      /* shown even if the list refresh fails: the token can never be shown again */
+      var link = { scope: s, url: location.origin + location.pathname + "#admininvite=" + encodeURIComponent(r.token) + "&role=" + s };
+      return rpc("jc_module_admins_list", { p_scope: s }).then(function(d){
+        adBusy = false; if (ad) ad[s] = adShape(d); draw(link);
+      }, function(){ adBusy = false; draw(link); });
+    }, function(e){ err(b, e); });
+  });
+  on("adCopy", function(){
+    (navigator.clipboard ? navigator.clipboard.writeText(keep.url) : Promise.reject())
+      .then(function(){ el("adCopy").textContent = jcT("adm_copied"); },
+            function(){ showErr("COPY_FAILED"); });
+  });
+  on("adShare", function(){ navigator.share({ url: keep.url }).catch(function(){}); });
+  each("[data-adrm]", function(b){
+    var s = b.dataset.adrm;
+    if (adBusy) return;
+    var ask = s === "community" ? jcFmt("adm_ad_remove_confirm_community", { n: b.dataset.name })
+                                : jcFmt("adm_ad_remove_confirm", { n: b.dataset.name, r: jcT("adm_ad_scope_" + s) });
+    if (!window.confirm(ask)) return;
+    adBusy = true; b.disabled = true;
+    rpc("jc_module_admin_revoke", { p_scope: s, p_user: b.dataset.user, p_link: null }).then(function(d){
+      if (ad) ad[s] = adShape(d);
+      if (s !== "community") { adBusy = false; return draw(null, jcT("adm_admins_removed")); }
+      /* maybe they removed themselves (allowed while another community admin remains): re-read who this is */
+      return rpc("jc_me_get").then(function(me){
+        adBusy = false;
+        scopes = me.admin_scopes || []; adminEvents = me.admin_events || []; owner = !!me.is_owner;
+        if (has("community")) return draw(null, jcT("adm_admins_removed"));
+        ad = null;
+        if (!canEnter()) { events = []; show("lock"); return showOk(jcT("adm_ad_self_removed")); }
+        return loadHome().then(function(){ showOk(jcT("adm_ad_self_removed")); });
+      }, function(){ adBusy = false; draw(null, jcT("adm_admins_removed")); });
+    }, function(e){ err(b, e); });
+  });
+  each("[data-adcancel]", function(b){
+    var s = b.dataset.adcancel;
+    if (adBusy) return;
+    adBusy = true; b.disabled = true;
+    rpc("jc_module_admin_revoke", { p_scope: s, p_user: null, p_link: b.dataset.link }).then(function(d){
+      adBusy = false; if (ad) ad[s] = adShape(d); draw(null);
+    }, function(e){ err(b, e); });
+  });
+}
+function each(sel, fn){
+  Array.prototype.forEach.call(document.querySelectorAll(sel), function(b){
+    b.addEventListener("click", function(){ fn(b); });
+  });
+}
+
+/* The invite's landing (R4b-1a): ask first, accept once (server-checked). A link that's used / expired /
+   cancelled, or a role already held, ends the question — the stored invite is forgotten. */
+function inviteView(){
+  current = "invite";
+  var r = INVITE.role;
+  el("view").innerHTML =
+    '<h1>' + esc(jcT("inv_title")) + '</h1>' +
+    '<div class="panel"><p>' + esc(r ? jcFmt("inv_body_role", { r: jcT("adm_ad_scope_" + r) }) : jcT("inv_body")) + '</p>' +
+      '<ul class="acclist">' + (r ? '<li>' + esc(jcT("adm_ad_can_" + r)) + '</li>' : '') +
+        '<li>' + esc(jcT("inv_see")) + '</li><li>' + esc(jcT("inv_ends")) + '</li></ul>' +
+      msgBox() +
+      (INVITE.dead ? '' : '<button class="btn" type="button" id="invYes">' + esc(jcT("acc_yes")) + '</button>') +
+      '<button class="btn ghost" type="button" id="invNo">' + esc(jcT(INVITE.dead ? "acct_back" : "acc_no")) + '</button></div>';
+  on("invNo", function(){
+    INVITE = null; inviteForget();
+    if (canEnter()) loadHome(); else location.href = "../";
+  });
+  on("invYes", function(){
+    busy("invYes", true);
+    rpc("jc_module_admin_accept", { p_token: INVITE.token }).then(function(res){
+      INVITE = null; inviteForget();
+      var role = jcOwn(INVITE_ROLES, res && res.scope) ? res.scope : null;
+      var done = role ? jcFmt("inv_done", { r: jcT("adm_ad_scope_" + role) }) : jcT("inv_done_any");
+      return rpc("jc_me_get").then(function(me){
+        scopes = me.admin_scopes || []; adminEvents = me.admin_events || []; owner = !!me.is_owner;
+        if (!canEnter()) { el("view").innerHTML = msgBox(); return showOk(done); }
+        return loadHome().then(function(){ showOk(done); });
+      }, function(){ location.replace(location.pathname); });   /* accepted; a fresh load reads the new role */
+    }, function(e){
+      busy("invYes", false);
+      if (e.code === "BAD_LINK" || e.code === "ALREADY_ADMIN") { INVITE.dead = e.code; inviteForget(); inviteView(); }
+      showErr(e.code);
+    });
+  });
+  if (INVITE.dead) showErr(INVITE.dead);
 }
 
 /* The grant link's landing: say what the role is, ask, then accept (single use, server-checked). */
@@ -2035,7 +2243,8 @@ function loadHome(){
     if (ev) openEditor(ev); else show("home");
   },
     function(e){
-      if (e.code === "NOT_ADMIN" && owner) { events = []; return show("home"); }   /* owner without an organizer code */
+      /* owner without an organizer code; a courts-only admin (R4b-1a) — no events list for either */
+      if (e.code === "NOT_ADMIN" && (owner || has("bookings"))) { events = []; return show("home"); }
       if (e.code === "NOT_ADMIN") { scopes = []; adminEvents = []; show("lock"); showErr(e.code); } else { show("lock"); showErr(e.code); } });
 }
 
@@ -2053,6 +2262,8 @@ el("langBtn").addEventListener("click", function(){
   paint();
   if (current === "editor") return drawQuestions();   /* never throw away the form */
   if (current === "accept") return acceptView(GRANT);   /* same link, other language */
+  if (current === "invite") return inviteView();
+  if (current === "admins" && ad) return VIEWS.admins();   /* keeps a just-made invite link on screen */
   /* keep what's half-done: the banner draft, an open note / spot, where the pin map was moved */
   var keep = Array.prototype.map.call(document.querySelectorAll("#bannerText, [data-form] [data-in]"), function(n){ return n.value; });
   var view = vmap ? { c: vmap.getCenter(), z: vmap.getZoom() } : null;
@@ -2079,6 +2290,7 @@ jcState().then(function(s){
     cfg = c;
     paint();
     if (GRANT) return acceptView(GRANT);
+    if (INVITE) return inviteView();
     if (canEnter()) return loadHome();
     show("lock");
   });
