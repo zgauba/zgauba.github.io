@@ -26,7 +26,7 @@
   /* text */
   --jc-ink:#f6f2e9;
   --jc-muted:#a9a294;
-  --jc-faint:#878072;  /* brightened from proposed #7a7365 — 4.77:1 on bg (was 3.98, fails AA for the 12px fine print it styles) */
+  --jc-faint:#9a9384;  /* R3c: ≥ 4.5:1 on bg AND both surfaces (6.12 / 5.56 / 4.93; was #878072: 4.33 on surface, 3.84 on surface-2 — axe) */
   /* roles */
   --jc-accent:#3e9b76;        /* primary action — mangrove */
   --jc-accent-ink:#06231b;    /* text on accent */

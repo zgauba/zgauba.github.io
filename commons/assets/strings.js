@@ -153,6 +153,7 @@ var JC_STRINGS = {
     invite_joined: "You've joined {h}.",
     invite_pending: "This home already has 4 members, so a community admin has to approve you. You'll get in once they do.",
     tab_home: "Commons",
+    tab_bar_label: "Main",              /* the bottom bar's name for screen readers (R3c P2) */
     update_ready: "A new version of Commons is ready. Tap to refresh.",
     tab_my_home: "My Home",
     /* R3a: your bar + start page + "Save as an app" (My Home → Account) */
@@ -972,6 +973,7 @@ var JC_STRINGS = {
     invite_joined: "انضممت إلى {h}.",
     invite_pending: "في هذا المنزل 4 أعضاء بالفعل، لذا يلزم أن يوافق مشرف المجتمع على انضمامك.",
     tab_home: "كومنز",
+    tab_bar_label: "القائمة الرئيسية",   /* R3c — DRAFT Arabic, pending review */
     update_ready: "نسخة جديدة من كومنز جاهزة. اضغط للتحديث.",
     tab_my_home: "منزلي",
     /* R3a — DRAFT Arabic, pending review */
@@ -1662,6 +1664,9 @@ function jcSetLang(lang){
   var pack = JC_STRINGS[lang] || JC_STRINGS.en;
   document.documentElement.setAttribute("dir", pack.dir);
   document.documentElement.setAttribute("lang", pack.lang);
+  /* the language button is labelled in the OTHER language: say so, or screen readers mispronounce it (P6) */
+  var b = document.getElementById("langBtn");
+  if (b) b.setAttribute("lang", pack.lang === "ar" ? "en" : "ar");
 }
 
 /* jcFmt("home_villa", {n: "12"}) → "Villa 12". Values are inserted as-is: callers

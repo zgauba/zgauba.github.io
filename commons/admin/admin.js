@@ -37,12 +37,17 @@ var resolving = false;    /* a Mark Resolved is in flight */
 /* the organizer home's sub-menu (?tab=); which tabs a person sees: adminTabs() */
 var admTab = new URLSearchParams(location.search).get("tab") || "events";
 var bannerDraft = null;   /* the banner text being typed when the person switched tabs */
+/* ONE entry per tab (R3c; R4 coordination C5): key = the ?tab= value and strings adm_tab_<key>;
+   show = who sees it; html = its panel. Wiring stays in VIEWS.home (on() skips ids that aren't drawn).
+   A new tab (R4b-1 Courts) is one more entry here + its adm_tab_ strings. */
+var ADM_TABS = [
+  { key: "events",    show: function(){ return isOrganizer() || isEventAdmin(); }, html: admEventsHtml },
+  { key: "banner",    show: function(){ return isOrganizer() || events.some(function(e){ return e.status === "live"; }); },
+    html: admBannerHtml },
+  { key: "community", show: function(){ return true; }, html: admCommunityHtml }
+];
 function adminTabs(){
-  var t = [];
-  if (isOrganizer() || isEventAdmin()) t.push("events");
-  if (isOrganizer() || events.some(function(e){ return e.status === "live"; })) t.push("banner");
-  t.push("community");
-  return t;
+  return ADM_TABS.filter(function(t){ return t.show(); }).map(function(t){ return t.key; });
 }
 var health = null;        /* T5.2 PR 6: { report | null, reportErr, notices | null, noticesErr, at } */
 var hh = null;            /* R1 households: { data (jc_admin_homes_list) | null, open: {id, what, m (member index)} | null, focus: home id | null } */
@@ -198,7 +203,9 @@ function show(name){
        : name === "adminlog" ? function(){ show("households"); }
        : name === "hhpin" ? function(){ if (hhBusy) return; hhPin = null; show("households"); } : null, "back");
   jcHelp(name === "lock" ? null : "admin");
+  var refocus = jcFocusKeep();
   VIEWS[name]();
+  refocus();
 }
 
 /* ---------- App health (T5.2 PR 6) ---------- */
@@ -352,6 +359,50 @@ function noticeHome(h){
     (h.village ? " · " + jcVillageName(cfg, h.village) : "");
 }
 
+/* ---------- Organizer Tools home: one panel per tab (ADM_TABS) ---------- */
+/* creating events is the community's step (T5.2 D2) */
+function admEventsHtml(){
+  return (isOrganizer() ? '<div class="row"><button class="btn" type="button" id="newEv">' + esc(jcT("adm_new")) + '</button></div>' : '') +
+    '<h2 class="group">' + esc(jcT("adm_events")) + '</h2>' +
+    (events.length ? '<ul class="aevents">' + events.map(eventRow).join("") + '</ul>'
+                   : '<p class="help">' + esc(jcT("adm_none")) + '</p>');
+}
+/* the banner (T5.2 PR 4): organizers any time; an event admin while an event they run is live */
+function admBannerHtml(){
+  return '<form class="panel" id="bannerForm" novalidate><p class="help">' + esc(jcT("adm_banner_help")) + '</p>' +
+    '<textarea id="bannerText" maxlength="280" dir="auto" aria-label="' + esc(jcT("adm_banner")) + '"></textarea>' +
+    bannerTieHtml() +
+    '<div class="row"><button class="btn" id="bannerSave" type="submit">' + esc(jcT("adm_banner_post")) + '</button>' +
+    '<button class="btn ghost" id="bannerClear" type="button">' + esc(jcT("adm_banner_clear")) + '</button></div></form>';
+}
+/* community: health + notices, the owner's feedback inbox, codes, add another code / lock */
+function admCommunityHtml(){
+  var h =
+    (has("community") ? '<div class="panel fbentry"><button class="btn ghost" type="button" id="healthOpen">' +
+      esc(jcT("adm_h_open")) + '</button></div>' +
+      '<div class="panel fbentry"><button class="btn ghost" type="button" id="hhOpen">' +
+      esc(jcT("adm_hh_open")) + '</button></div>' : '') +
+    (owner ? '<div class="panel fbentry"><button class="btn' + (fb && fb.unread ? '' : ' ghost') + '" type="button" id="fbOpen">' +
+      esc(fb ? jcFmt("adm_fb_open", { n: fb.unread }) : jcT("adm_fb_title")) + '</button></div>' : '');
+  if (has("community")) {
+    h += '<h2 class="group">' + esc(jcT("adm_codes")) + '</h2><div class="panel"><p class="help">' + esc(jcT("adm_codes_help")) + '</p>' +
+      ["join", "community", "events"].map(function(s){
+        return '<div class="coderow"><span>' + esc(jcT("adm_code_" + s)) + '</span>' +
+          '<button class="btn ghost" type="button" data-rotate="' + s + '">' + esc(jcT("adm_rotate")) + '</button></div>' +
+          (newCode && newCode.scope === s
+            ? '<div class="codebox" role="status"><span>' + esc(jcFmt("adm_new_code", { s: jcT("adm_code_" + s) })) + '</span>' +
+              '<b id="newCode">' + esc(newCode.code) + '</b>' +
+              '<button class="btn ghost" type="button" id="copyCode">' + esc(jcT("adm_copy")) + '</button></div>' : '');
+      }).join("") + '</div>';
+  }
+  /* lock = drop CODE unlocks; event-admin grants are named and stay (a community admin removes them) */
+  return h + '<div class="section"><div class="panel">' +
+    '<button class="btn ghost" type="button" id="addCode">' + esc(jcT("adm_add_code")) + '</button>' +
+    (scopes.length ? '<button class="btn ghost" type="button" id="exit">' + esc(jcT("adm_exit")) + '</button>' +
+      '<p class="help">' + esc(jcT("adm_exit_help")) + '</p>' : '') +
+    '</div></div>';
+}
+
 /* ---------- views ---------- */
 var VIEWS = {
   lock: function(){
@@ -387,60 +438,16 @@ var VIEWS = {
       '<p class="sub">' + esc(scopes.length
         ? jcFmt("adm_scopes", { s: scopes.map(function(s){ return jcT("scope_" + s); }).join(" · ") })
         : isEventAdmin() ? jcT("adm_event_admin_sub") : jcT("adm_owner_sub")) + '</p>' +
-      (tabs.length > 1 ? '<div class="subtabs" role="tablist">' + tabs.map(function(t){
-        return '<button type="button" role="tab" id="atab-' + t + '" aria-selected="' + (admTab === t) + '">' +
-          esc(jcT("adm_tab_" + t)) + '</button>';
-      }).join("") + '</div>' : '') +
+      (tabs.length > 1 ? jcTabsHtml("atab-", tabs, admTab, function(t){ return jcT("adm_tab_" + t); }, jcT("adm_title"), "admPanel") : '') +
       msgBox();
-    if (admTab === "events") {
-      /* creating events is the community's step (T5.2 D2) */
-      html += (isOrganizer() ? '<div class="row"><button class="btn" type="button" id="newEv">' + esc(jcT("adm_new")) + '</button></div>' : '') +
-        '<h2 class="group">' + esc(jcT("adm_events")) + '</h2>' +
-        (events.length ? '<ul class="aevents">' + events.map(eventRow).join("") + '</ul>'
-                       : '<p class="help">' + esc(jcT("adm_none")) + '</p>');
-    } else if (admTab === "banner") {
-      /* the banner (T5.2 PR 4): organizers any time; an event admin while an event they run is live */
-      html += '<form class="panel" id="bannerForm" novalidate><p class="help">' + esc(jcT("adm_banner_help")) + '</p>' +
-        '<textarea id="bannerText" maxlength="280" dir="auto" aria-label="' + esc(jcT("adm_banner")) + '"></textarea>' +
-        bannerTieHtml() +
-        '<div class="row"><button class="btn" id="bannerSave" type="submit">' + esc(jcT("adm_banner_post")) + '</button>' +
-        '<button class="btn ghost" id="bannerClear" type="button">' + esc(jcT("adm_banner_clear")) + '</button></div></form>';
-    } else {
-      /* community: health + notices, the owner's feedback inbox, codes, add another code / lock */
-      html +=
-        (has("community") ? '<div class="panel fbentry"><button class="btn ghost" type="button" id="healthOpen">' +
-          esc(jcT("adm_h_open")) + '</button></div>' +
-          '<div class="panel fbentry"><button class="btn ghost" type="button" id="hhOpen">' +
-          esc(jcT("adm_hh_open")) + '</button></div>' : '') +
-        (owner ? '<div class="panel fbentry"><button class="btn' + (fb && fb.unread ? '' : ' ghost') + '" type="button" id="fbOpen">' +
-          esc(fb ? jcFmt("adm_fb_open", { n: fb.unread }) : jcT("adm_fb_title")) + '</button></div>' : '');
-      if (has("community")) {
-        html += '<h2 class="group">' + esc(jcT("adm_codes")) + '</h2><div class="panel"><p class="help">' + esc(jcT("adm_codes_help")) + '</p>' +
-          ["join", "community", "events"].map(function(s){
-            return '<div class="coderow"><span>' + esc(jcT("adm_code_" + s)) + '</span>' +
-              '<button class="btn ghost" type="button" data-rotate="' + s + '">' + esc(jcT("adm_rotate")) + '</button></div>' +
-              (newCode && newCode.scope === s
-                ? '<div class="codebox" role="status"><span>' + esc(jcFmt("adm_new_code", { s: jcT("adm_code_" + s) })) + '</span>' +
-                  '<b id="newCode">' + esc(newCode.code) + '</b>' +
-                  '<button class="btn ghost" type="button" id="copyCode">' + esc(jcT("adm_copy")) + '</button></div>' : '');
-          }).join("") + '</div>';
-      }
-      /* lock = drop CODE unlocks; event-admin grants are named and stay (a community admin removes them) */
-      html += '<div class="section"><div class="panel">' +
-        '<button class="btn ghost" type="button" id="addCode">' + esc(jcT("adm_add_code")) + '</button>' +
-        (scopes.length ? '<button class="btn ghost" type="button" id="exit">' + esc(jcT("adm_exit")) + '</button>' +
-          '<p class="help">' + esc(jcT("adm_exit_help")) + '</p>' : '') +
-        '</div></div>';
-    }
+    var panel = ADM_TABS.filter(function(x){ return x.key === admTab; })[0].html();
+    html += tabs.length > 1 ? '<div ' + jcTabPanel("atab-", admTab, "admPanel") + '>' + panel + '</div>' : panel;
     el("view").innerHTML = html;
-    tabs.forEach(function(t){
-      on("atab-" + t, function(){
-        if (el("bannerText")) bannerDraft = el("bannerText").value;   /* a half-typed banner survives a tab switch */
-        admTab = t;
-        try { history.replaceState(null, "", "?tab=" + t); } catch(e){}
-        show("home");
-        if (el("atab-" + t)) el("atab-" + t).focus();                  /* keyboard focus stays on the tab */
-      });
+    jcTabsWire("atab-", tabs, function(t){
+      if (el("bannerText")) bannerDraft = el("bannerText").value;   /* a half-typed banner survives a tab switch */
+      admTab = t;
+      try { history.replaceState(null, "", "?tab=" + t); } catch(e){}
+      show("home");
     });
 
     on("newEv", function(){ openEditor(null); });
