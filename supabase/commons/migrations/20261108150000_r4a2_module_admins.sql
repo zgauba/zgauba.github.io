@@ -19,7 +19,8 @@
 --      open link (jc_module_admin_revoke). Revocation is immediate: every gate reads the table on each call.
 --   A per-person grant does not lapse with inactivity (unlike a code unlock's 60 days): it is a named
 --   appointment that a community admin can see (last_used_at is shown) and revoke. It is NOT touched by code
---   rotation or jc_admin_exit ("lock" on a device drops code unlocks only).
+--   rotation or jc_admin_exit ("lock" on a device drops code unlocks only). It ends when a community admin revokes
+--   it, removes the member (jc_admin_member_remove, re-created below), or the account is deleted.
 --
 -- Shared codes: kept working, unchanged (no existing admin breaks). Recommendation (for Zee, not done here): once
 --   R4b-1 ships the invite screen, stop handing out the 'bookings' and 'pets' codes and rotate each to a fresh
@@ -43,7 +44,7 @@
 -- Rollback (manual): drop function jc_module_admin_link_create(text), jc_module_admin_accept(text),
 --   jc_module_admins_list(text), jc_module_admin_revoke(text, uuid, uuid); drop table jc_module_admin_links,
 --   jc_module_admins; re-create jc_assert_admin, jc_admin_has, jc_me_get, jc_snapshot_run, jc_admin_block_create
---   from their live 2026-11-08 bodies (r4a_courts / earlier files).
+--   jc_admin_member_remove from their live 2026-11-08 bodies (r4a_courts / earlier files).
 
 -- ---------- 1. tables ----------
 create table public.jc_module_admins (
@@ -88,7 +89,7 @@ CREATE OR REPLACE FUNCTION public.jc_assert_admin(p_scope text)
  SECURITY DEFINER
  SET search_path TO 'public', 'pg_temp'
 AS $function$
-declare v_user uuid; v_comm text; v_home uuid;
+declare v_user uuid; v_comm text; v_home uuid; v_ok boolean;   -- R4a-2
 begin
   select o_user, o_community, o_home into v_user, v_comm, v_home from jc_me();
   update jc_admin_grants g set last_used_at = now()
@@ -97,11 +98,12 @@ begin
      and g.last_used_at > now() - interval '60 days'
      and g.code_version = (select c.version from jc_codes c
                             where c.community_id = g.community_id and c.scope = g.scope);
-  if found then return v_comm; end if;                                          -- R4a-2
-  -- R4a-2: a per-person grant for exactly this module scope (never 'community': the check constraint)
+  v_ok := found;                                                                -- R4a-2
+  -- R4a-2: a per-person grant for exactly this module scope (never 'community': the check constraint). Touched
+  -- even when a code also matched, so the list's last_used_at is true for people who hold both (db review L).
   update jc_module_admins m set last_used_at = now()
    where m.user_id = v_user and m.community_id = v_comm and m.scope = p_scope;
-  if not found then raise exception 'NOT_ADMIN'; end if;
+  if not (v_ok or found) then raise exception 'NOT_ADMIN'; end if;
   return v_comm;
 end;
 $function$;
@@ -149,7 +151,9 @@ begin
 end;
 $$;
 
--- Single use. Any failure (unknown, other community, used, revoked, expired) is the same BAD_LINK.
+-- Single use. Any failure (unknown, other community, used, revoked, expired) is the same BAD_LINK; a person who
+-- already holds the scope gets ALREADY_ADMIN and the link is not consumed. (A concurrent second accept by the same
+-- person with two links: the PK makes the loser fail with a unique violation — rolled back, link unused.)
 create function public.jc_module_admin_accept(p_token text) returns jsonb
 language plpgsql security definer set search_path = public, pg_temp
 as $$
@@ -163,9 +167,12 @@ begin
      or l.used_at is not null or l.revoked_at is not null or l.expires_at <= now() then
     raise exception 'BAD_LINK';
   end if;
+  -- already holds this scope: the link stays unused (it can go to someone else) and nothing is logged
+  if exists (select 1 from jc_module_admins where user_id = v_user and scope = l.scope) then
+    raise exception 'ALREADY_ADMIN';
+  end if;
   insert into jc_module_admins (user_id, community_id, scope, granted_by)
-  values (v_user, v_comm, l.scope, l.created_by)
-  on conflict (user_id, scope) do nothing;
+  values (v_user, v_comm, l.scope, l.created_by);
   update jc_module_admin_links set used_by = v_user, used_at = now() where id = l.id;
   perform jc_admin_log_add(v_comm, 'module_admin_accept', jsonb_build_object('scope', l.scope, 'link_id', l.id));
   return jsonb_build_object('scope', l.scope);
@@ -374,5 +381,36 @@ begin
     'block_id', v_id, 'facility_id', p_facility, 'starts_at', p_starts, 'ends_at', p_ends,
     'bookings_cancelled', to_jsonb(v_ids)));
   return jsonb_build_object('block_id', v_id, 'bookings_cancelled', cardinality(v_ids));
+end;
+$function$;
+
+-- ---------- 7. removing a member removes their module appointments (security review M1) ----------
+-- A per-person grant never lapses, so "remove this member" (with or without deleting the account) must end it;
+-- leaving or moving home does not (the person is still a member). Code unlocks and per-event grants keep their
+-- existing behaviour (deferred: see the PR).
+CREATE OR REPLACE FUNCTION public.jc_admin_member_remove(p_user uuid, p_delete_account boolean)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'pg_temp'
+AS $function$
+declare v_comm text; v_home uuid; v_scopes text[];                                -- R4a-2
+begin
+  v_comm := jc_assert_admin('community');
+  if p_user = auth.uid() then raise exception 'USE_ACCOUNT_DELETE'; end if;
+  if not exists (select 1 from jc_accounts where user_id = p_user and community_id = v_comm) then
+    raise exception 'NOT_FOUND';
+  end if;
+  v_home := jc_home_detach(p_user, false);
+  -- R4a-2
+  with gone as (delete from jc_module_admins where user_id = p_user and community_id = v_comm returning scope)
+  select array_agg(scope order by scope) into v_scopes from gone;
+  if coalesce(p_delete_account, false) then
+    delete from auth.users where id = p_user;
+  end if;
+  perform jc_admin_log_add(v_comm, 'member_remove', jsonb_build_object(
+    'user_id', p_user, 'home_id', v_home, 'account_deleted', coalesce(p_delete_account, false),
+    'module_admin_removed', to_jsonb(coalesce(v_scopes, '{}'))));                -- R4a-2
+  return jc_admin_homes_list();
 end;
 $function$;

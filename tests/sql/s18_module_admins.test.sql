@@ -135,7 +135,7 @@ begin
   select (x ->> 'id')::uuid into ct from jsonb_array_elements(v) x where x ->> 'name_en' = 'Court 18';
   if ct is null then raise exception 'FAIL MA03a invited courts admin could not create a court: %', v; end if;
   perform jc_admin_facility_status(ct, 'published');
-  if jc_admin_booking_rules() is null or jsonb_array_length(jc_admin_facilities_list()) <> 1 then
+  if jc_admin_booking_rules() is null or jsonb_array_length(jc_admin_facilities_list()) is distinct from 1 then
     raise exception 'FAIL MA03b invited courts admin can''t read courts'; end if;
   foreach q in array array['select jc_admin_pets_list()', 'select jc_admin_events_list()',
                            'select jc_admin_code_rotate(''bookings'')', 'select jc_admin_homes_list()',
@@ -197,7 +197,7 @@ begin
   -- ---------- MA07 list: identified like the per-event admin list, no new PII ----------
   perform pg_temp.s18_as(c1);
   v := jc_module_admins_list('bookings');
-  if v ->> 'scope' is distinct from 'bookings' or jsonb_array_length(v -> 'admins') <> 3 then
+  if v ->> 'scope' is distinct from 'bookings' or jsonb_array_length(v -> 'admins') is distinct from 3 then
     raise exception 'FAIL MA07a list: %', v; end if;
   select x into v from jsonb_array_elements(jc_module_admins_list('bookings') -> 'admins') x where (x ->> 'user_id')::uuid = bk;
   if v ->> 'name' is distinct from 'b•••@s18.test' or v ->> 'number' is distinct from '82' or v ->> 'village' is distinct from 'north'
@@ -208,7 +208,7 @@ begin
     raise exception 'FAIL MA07c admin row keys: %', v; end if;
   if jc_module_admins_list('bookings')::text like '%bk@s18.test%' then raise exception 'FAIL MA07d full email listed'; end if;
   v := jc_module_admins_list('pets');
-  if jsonb_array_length(v -> 'admins') <> 2 or jsonb_array_length(v -> 'links') <> 0 then
+  if jsonb_array_length(v -> 'admins') is distinct from 2 or jsonb_array_length(v -> 'links') is distinct from 0 then
     raise exception 'FAIL MA07e pets list: %', v; end if;
   k := k + 5;
 
@@ -222,14 +222,14 @@ begin
   select id into l_id from jc_module_admin_links where token_hash = encode(extensions.digest(tok2, 'sha256'), 'hex');
   execute 'set local role authenticated';
   perform pg_temp.s18_as(c1);
-  if jsonb_array_length(jc_module_admins_list('bookings') -> 'links') <> 2 then raise exception 'FAIL MA08a expired link listed'; end if;
+  if jsonb_array_length(jc_module_admins_list('bookings') -> 'links') is distinct from 2 then raise exception 'FAIL MA08a expired link listed'; end if;
   if pg_temp.s18_err(format('select jc_module_admin_revoke(''bookings'', %L, %L)', r2, l_id)) is distinct from 'BAD_FIELDS'
      or pg_temp.s18_err('select jc_module_admin_revoke(''bookings'', null, null)') is distinct from 'BAD_FIELDS' then
     raise exception 'FAIL MA08b both / neither of user and link'; end if;
   if pg_temp.s18_err(format('select jc_module_admin_revoke(''pets'', null, %L)', l_id)) is distinct from 'NOT_FOUND' then
     raise exception 'FAIL MA08c a bookings link revoked under pets'; end if;
   v := jc_module_admin_revoke('bookings', null, l_id);
-  if jsonb_array_length(v -> 'links') <> 1 then raise exception 'FAIL MA08d revoked link still listed: %', v -> 'links'; end if;
+  if jsonb_array_length(v -> 'links') is distinct from 1 then raise exception 'FAIL MA08d revoked link still listed: %', v -> 'links'; end if;
   if pg_temp.s18_err(format('select jc_module_admin_revoke(''bookings'', null, %L)', l_id)) is distinct from 'NOT_FOUND' then
     raise exception 'FAIL MA08e a link revoked twice'; end if;
   perform pg_temp.s18_as(r2);
@@ -240,11 +240,19 @@ begin
   if jc_me_get() -> 'admin_scopes' is distinct from '[]'::jsonb then raise exception 'FAIL MA08h a refused link granted something'; end if;
   -- at most 10 open links per community + scope (1 open now: tok3)
   perform pg_temp.s18_as(c1);
-  for i in 1..9 loop perform jc_module_admin_link_create('bookings'); end loop;
+  -- someone who already holds the scope can't burn a link: ALREADY_ADMIN, the link stays open (2 open now)
+  tok := jc_module_admin_link_create('bookings') ->> 'token';
+  perform pg_temp.s18_as(bk);
+  if pg_temp.s18_err(format('select jc_module_admin_accept(%L)', tok)) is distinct from 'ALREADY_ADMIN' then
+    raise exception 'FAIL MA08k accept by a current admin'; end if;
+  perform pg_temp.s18_as(c1);
+  if jsonb_array_length(jc_module_admins_list('bookings') -> 'links') is distinct from 2 then
+    raise exception 'FAIL MA08l the refused accept consumed the link'; end if;
+  for i in 1..8 loop perform jc_module_admin_link_create('bookings'); end loop;
   if pg_temp.s18_err('select jc_module_admin_link_create(''bookings'')') is distinct from 'TOO_MANY_LINKS' then
     raise exception 'FAIL MA08i 11th open link'; end if;
   if jc_module_admin_link_create('pets') ->> 'token' is null then raise exception 'FAIL MA08j the cap leaked across scopes'; end if;
-  k := k + 10;
+  k := k + 12;
 
   -- ---------- MA09 cross-community: another community's admin sees and touches nothing ----------
   execute 'reset role';
@@ -252,7 +260,7 @@ begin
   execute 'set local role authenticated';
   perform pg_temp.s18_as(oc);
   v := jc_module_admins_list('bookings');
-  if jsonb_array_length(v -> 'admins') <> 0 or jsonb_array_length(v -> 'links') <> 0 then
+  if jsonb_array_length(v -> 'admins') is distinct from 0 or jsonb_array_length(v -> 'links') is distinct from 0 then
     raise exception 'FAIL MA09a cross-community list: %', v; end if;
   if pg_temp.s18_err(format('select jc_module_admin_revoke(''bookings'', %L, null)', bk)) is distinct from 'NOT_FOUND' then
     raise exception 'FAIL MA09b revoked another community''s admin'; end if;
@@ -263,11 +271,11 @@ begin
      or pg_temp.s18_err(format('select jc_module_admin_revoke(''pets'', %L, null)', bk)) is distinct from 'NOT_FOUND' then
     raise exception 'FAIL MA09d revoked a grant that isn''t there'; end if;
   perform pg_temp.s18_as(bk);
-  if jsonb_array_length(jc_admin_facilities_list()) <> 1 then raise exception 'FAIL MA09e the failed revokes touched bk'; end if;
+  if jsonb_array_length(jc_admin_facilities_list()) is distinct from 1 then raise exception 'FAIL MA09e the failed revokes touched bk'; end if;
   -- an invited admin of testville18b is not ours: o1 takes a 18b courts invite
   perform pg_temp.s18_as(oc); tok := jc_module_admin_link_create('bookings') ->> 'token';
   perform pg_temp.s18_as(o1); perform jc_module_admin_accept(tok);
-  if jsonb_array_length(jc_admin_facilities_list()) <> 0 then raise exception 'FAIL MA09f 18b admin sees our courts'; end if;
+  if jsonb_array_length(jc_admin_facilities_list()) is distinct from 0 then raise exception 'FAIL MA09f 18b admin sees our courts'; end if;
   if pg_temp.s18_err(format('select jc_admin_facility_status(%L, %L)', ct, 'draft')) is distinct from 'NOT_FOUND' then
     raise exception 'FAIL MA09g 18b admin touched our court'; end if;
   k := k + 7;
@@ -290,18 +298,18 @@ begin
 
   -- ---------- MA11 the shared codes keep working, and rotation leaves invited admins alone ----------
   perform pg_temp.s18_as(c1);
-  if jsonb_array_length(jc_admin_facilities_list()) <> 1 then raise exception 'FAIL MA11a community code lost courts'; end if;
+  if jsonb_array_length(jc_admin_facilities_list()) is distinct from 1 then raise exception 'FAIL MA11a community code lost courts'; end if;
   execute 'reset role';
   delete from jc_module_admins where user_id = lg;   -- lg back to "code only"
   execute 'set local role authenticated';
   perform pg_temp.s18_as(lg);
-  if jsonb_array_length(jc_admin_facilities_list()) <> 1 then raise exception 'FAIL MA11b bookings code lost courts'; end if;
+  if jsonb_array_length(jc_admin_facilities_list()) is distinct from 1 then raise exception 'FAIL MA11b bookings code lost courts'; end if;
   perform pg_temp.s18_as(c1); perform jc_admin_code_rotate('bookings');
   perform pg_temp.s18_as(lg);
   if pg_temp.s18_err('select jc_admin_facilities_list()') is distinct from 'NOT_ADMIN' then
     raise exception 'FAIL MA11c rotation did not end the old code'; end if;
   perform pg_temp.s18_as(b2);
-  if jsonb_array_length(jc_admin_facilities_list()) <> 1 then raise exception 'FAIL MA11d rotation dropped an invited admin'; end if;
+  if jsonb_array_length(jc_admin_facilities_list()) is distinct from 1 then raise exception 'FAIL MA11d rotation dropped an invited admin'; end if;
   -- "lock" on a device (jc_admin_exit) drops code unlocks, not the appointment
   perform pg_temp.s18_as(pt); perform jc_admin_exit();
   if jsonb_typeof(jc_admin_pets_list()) is distinct from 'array' then raise exception 'FAIL MA11e exit dropped the pets grant'; end if;
@@ -309,7 +317,7 @@ begin
 
   -- ---------- MA12 the audit log, gone with the account, 'community' can't be granted, snapshots count them ----------
   execute 'reset role';
-  if (select count(*) from jc_admin_log where community_id = 'testville18' and action = 'module_admin_link') < 15
+  if (select count(*) from jc_admin_log where community_id = 'testville18' and action = 'module_admin_link') is distinct from 18::bigint
      or not exists (select 1 from jc_admin_log where community_id = 'testville18' and action = 'module_admin_accept'
                      and actor = bk and target ->> 'scope' = 'bookings')
      or not exists (select 1 from jc_admin_log where community_id = 'testville18' and action = 'module_admin_revoke'
@@ -336,12 +344,30 @@ begin
   if (select (metrics ->> 'admins')::int from jc_snapshots
        where community_id = 'testville18b' and module = 'accounts' and bucket = date_trunc('hour', now())) is distinct from 2 then
     raise exception 'FAIL MA12f snapshot admins (code + invite) for 18b'; end if;
+  -- testville18: c1 + lg (code grants) + pt (invite) — bk revoked, b2 deleted
+  if (select (metrics ->> 'admins')::int from jc_snapshots
+       where community_id = 'testville18' and module = 'accounts' and bucket = date_trunc('hour', now())) is distinct from 3 then
+    raise exception 'FAIL MA12g snapshot admins for 18'; end if;
   execute 'set local role authenticated';
-  k := k + 6;
+  k := k + 7;
+
+  -- ---------- MA13 removing a member ends their appointment (security review M1) ----------
+  perform pg_temp.s18_as(c1);
+  perform jc_admin_member_remove(pt, false);
+  perform pg_temp.s18_as(pt);
+  if pg_temp.s18_err('select jc_admin_pets_list()') is distinct from 'NOT_ADMIN' then
+    raise exception 'FAIL MA13a a removed member kept pets admin'; end if;
+  if jc_me_get() -> 'admin_scopes' is distinct from '[]'::jsonb then raise exception 'FAIL MA13b removed member scopes'; end if;
+  execute 'reset role';
+  if not exists (select 1 from jc_admin_log where community_id = 'testville18' and action = 'member_remove'
+                  and (target ->> 'user_id')::uuid = pt and target -> 'module_admin_removed' = '["pets"]'::jsonb) then
+    raise exception 'FAIL MA13c member_remove log'; end if;
+  execute 'set local role authenticated';
+  k := k + 3;
 
   -- ---------- BD01 bidi controls: jc_clean_line strips every one; plain and Arabic text unchanged ----------
   execute 'reset role';   -- an internal helper (no member grant)
-  foreach cp in array array[8234, 8235, 8236, 8237, 8238, 8294, 8295, 8296, 8297, 8206, 8207, 1564] loop
+  foreach cp in array array[8234, 8235, 8236, 8237, 8238, 8294, 8295, 8296, 8297, 8206, 8207, 1564, 8203, 8204, 8205, 8232, 8233, 65279] loop
     if jc_clean_line('Ab' || chr(cp) || 'cd') is distinct from 'Abcd' then
       raise exception 'FAIL BD01a U+% survives jc_clean_line', upper(to_hex(cp)); end if;
   end loop;
@@ -422,7 +448,10 @@ begin
   if has_function_privilege('authenticated', 'public.jc_assert_admin(text)', 'execute')
      or has_function_privilege('authenticated', 'public.jc_admin_has(text)', 'execute') then
     raise exception 'FAIL G01c a gate became callable'; end if;
-  k := k + 3;
+  -- jc_admin_has backs read-only visibility predicates: it must stay STABLE (no last_used_at write) and definer
+  if (select provolatile::text || prosecdef::text from pg_proc where oid = 'public.jc_admin_has(text)'::regprocedure) is distinct from 'strue' then
+    raise exception 'FAIL G01d jc_admin_has is no longer stable / definer'; end if;
+  k := k + 4;
 
   perform set_config('jc_test.checks', (coalesce(nullif(current_setting('jc_test.checks', true), ''), '0')::int + k)::text, true);
   raise notice 's18_module_admins: % checks passed', k;
