@@ -173,7 +173,7 @@ function draw(){ var r = jcFocusKeep(); VIEWS[current](); r(); }
 /* ---------- views ---------- */
 function show(name){
   current = name;
-  if (map) { map.remove(); map = null; }
+  if (map) { jcMapRemove(map); map = null; }
   jcBack(name === "court" ? function(){ if (bkBusy) return; day = null; setUrl(tab === "list" ? null : "tab=" + tab); show("list"); } : null, "back");
   if (name !== "list") { mapFull = false; document.body.classList.remove("mapfull"); }
   var refocus = jcFocusKeep();
@@ -384,8 +384,8 @@ var VIEWS = {
 function slotRow(s, i){
   var st = s.state === "mine" || s.state === "booked" || s.state === "blocked" || s.state === "free" ? s.state : "past";
   if (st === "free" && Date.parse(s.starts_at) <= Date.now()) st = "past";    /* started: the server refuses a past start */
-  var h = '<li class="s-' + st + '" data-slot="' + i + '"><div class="head"><b class="time">⁦' + esc(jcClock(s.starts_at, cfg) + "–" + jcClock(s.ends_at, cfg)) + '⁩</b>' +
-    '<span class="chip' + (st === "mine" ? ' mine' : '') + '">' + esc(jcT("bk_st_" + st)) + '</span>' +
+  var h = '<li class="slot slot-' + st + ' s-' + st + '" data-slot="' + i + '"><div class="head"><b class="time">⁦' + esc(jcClock(s.starts_at, cfg) + "–" + jcClock(s.ends_at, cfg)) + '⁩</b>' +
+    '<span class="chip slotchip">' + esc(jcT("bk_st_" + st)) + '</span>' +
     (st === "mine" && s.is_private === true ? '<span class="chip">' + esc(jcT("bk_private_chip")) + '</span>' : '') + '</div>';
   /* another home: its label only if the server sent one (never for Private / hidden homes) */
   if (st === "booked" && hObj(s.home)) {

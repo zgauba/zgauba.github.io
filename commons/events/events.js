@@ -185,7 +185,7 @@ function show(name){
   var old = map;
   map = null; homeLayer = null; popupOpen = false; pendingRepaint = false; mineShown = null;
   mapFull = false; document.body.classList.remove("mapfull");   /* any redraw: the map is back in the page */
-  if (old) old.remove();
+  jcMapRemove(old);
   current = name;
   setLook(name === "list" ? null : lookOf(data && data.event));
   jcBack(name === "list" ? null : "./", "ev_back");   /* back to the events list, in the top bar */

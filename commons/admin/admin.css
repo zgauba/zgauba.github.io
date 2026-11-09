@@ -148,13 +148,19 @@ label.check span small{display:block; color:var(--jc-muted); font-size:12.5px; f
 .cdbar{display:grid; grid-template-columns:48px minmax(0,1fr) 48px; align-items:center; gap:8px; margin:8px 0}
 .cdbar .cdstep{width:48px; min-width:0; height:44px; padding:0; font-size:26px; line-height:1}
 [dir=rtl] .cdbar .cdstep span{display:inline-block; transform:scaleX(-1)}
-.cdbar .cddate{display:block; min-width:0; margin:0}
-.cdbar input[type=date]{display:block; width:100%; min-width:0; max-width:100%; height:44px; box-sizing:border-box; text-align:center}
-.cdday{font-weight:600; margin:0 0 8px}
+/* Zee 2026-11-09 (again): iOS draws the date pill's text at the top and wider than its box. Our own pill shows the day,
+   centred; the real date input sits invisibly on top of it, so a tap still opens the iPhone's date picker. */
+.cdbar .cddate{position:relative; display:block; min-width:0; margin:0; height:44px}
+.cdbar .cdpill{display:flex; align-items:center; justify-content:center; gap:6px; height:100%; box-sizing:border-box; padding:0 10px;
+  background:var(--jc-surface-2); border:1px solid var(--jc-line); border-radius:10px; color:var(--jc-ink);
+  font-size:16px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.cdbar .cdpill::after{content:"▾"; color:var(--jc-muted); font-size:13px}
+.cdbar input[type=date]{position:absolute; inset:0; width:100%; height:100%; min-width:0; margin:0; padding:0; border:0;
+  opacity:0; font-size:16px; cursor:pointer; -webkit-appearance:none; appearance:none}
+.cdbar .cddate:focus-within .cdpill{outline:2px solid var(--jc-accent); outline-offset:2px}
 .cdlist .cdhead{display:flex; flex-wrap:wrap; align-items:center; gap:6px}
 .cdlist .cdtime{font-variant-numeric:tabular-nums}
 .cdlist li.cd-past .cdtime{color:var(--jc-muted)}
-.cdlist li.cd-blocked{border-style:dashed}
 .cdlist .cdform{margin-top:8px}
 #cdBlockForm select, #cdBlockForm input[type=date]{width:100%}
 .cdlist{margin-top:12px}

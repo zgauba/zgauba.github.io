@@ -407,6 +407,19 @@ test("spacing: the banner, the day strip and the slots never touch", async ({ pa
   }
 });
 
+// Same Leaflet timer as the events map: a tab switch mid-zoom must not throw.
+test("a tab switch in the middle of a map zoom throws nothing", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await open(page, backend(), { q: "?tab=map" });
+  await expect(page.locator(".leaflet-interactive")).not.toHaveCount(0);
+  await page.evaluate(() => { map.setZoom(map.getZoom() - 1); document.getElementById("bktab-list").click(); });
+  await expect(page.locator("#bktab-list")).toHaveAttribute("aria-selected", "true");
+  await page.clock.runFor(500);
+  await page.waitForTimeout(100);
+  expect(errors).toEqual([]);
+});
+
 test("no home: told to claim it first, no Book buttons, nothing asked of the day", async ({ page }) => {
   const b = backend({ me: MEMBER_NO_HOME });
   const { calls } = await open(page, b);

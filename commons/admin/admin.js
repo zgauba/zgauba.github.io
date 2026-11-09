@@ -249,7 +249,7 @@ function show(name){
   newCode = null;         /* only rotate() draws the code, once (review PR #26) */
   newLink = null;         /* same for a grant link */
   adLinks = {}; adErr = null;   /* and admin invite links (leaving the Admins screen) */
-  if (vmap) { vmap.remove(); vmap = null; }
+  if (vmap) { jcMapRemove(vmap); vmap = null; }
   /* back, in the top bar: sign-ups → the events list; pin move → the sign-ups */
   jcBack(name === "signups" ? leaveSignups
        : name === "pinmove" ? function(){ pm = null; show("signups"); }
@@ -885,9 +885,10 @@ var VIEWS = {
     var html = '<h1 dir="auto">' + esc(name) + '</h1>' +
       '<p class="help">' + esc(jcT("cd_help")) + '</p>' +
       '<div class="cdbar"><button class="btn ghost small cdstep" type="button" id="cdPrev" aria-label="' + esc(jcT("cd_prev")) + '"' + (cd.date <= today ? ' disabled' : '') + '><span aria-hidden="true">‹</span></button>' +
-      '<label class="cddate"><span class="sr-only">' + esc(jcT("cd_date")) + '</span><input id="cdDate" type="date" min="' + today + '" max="' + max + '" value="' + esc(cd.date) + '"></label>' +
+      '<label class="cddate"><span class="cdpill" id="cdDay" aria-hidden="true">' + esc(cdDayText(cd.date)) + '</span><span class="sr-only">' + esc(jcT("cd_date")) + '</span>' +
+      '<input id="cdDate" type="date" min="' + today + '" max="' + max + '" value="' + esc(cd.date) + '"></label>' +
       '<button class="btn ghost small cdstep" type="button" id="cdNext" aria-label="' + esc(jcT("cd_next")) + '"' + (cd.date >= max ? ' disabled' : '') + '><span aria-hidden="true">›</span></button></div>' +
-      '<p class="cdday" id="cdDay">' + esc(cdDayText(cd.date)) + '</p>' + msgBox();
+      msgBox();
     if (cd.err) {
       el("view").innerHTML = html + '<div class="row"><button class="btn ghost" type="button" id="cdRetry">' + esc(jcT("adm_ad_retry")) + '</button></div>';
       showErr(cd.err);
@@ -1653,8 +1654,8 @@ function cdRows(slots){
 function cdRowHtml(r){
   var st = r.state === "mine" ? "booked" : r.state === "free" || r.state === "booked" || r.state === "blocked" ? r.state : "past";
   var over = cdOver(r);
-  var h = '<li data-slot="' + r.i + '" class="cd-' + st + '"><div class="cdhead"><b class="cdtime">⁦' + esc(cdTime(r.starts_at) + "–" + cdTime(r.ends_at)) + '⁩</b>' +
-    '<span class="chip">' + esc(jcT("cd_st_" + st)) + '</span>' +
+  var h = '<li data-slot="' + r.i + '" class="slot slot-' + st + ' cd-' + st + '"><div class="cdhead"><b class="cdtime">⁦' + esc(cdTime(r.starts_at) + "–" + cdTime(r.ends_at)) + '⁩</b>' +
+    '<span class="chip slotchip">' + esc(jcT("cd_st_" + st)) + '</span>' +
     (st === "booked" && r.is_private === true ? '<span class="chip">' + esc(jcT("cd_private")) + '</span>' : '') + '</div>';
   if (st === "booked") {
     var hm_ = hObj(r.home);
@@ -1716,6 +1717,8 @@ function cdWire(){
   on("cdNext", function(){ go(cdAdd(cd.date, 1)); });
   var di = el("cdDate");
   if (di) di.addEventListener("change", function(){ if (!go(di.value)) di.value = cd.date; });
+  /* a mouse click on the invisible picker lands on a date part, not the calendar: open the calendar (a tap on iOS already does) */
+  if (di && di.showPicker) di.addEventListener("click", function(){ if (!(window.matchMedia && matchMedia("(pointer: coarse)").matches)) try { di.showPicker(); } catch(e){} });
   on("cdRetry", function(){ loadDay(); });
   on("cdBlock", function(){ if (cdBusy || !cd.slots) return; cd.form = { kind: "block" }; VIEWS.courtday(); var n = el("cdFrom"); if (n) n.focus(); });
   on("cdBlockKeep", function(){ cd.form = null; cdDraw(); if (el("cdBlock")) el("cdBlock").focus(); });

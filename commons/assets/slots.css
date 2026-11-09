@@ -1,0 +1,16 @@
+/* Court slots: one look on the residents' court page and the organizer's day view (Zee 2026-11-09:
+   "more obvious visually what is booked vs free vs in the past"). Loaded after the page's own CSS. A colour bar on the leading edge and a
+   coloured chip — the chip's word still says it, so colour is never the only signal.
+   free = green · yours = mangrove, filled · booked = amber · blocked = red, dashed · over = faded, no bar */
+li.slot{border-inline-start-width:5px}
+li.slot .slotchip{font-weight:700}
+li.slot-free{border-inline-start-color:var(--jc-good); background:color-mix(in srgb, var(--jc-good) 7%, var(--jc-surface))}
+li.slot-free .slotchip{color:var(--jc-good); border-color:var(--jc-good)}
+li.slot-mine{border-inline-start-color:var(--jc-accent); background:color-mix(in srgb, var(--jc-accent) 14%, var(--jc-surface))}
+li.slot-mine .slotchip{color:var(--jc-accent-ink); background:var(--jc-accent); border-color:var(--jc-accent)}
+li.slot-booked{border-inline-start-color:var(--jc-warn); background:color-mix(in srgb, var(--jc-warn) 7%, var(--jc-surface))}
+li.slot-booked .slotchip{color:var(--jc-warn); border-color:var(--jc-warn)}
+li.slot-blocked{border-inline-start-color:var(--jc-danger); border-style:dashed; border-inline-start-style:solid}
+li.slot-blocked .slotchip{color:var(--jc-danger); border-color:var(--jc-danger)}
+li.slot-past{border-inline-start-width:1px; background:var(--jc-bg)}
+li.slot-past .slotchip{color:var(--jc-faint)}

@@ -7,7 +7,6 @@ h2.group{font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color
 .mini.danger{color:var(--jc-danger); border-color:var(--jc-danger)}
 .mini:disabled{opacity:.5; cursor:default}
 .chip{display:inline-block; font-size:11.5px; line-height:1.5; border:1px solid var(--jc-line); border-radius:999px; padding:0 8px; color:var(--jc-muted)}
-.chip.mine{border-color:var(--jc-accent); color:var(--jc-ink)}
 .bklist{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px}
 .bklist li{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius); padding:12px 14px;
   display:flex; flex-direction:column; gap:6px; font-size:14px}
@@ -17,8 +16,6 @@ h2.group{font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color
 .bklist .head{display:flex; flex-wrap:wrap; align-items:center; gap:6px}
 .bklist .time{font-variant-numeric:tabular-nums}
 .bklist li.s-past .time{color:var(--jc-muted)}
-.bklist li.s-blocked{border-style:dashed}
-.bklist li.s-mine{border-color:var(--jc-accent)}
 .bklist li.cancelled{border-color:var(--jc-warn)}
 .bklist .check{flex-direction:row; align-items:center; gap:8px; font-weight:600; color:var(--jc-ink); font-size:14px}
 .bklist .check input{width:20px; height:20px}
