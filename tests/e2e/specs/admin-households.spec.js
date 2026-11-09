@@ -24,7 +24,7 @@ const LOG = [
   { at: "2026-11-06T08:00:00Z", action: "event_autoclose", target: { event_id: "ev-1" }, actor: null },
   { at: "2026-11-06T07:00:00Z", action: "home_suppress", target: { home_id: "h8", on: true }, actor: "Alice" },
   { at: "2026-11-06T06:00:00Z", action: "member_remove", target: { user_id: "u-secret-zed", home_id: "h10", account_deleted: false }, actor: "Alice" },
-  { at: "2026-11-06T05:00:00Z", action: "facility_save", target: { facility_id: "f-1" }, actor: "Alice" },
+  { at: "2026-11-06T05:00:00Z", action: "stray_save", target: { stray_id: "s-1" }, actor: "Alice" },
 ];
 
 function hhBackend(opts = {}) {
@@ -236,7 +236,7 @@ test("admin log: actions in words, a scheduled job shows as Automatic, only home
   await expect(rows.nth(1)).toContainText("Changed directory visibility");
   await expect(rows.nth(1).locator(".fbbody")).toHaveText("Alice · Townhouse 40 · Ain Al Maha");
   await expect(rows.nth(2).locator(".fbbody")).toHaveText("Alice · Apt 304, B2 · Seef Al Jubail");
-  await expect(rows.nth(3)).toContainText("facility_save");          // not yet in words: its own name
+  await expect(rows.nth(3)).toContainText("stray_save");             // not yet in words (R5 pets): its own name
   expect(await page.content()).not.toContain("u-secret");
   expect(await page.content()).not.toContain("ev-1");
 });
