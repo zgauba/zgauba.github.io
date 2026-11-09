@@ -1620,13 +1620,15 @@ function cdSlots(d){
 function loadDay(then){
   var mine = cd, seq = ++cdSeq;
   mine.slots = null; mine.err = null; mine.loading = true;
+  if (current === "courtday") cdDraw();                /* the old day's forms go at once (review M1) */
   rpc("jc_admin_facility_day", { p_facility: mine.f.id, p_date: mine.date }).then(function(d){
     if (cd !== mine || seq !== cdSeq) return;
     mine.loading = false;
-    if (current !== "courtday" || !isCourtsAdmin()) return;      /* left, or the right ended on the way */
+    if (!isCourtsAdmin()) { cd = null; return; }               /* the right ended on the way (review L3) */
+    if (current !== "courtday") return;
     var s = cdSlots(d);
     if (s) mine.slots = s; else mine.err = "UNKNOWN";
-    VIEWS.courtday();
+    cdDraw();
     if (then && s) then();
   }, function(e){
     if (cd !== mine || seq !== cdSeq) return;
@@ -1634,9 +1636,11 @@ function loadDay(then){
     if (current !== "courtday") return;
     if (e.code === "NOT_ADMIN") return fail(e);
     if (e.code === "NOT_FOUND") { cd = null; ct = null; ctNote = "NOT_FOUND"; admTab = "courts"; return show("home"); }
-    mine.err = e.code || "UNKNOWN"; VIEWS.courtday();
+    mine.err = e.code || "UNKNOWN"; cdDraw();
   });
 }
+/* an in-place redraw keeps focus where it was (review L1) */
+function cdDraw(){ var r = jcFocusKeep(); VIEWS.courtday(); r(); }
 function cdMsg(code){
   var t = jcT("cd_err_" + code);
   if (t === "cd_err_" + code) return showErr(code);
@@ -1671,13 +1675,15 @@ function cdRowHtml(r){
           '<div class="acts"><button class="mini danger" type="button" id="cdCancelGo">' + esc(jcT("cd_cancel_go")) + '</button>' +
           '<button class="mini" type="button" id="cdCancelKeep">' + esc(jcT("cd_keep")) + '</button></div></div>';
       } else {
-        h += '<div class="acts"><button class="mini danger" type="button" data-cdcancel="' + esc(r.booking_id) + '">' + esc(jcT("cd_cancel")) + '</button></div>';
+        h += '<div class="acts"><button class="mini danger" type="button" data-cdcancel="' + esc(r.booking_id) + '" aria-label="' +
+          esc(jcT("cd_cancel") + " " + cdTime(r.starts_at)) + '">' + esc(jcT("cd_cancel")) + '</button></div>';
       }
     }
   }
   if (st === "blocked") {
     if (r.block_reason) h += '<div class="meta" dir="auto">' + esc(r.block_reason) + '</div>';
-    if (r.block_id) h += '<div class="acts"><button class="mini" type="button" data-cdunblock="' + esc(r.block_id) + '">' + esc(jcT("cd_remove")) + '</button></div>';
+    if (r.block_id) h += '<div class="acts"><button class="mini" type="button" data-cdunblock="' + esc(r.block_id) + '" aria-label="' +
+      esc(jcT("cd_remove") + " " + cdTime(r.starts_at)) + '">' + esc(jcT("cd_remove")) + '</button></div>';
   }
   return h + '</li>';
 }
@@ -1719,9 +1725,10 @@ function cdWire(){
   var di = el("cdDate");
   if (di) di.addEventListener("change", function(){ if (!go(di.value)) di.value = cd.date; });
   on("cdRetry", function(){ loadDay(); });
-  on("cdBlock", function(){ if (cdBusy) return; cd.form = { kind: "block" }; VIEWS.courtday(); var n = el("cdFrom"); if (n) n.focus(); });
-  on("cdBlockKeep", function(){ cd.form = null; VIEWS.courtday(); });
-  on("cdCancelKeep", function(){ cd.form = null; VIEWS.courtday(); });
+  on("cdBlock", function(){ if (cdBusy || !cd.slots) return; cd.form = { kind: "block" }; VIEWS.courtday(); var n = el("cdFrom"); if (n) n.focus(); });
+  on("cdBlockKeep", function(){ cd.form = null; cdDraw(); if (el("cdBlock")) el("cdBlock").focus(); });
+  on("cdCancelKeep", function(){ var id = cd.form && cd.form.id; cd.form = null; cdDraw();
+    var b = id && document.querySelector('[data-cdcancel="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]'); if (b) b.focus(); });
   each("[data-cdcancel]", function(b){
     if (cdBusy) return;
     cd.form = { kind: "cancel", id: b.dataset.cdcancel }; VIEWS.courtday();
@@ -1729,6 +1736,7 @@ function cdWire(){
   });
   on("cdCancelGo", function(){
     var b = el("cdCancelGo"), why = el("cdCancelWhy").value.trim(), id = cd.form && cd.form.id;
+    if (!id || !cd.slots || cdBusy) return;            /* a day reload on its way (review M1) */
     if (why.length < 3) return cdMsg("REASON");
     cdWrite(b, function(){
       return rpc("jc_admin_booking_cancel", { p_booking: id, p_reason: why }).then(function(list){
@@ -1768,6 +1776,7 @@ function cdWire(){
   form.addEventListener("submit", function(e){ e.preventDefault(); cdBlockSubmit(); });
 }
 function cdBlockSubmit(){
+  if (!cd || !cd.slots || cdBusy) return;            /* a day reload / a write on its way (review M1 / L4) */
   var why = el("cdWhy").value.trim();
   if (why.length < 3) return cdMsg("REASON");
   var a = cd.slots[+el("cdFrom").value];
@@ -2724,7 +2733,8 @@ function saveEvent(){
     if (!ev ? v !== null : v !== was) f[k] = v;
   });
   var s = fromLocalInput(el("starts_at").value), en = fromLocalInput(el("ends_at").value);
-  if (s && en && new Date(en) < new Date(s)) return showErr("BAD_DATES");
+  /* <=, not <: picking a start moves an empty / earlier end onto it (followStart), so an untouched end equals the start (review M2) */
+  if (s && en && new Date(en) <= new Date(s)) return showErr("BAD_DATES");
   /* features: the three switches, keeping any other flag an event already carries */
   var feats = Object.assign({}, orig.features || {});
   FEATURES.forEach(function(k){ if (el("f_" + k).checked) feats[k] = true; else delete feats[k]; });

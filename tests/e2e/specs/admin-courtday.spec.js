@@ -118,7 +118,7 @@ test("opens on today in community time (phone in London, still yesterday there);
   await expect(page.locator("#cdDate")).toHaveAttribute("max", "2027-02-08");       // 90 days ahead
   await page.locator("#cdNext").click();
   await expect(page.locator("#cdDay")).toHaveText("Wed 11 Nov");
-  expect(lastCall(calls, "jc_admin_facility_day").args.p_date).toBe("2026-11-11");
+  await expect.poll(() => lastCall(calls, "jc_admin_facility_day").args.p_date).toBe("2026-11-11");
   await expect(page.locator("#cdPrev")).toBeEnabled();
   await page.locator("#cdDate").fill("2027-03-01");                                  // past the 90 days: refused
   await page.locator("#cdDate").dispatchEvent("change");
@@ -296,11 +296,16 @@ test("an answer that lands after leaving changes nothing on screen; the list is 
   await page.locator("#jcBackBtn").click();
   await expect(page.locator("#ctNew")).toBeVisible();
   const lists = calls.filter((c) => c.name === "jc_admin_facilities_list").length;
+  await page.locator('[data-ct="day"][data-id="c1"]').click();                      // back in before the answer: a new day view
+  await expect(page.locator(".cdlist li.cd-blocked")).toHaveCount(1);
+  const days = calls.filter((c) => c.name === "jc_admin_facility_day").length;
   release();
   await expect.poll(() => calls.filter((c) => c.name === "jc_admin_block_create").length).toBe(1);
-  await page.waitForTimeout(200);
-  await expect(page.locator("#msg")).not.toContainText("Blocked");
-  await page.locator('[data-ct="day"][data-id="c1"]').click();                      // back in: the new block is there
+  await page.waitForTimeout(300);
+  await expect(page.locator("#msg")).not.toContainText("Blocked");                    // the old screen's answer touches nothing
+  expect(calls.filter((c) => c.name === "jc_admin_facility_day").length).toBe(days);
+  await page.locator("#cdNext").click();
+  await page.locator("#cdPrev").click();                                             // a fresh read shows the new block
   await expect(page.locator(".cdlist li.cd-blocked")).toHaveCount(2);
   await page.locator("#jcBackBtn").click();
   await expect.poll(() => calls.filter((c) => c.name === "jc_admin_facilities_list").length).toBeGreaterThan(lists);
@@ -323,6 +328,51 @@ test("a court gone in the meantime goes back to the list and says so; a day that
   await page.locator("#cdPrev").click();
   await expect(page.locator("#ctNew")).toBeVisible();
   await expect(page.locator("#msg")).toHaveText("That court is no longer listed.");
+});
+
+test("code review M1: while another day loads, the old forms are gone (nothing to submit against no slots)", async ({ page }) => {
+  const b = backend(DAY);
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const rpc = Object.assign({}, b.rpc, { jc_admin_facility_day: async (a, c) => { if (a.p_date === "2026-11-11") await gate; return b.rpc.jc_admin_facility_day(a, c); } });
+  await page.clock.install({ time: T_MORNING });
+  const { calls } = await stubBackend(page, { rpc });
+  await signIn(page);
+  await page.goto("admin/?tab=courts");
+  await page.locator('[data-ct="day"][data-id="c1"]').click();
+  await page.locator("#cdBlock").click();
+  await page.locator("#cdWhy").fill("Maintenance");
+  await page.locator("#cdNext").click();
+  await expect(page.locator("#cdBlockForm")).toHaveCount(0);
+  await expect(page.locator("#view")).toContainText("One moment…");
+  await expect(page.locator("#cdBlock")).toHaveCount(0);
+  release();
+  await expect(page.locator("#cdDay")).toHaveText("Wed 11 Nov");
+  await expect(page.locator("#cdBlock")).toBeVisible();
+  expect(calls.some((c) => c.name === "jc_admin_block_create")).toBe(false);
+});
+
+test("a slow day that lands after a newer one is dropped", async ({ page }) => {
+  const b = backend({ bookings: [{ id: "b11", starts: at("2026-11-11", 9), home: VILLA }] });   // only the 11th has a booking
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const rpc = Object.assign({}, b.rpc, { jc_admin_facility_day: async (a, c) => { if (a.p_date === "2026-11-11") await gate; return b.rpc.jc_admin_facility_day(a, c); } });
+  await page.clock.install({ time: T_MORNING });
+  const { calls } = await stubBackend(page, { rpc });
+  await signIn(page);
+  await page.goto("admin/?tab=courts");
+  await page.locator('[data-ct="day"][data-id="c1"]').click();
+  await expect(page.locator(".cdlist")).toBeVisible();
+  await page.locator("#cdNext").click();                                             // the 11th: slow
+  await expect.poll(() => calls.filter((c) => c.name === "jc_admin_facility_day").length).toBe(2);
+  await page.locator("#cdNext").click();                                             // the 12th: fast
+  await expect(page.locator(".cdlist")).toBeVisible();
+  await expect(page.locator("#cdDay")).toHaveText("Thu 12 Nov");
+  release();
+  await page.waitForTimeout(300);
+  await expect(page.locator("#cdDay")).toHaveText("Thu 12 Nov");
+  await expect(page.locator("#cdDate")).toHaveValue("2026-11-12");
+  await expect(page.locator(".cdlist li.cd-booked")).toHaveCount(0);                 // the 11th's slots never replace the 12th's
 });
 
 test("a language switch keeps the day and what's typed in the block form", async ({ page }) => {

@@ -94,7 +94,10 @@ before publishing).
 **Reviewer:** code-reviewer (screen logic). It shows home labels, but only what the server already returns to
 admins, so no security review per tier. *Raise to security if you'd rather.*
 
-## Questions for Zee
+## Questions for Zee: answered 2026-11-09
+
+**Answers:** 1 agreed · **2 CHANGED: multi-day blocks needed** ("fixing a cracked court"): one day, or "closing time on another day" ≤ 30 days later, the end taken from that day's last slot as the server lays it out · 3 agreed · 4 agreed. Plus, mid-build: wherever a start / end pair is picked, a start moves an empty or earlier end to it (block form + event editor).
+
 
 1. **Reason presets:** *Maintenance · Community event · Official booking · Other* (from Q5's recommendation)?
 2. **Block range:** recommend **within one day** (From / To slot, or Whole day). Multi-day closures use one

@@ -110,7 +110,7 @@ test("editor checks: short name format, end before start", async ({ page }) => {
   await page.locator("#starts_at").fill("2026-12-02T18:00");
   await page.locator("#ends_at").fill("2026-12-02T17:00");
   await page.locator("#save").click();
-  await expect(page.locator("#msg")).toHaveText("The end can't be before the start.");
+  await expect(page.locator("#msg")).toHaveText("The end has to be after the start.");
   expect(calls.some((c) => c.name === "jc_admin_event_save")).toBe(false);
 });
 
@@ -129,6 +129,11 @@ test("picking a start moves an empty or earlier end to it; a later end stays (Ze
   await expect(page.locator("#ends_at")).toHaveValue("2026-12-02T21:00");
   await page.locator("#starts_at").fill("2026-12-03T10:00");
   await expect(page.locator("#ends_at")).toHaveValue("2026-12-03T10:00");
+  // an end left equal to the start doesn't save (code review M2: no silent zero-length event)
+  await page.locator("#title_en").fill("Fun");
+  await page.locator("#slug").fill("fun-day");
+  await page.locator("#save").click();
+  await expect(page.locator("#msg")).toHaveText("The end has to be after the start.");
 });
 
 test("publish (confirmed), pause sign-ups, close only with the exact short name", async ({ page }) => {
