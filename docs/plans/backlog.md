@@ -80,6 +80,16 @@ Last groomed: 2026-11-02
 - [ ] Per-event admin grant link `?eventadmin=` → fragment (`#eventadmin=`) like R4b-1a's invites, so the token stays out of logs / Referer and the sign-in `next` (Zee 2026-11-08, R4b-1 plan Q2: "later, own small PR").
 - [ ] Launch prep: move the SQL suite's fixtures off `jubail` (a test community) and drop the `00_grants` abort — required before any real Jubail account (R4b-1 plan, super-admin track).
 
+- [ ] 2026-11-09 (Zee) **Parcel for another home**: a finder tells the household "I have your parcel" without
+      WhatsApp. Leaning: structured, not free chat — sender picks the home + one of "collect from <my home>" / "left at
+      your door" / "with security"; the household answers "Thanks, coming" / "Collected"; 72 h expiry, rate-limited,
+      the sender's home shown only to that household; "this home isn't on Commons yet" said BEFORE writing.
+      **Blocker: a notification channel** (Web Push for the installed app on iOS 16.4+, and/or email after SMTP) —
+      without it, the note sits unread while the WhatsApp post gets seen. Post-launch; /plan-change first.
+- [ ] 2026-11-09 **Codes section after code retirement**: once codes are retired (manifest R4a-3 "Code retirement"
+      steps; needs ≥ 2 invite-made community admins in different homes), hide the admin / organizer code rows and
+      "Enter Another Code", and make `jc_admin_code_rotate` refuse retired scopes. The join code stays. Pre-launch.
+
 ## Done
 
 - [x] 2026-11-02 — Monorepo switchover: pushed, old repo Pages disabled +
