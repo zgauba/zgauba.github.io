@@ -52,6 +52,9 @@ var ct = null;            /* { list (jc_admin_facilities_list), rules (jc_admin_
 var ctLoading = false;
 var ctNote = null;        /* an error code to show once the re-read list is drawn (a stale change) */
 var ctBusy = false;       /* a status change is in flight */
+var cd = null;            /* R4b-2 court day view: { f (court row), date "YYYY-MM-DD" (community time), slots [] | null, err, loading,
+                             form null | {kind:"block"} | {kind:"cancel", id}, draft (form values across a language switch) } */
+var cdBusy = false, cdSeq = 0;
 var ctEd = null;          /* court editor: { f (original row) | null, draft (form values across a language switch) | null, pin {lat,lng} | null } */
 var adminEvents = [];     /* jc_me_get.admin_events — events this person runs (no code needed) */
 var admining = null;      /* id of the event whose Admins panel is open */
@@ -213,6 +216,15 @@ function toLocalInput(iso){
   function p(n){ return (n < 10 ? "0" : "") + n; }
   return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "T" + p(d.getHours()) + ":" + p(d.getMinutes());
 }
+/* Zee 2026-11-09: picking a start moves an empty or earlier end to it, so the end's picker opens on the right day.
+   An end already after the start stays. Same-format values ("YYYY-MM-DDTHH:MM", or select indexes) compare as text / numbers. */
+function followStart(a, z, num){
+  if (!a || !z) return;
+  a.addEventListener("change", function(){
+    if (!a.value) return;
+    if (num ? +z.value < +a.value : (!z.value || z.value < a.value)) z.value = a.value;
+  });
+}
 function fromLocalInput(v){ return v ? new Date(v).toISOString() : null; }
 function slugify(t){
   var s = String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").replace(/^[^a-z]+/, "");
@@ -224,7 +236,7 @@ function fail(e){
   /* one event closing or one grant ending must not drop the others (code review PR B):
      re-read who this is, then land wherever they still belong */
   admining = null; adminsData = null; closing = null; su = null; pm = null; ad = null; adBusy = false;
-  hh = null; hlog = null; health = null; ct = null; ctEd = null; ctBusy = false;   /* a right that ended must not leave its data cached (security L5) */
+  hh = null; hlog = null; health = null; ct = null; ctEd = null; ctBusy = false; cd = null; cdBusy = false;   /* a right that ended must not leave its data cached (security L5) */
   rpc("jc_me_get").then(function(me){
     scopes = me.admin_scopes || []; adminEvents = me.admin_events || []; owner = !!me.is_owner;
     if (!canEnter()) { show("lock"); return showErr("NOT_ADMIN"); }
@@ -244,6 +256,7 @@ function show(name){
        : name === "feedback" || name === "health" || name === "households" || name === "admins" ? function(){ show("home"); }
        : name === "adminlog" ? function(){ show("households"); }
        : name === "court" ? function(){ ctEd = null; show("home"); }
+       : name === "courtday" ? function(){ cd = null; admTab = "courts"; show("home"); }
        : name === "hhpin" ? function(){ if (hhBusy) return; hhPin = null; show("households"); } : null, "back");
   jcHelp(name === "lock" ? null : "admin");
   var refocus = jcFocusKeep();
@@ -515,7 +528,7 @@ var VIEWS = {
     on("exit", function(){
       busy("exit", true);
       rpc("jc_admin_exit").then(function(){
-        scopes = []; admining = null; adminsData = null; ct = null; ctEd = null;   /* nothing of the code's stays cached */
+        scopes = []; admining = null; adminsData = null; ct = null; ctEd = null; cd = null;   /* nothing of the code's stays cached */
         if (isEventAdmin() || owner) return loadHome();   /* still runs their own events / reads feedback */
         events = []; show("lock");
       }, function(e){ busy("exit", false); fail(e); });
@@ -625,6 +638,7 @@ var VIEWS = {
     jcRichToolbar(el("description_ar"), el("prev_ar"));
     el("starts_at").value = el("starts_at").defaultValue = toLocalInput(ev.starts_at);
     el("ends_at").value = el("ends_at").defaultValue = toLocalInput(ev.ends_at);
+    followStart(el("starts_at"), el("ends_at"));
     var feats0 = ed.ev ? ev.features : ed.tpl && ed.tpl.features;      /* a template pre-sets switches */
     FEATURES.forEach(function(f){ el("f_" + f).checked = !!(feats0 && feats0[f]); });
     el("f_safety").checked = el("f_safety").defaultChecked = !!(ed.ev && ev.features && ev.features.safety === true);
@@ -864,6 +878,43 @@ var VIEWS = {
     el("ctForm").addEventListener("submit", function(e){ e.preventDefault(); saveCourt(); });
   },
 
+  /* R4b-2 — one court, one day */
+  courtday: function(){
+    if (!cd) return show("home");
+    var name = ar() && cd.f.name_ar ? cd.f.name_ar : cd.f.name_en, today = cdToday(), max = cdAdd(today, CD_AHEAD);
+    var html = '<h1 dir="auto">' + esc(name) + '</h1>' +
+      '<p class="help">' + esc(jcT("cd_help")) + '</p>' +
+      '<div class="cdbar"><button class="btn ghost small" type="button" id="cdPrev"' + (cd.date <= today ? ' disabled' : '') + '>' + esc(jcT("cd_prev")) + '</button>' +
+      '<label class="cddate"><span class="sr-only">' + esc(jcT("cd_date")) + '</span><input id="cdDate" type="date" min="' + today + '" max="' + max + '" value="' + esc(cd.date) + '"></label>' +
+      '<button class="btn ghost small" type="button" id="cdNext"' + (cd.date >= max ? ' disabled' : '') + '>' + esc(jcT("cd_next")) + '</button></div>' +
+      '<p class="cdday" id="cdDay">' + esc(cdDayText(cd.date)) + '</p>' + msgBox();
+    if (cd.err) {
+      el("view").innerHTML = html + '<div class="row"><button class="btn ghost" type="button" id="cdRetry">' + esc(jcT("adm_ad_retry")) + '</button></div>';
+      showErr(cd.err);
+      return cdWire();
+    }
+    if (!cd.slots) {
+      el("view").innerHTML = html + '<p class="help">' + esc(jcT("working")) + '</p>';
+      cdWire();
+      if (!cd.loading) loadDay();
+      return;
+    }
+    var open = cd.slots.map(function(s, i){ return Object.assign({ i: i }, s); }).filter(function(s){ return !cdOver(s); });
+    if (cd.form && cd.form.kind === "block" && !open.length) cd.form = null;
+    html += (cd.form && cd.form.kind === "block" ? cdBlockHtml(open)
+             : open.length ? '<div class="row"><button class="btn" type="button" id="cdBlock">' + esc(jcT("cd_block")) + '</button></div>' : '') +
+      (cd.slots.length ? '<ul class="sulist cdlist">' + cdRows(cd.slots).map(cdRowHtml).join("") + '</ul>'
+                       : '<p class="help">' + esc(jcT("cd_none")) + '</p>');
+    el("view").innerHTML = html;
+    var dr = cd.draft; cd.draft = null;
+    if (dr) {
+      ["cdFrom", "cdTo", "cdLast", "cdWhy", "cdCancelWhy"].forEach(function(id){ if (el(id) && dr[id] != null) el(id).value = dr[id]; });
+      var u = dr.until && document.querySelector('input[name="cdUntil"][value="' + (dr.until === "days" ? "days" : "day") + '"]');
+      if (u) u.checked = true;
+    }
+    cdWire();
+  },
+
   households: function(){
     var html = '<h1>' + esc(jcT("adm_hh_title")) + '</h1>' + msgBox();
     if (!hh || !hh.data) {
@@ -984,7 +1035,10 @@ var LOG_KEYS = { home_edit: "y", home_pin_set: "y", home_suppress: "y", member_r
   invite_decline: "y", code_rotate: "y", broadcast_set: "y", notice_resolve: "y", event_save: "y", event_publish: "y",
   event_signups: "y", event_announce: "y", event_close: "y", event_autoclose: "y", entry_moderate: "y", entry_pin_set: "y",
   entry_spot_set: "y", event_admin_link: "y", event_admin_accept: "y", event_admin_revoke: "y",
-  broadcast_tie: "y" };
+  broadcast_tie: "y",
+  /* R4b-2: courts + per-module admins (R4a / R4a-2) */
+  facility_save: "y", facility_status: "y", block_create: "y", block_remove: "y", booking_cancel: "y",
+  module_admin_link: "y", module_admin_accept: "y", module_admin_revoke: "y" };
 /* the homes list, well-formed rows only (a null row would throw while drawing) */
 function hhShape(d){
   if (!hObj(d) || !Array.isArray(d.homes) || !Array.isArray(d.pending)) return null;
@@ -1407,7 +1461,7 @@ function courtRow(f){
   var meta = [jcT("ct_kind_" + (f.kind === "basketball" ? "basketball" : "tennis")),
               "⁦" + hm(f.open_time) + "–" + hm(f.close_time) + "⁩",
               f.walk_on ? jcT("ct_walk_on_short") : jcFmt("ct_slot_n", { n: f.slot_minutes }) + " · " + jcFmt("ct_window_n", { n: f.window_days })];
-  var acts = st === "retired" ? [] : [["edit", "ct_act_edit"]]
+  var acts = st === "retired" ? [] : (f.walk_on ? [] : [["day", "ct_act_day"]]).concat([["edit", "ct_act_edit"]])
     .concat(st === "draft" ? [["published", "ct_act_publish"]] : st === "published" ? [["draft", "ct_act_unpublish"]] : [])
     .concat([["retired", "ct_act_retire"]]);
   return '<li data-court="' + esc(f.id) + '" class="' + st + '"><b dir="auto">' + esc(name) + '</b>' +
@@ -1443,6 +1497,7 @@ function wireCourts(){
       if (!f) return showErr("NOT_FOUND");
       var to = b.dataset.ct;
       if (to === "edit") { ctEd = { f: f, draft: null, pin: null }; return show("court"); }
+      if (to === "day") { cd = { f: f, date: cdToday(), slots: null, err: null, loading: false, form: null, draft: null }; return show("courtday"); }
       if (ctBusy) return;
       var name = ar() && f.name_ar ? f.name_ar : f.name_en, n = f.upcoming || 0;
       /* the server cancels every booking not yet over — a slot being played now too (security review L3) */
@@ -1531,6 +1586,247 @@ function saveCourt(){
     busy("ctSave", false);
     if (e.code === "NOT_ADMIN") return fail(e);
     ctMsg(e.code);
+  });
+}
+
+/* ---------- court day view (R4b-2; server S3 + R4a / R4a-2) ---------- */
+/* Days are community-time dates (jc_admin_facility_day takes a date in cfg.tz) and every time shown is in cfg.tz,
+   never the phone's zone. A block's ends come from the slots the server returned, so no time arithmetic here. */
+var CD_AHEAD = 90;     /* Zee 2026-11-09: today → 90 days ahead; past days hidden */
+var CD_SPAN = 30;      /* a multi-day block ends at most 30 days after its first day (server: ≤ 31 days) */
+var CD_PRESETS = ["maintenance", "event", "official", "other"];
+function cdTz(){ return (cfg && cfg.tz) || "Asia/Dubai"; }
+function cdToday(){
+  try {
+    var p = {};
+    new Intl.DateTimeFormat("en-US", { timeZone: cdTz(), year: "numeric", month: "2-digit", day: "2-digit" })
+      .formatToParts(new Date()).forEach(function(x){ p[x.type] = x.value; });
+    return p.year + "-" + p.month + "-" + p.day;
+  } catch(e){ return new Date().toISOString().slice(0, 10); }
+}
+function cdAdd(d, n){ var t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); }
+function cdIsDate(d){ return typeof d === "string" && /^\d{4}-\d\d-\d\d$/.test(d) && !isNaN(Date.parse(d + "T00:00:00Z")) && cdAdd(d, 0) === d; }
+function cdLoc(){ return ar() ? "ar-AE-u-nu-latn" : "en-GB"; }
+function cdDayText(d){ return new Date(d + "T12:00:00Z").toLocaleDateString(cdLoc(), { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }); }
+function cdTime(iso){ return new Date(iso).toLocaleTimeString(cdLoc(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: cdTz() }); }
+function cdOver(s){ return Date.parse(s.ends_at) <= Date.now(); }
+function cdBooked(s){ return (s.state === "booked" || s.state === "mine") && !!s.booking_id; }
+function cdSlots(d){
+  return hObj(d) && Array.isArray(d.slots) ? d.slots.filter(function(s){
+    return hObj(s) && typeof s.starts_at === "string" && typeof s.ends_at === "string" && !isNaN(Date.parse(s.starts_at)) && !isNaN(Date.parse(s.ends_at));
+  }) : null;
+}
+/* then() runs after the redraw, so a message it draws survives */
+function loadDay(then){
+  var mine = cd, seq = ++cdSeq;
+  mine.slots = null; mine.err = null; mine.loading = true;
+  rpc("jc_admin_facility_day", { p_facility: mine.f.id, p_date: mine.date }).then(function(d){
+    if (cd !== mine || seq !== cdSeq) return;
+    mine.loading = false;
+    if (current !== "courtday" || !isCourtsAdmin()) return;      /* left, or the right ended on the way */
+    var s = cdSlots(d);
+    if (s) mine.slots = s; else mine.err = "UNKNOWN";
+    VIEWS.courtday();
+    if (then && s) then();
+  }, function(e){
+    if (cd !== mine || seq !== cdSeq) return;
+    mine.loading = false;
+    if (current !== "courtday") return;
+    if (e.code === "NOT_ADMIN") return fail(e);
+    if (e.code === "NOT_FOUND") { cd = null; ct = null; ctNote = "NOT_FOUND"; admTab = "courts"; return show("home"); }
+    mine.err = e.code || "UNKNOWN"; VIEWS.courtday();
+  });
+}
+function cdMsg(code){
+  var t = jcT("cd_err_" + code);
+  if (t === "cd_err_" + code) return showErr(code);
+  var m = el("msg"); if (!m) return;
+  m.className = "msg err"; m.textContent = t;
+  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
+}
+/* one block's run of slots is one row */
+function cdRows(slots){
+  var out = [];
+  slots.forEach(function(s, i){
+    var last = out[out.length - 1];
+    if (s.state === "blocked" && s.block_id && last && last.state === "blocked" && last.block_id === s.block_id) { last.ends_at = s.ends_at; return; }
+    out.push(Object.assign({}, s, { i: i }));
+  });
+  return out;
+}
+function cdRowHtml(r){
+  var st = r.state === "mine" ? "booked" : r.state === "free" || r.state === "booked" || r.state === "blocked" ? r.state : "past";
+  var over = cdOver(r);
+  var h = '<li data-slot="' + r.i + '" class="cd-' + st + '"><div class="cdhead"><b class="cdtime">⁦' + esc(cdTime(r.starts_at) + "–" + cdTime(r.ends_at)) + '⁩</b>' +
+    '<span class="chip">' + esc(jcT("cd_st_" + st)) + '</span>' +
+    (st === "booked" && r.is_private === true ? '<span class="chip">' + esc(jcT("cd_private")) + '</span>' : '') + '</div>';
+  if (st === "booked") {
+    var hm_ = hObj(r.home);
+    var who = hm_ ? [jcHomeLabel(hm_), hm_.village ? jcVillageName(cfg, hm_.village) : ""].filter(Boolean).join(" · ") : "";
+    if (who) h += '<div class="meta" dir="auto">' + esc(who) + '</div>';
+    if (!over && r.booking_id) {
+      if (cd.form && cd.form.kind === "cancel" && cd.form.id === r.booking_id) {
+        h += '<div class="cdform"><label>' + esc(jcT("cd_cancel_reason")) +
+          '<input id="cdCancelWhy" type="text" maxlength="200" dir="auto" autocomplete="off"></label>' +
+          '<div class="acts"><button class="mini danger" type="button" id="cdCancelGo">' + esc(jcT("cd_cancel_go")) + '</button>' +
+          '<button class="mini" type="button" id="cdCancelKeep">' + esc(jcT("cd_keep")) + '</button></div></div>';
+      } else {
+        h += '<div class="acts"><button class="mini danger" type="button" data-cdcancel="' + esc(r.booking_id) + '">' + esc(jcT("cd_cancel")) + '</button></div>';
+      }
+    }
+  }
+  if (st === "blocked") {
+    if (r.block_reason) h += '<div class="meta" dir="auto">' + esc(r.block_reason) + '</div>';
+    if (r.block_id) h += '<div class="acts"><button class="mini" type="button" data-cdunblock="' + esc(r.block_id) + '">' + esc(jcT("cd_remove")) + '</button></div>';
+  }
+  return h + '</li>';
+}
+function cdBlockHtml(open){
+  return '<form class="panel" id="cdBlockForm" novalidate data-no-autoreload>' +
+    '<h2 class="group">' + esc(jcT("cd_block")) + '</h2>' +
+    '<label>' + esc(jcT("cd_from")) + '<select id="cdFrom">' + open.map(function(s){
+      return '<option value="' + s.i + '">' + esc(cdTime(s.starts_at)) + '</option>'; }).join("") + '</select></label>' +
+    '<fieldset><legend>' + esc(jcT("cd_until")) + '</legend>' +
+      '<label class="check"><input type="radio" name="cdUntil" value="day" checked> <span>' + esc(jcT("cd_until_day")) + '</span></label>' +
+      '<label class="check"><input type="radio" name="cdUntil" value="days"> <span>' + esc(jcT("cd_until_days")) + '</span></label>' +
+    '</fieldset>' +
+    '<label id="cdToWrap">' + esc(jcT("cd_to")) + '<select id="cdTo">' + open.map(function(s){
+      return '<option value="' + s.i + '">' + esc(cdTime(s.ends_at)) + '</option>'; }).join("") + '</select></label>' +
+    '<label id="cdLastWrap">' + esc(jcT("cd_last")) + '<input id="cdLast" type="date" min="' + cdAdd(cd.date, 1) + '" max="' + cdAdd(cd.date, CD_SPAN) + '"></label>' +
+    '<p class="help" id="cdLastHelp">' + esc(jcT("cd_last_help")) + '</p>' +
+    '<div class="row"><button class="btn ghost small" type="button" id="cdWhole">' + esc(jcT("cd_whole")) + '</button></div>' +
+    '<div class="ctchips" role="group" aria-label="' + esc(jcT("cd_presets")) + '">' + CD_PRESETS.map(function(k){
+      return '<button class="mini" type="button" data-cdpre="' + k + '">' + esc(jcT("cd_pre_" + k)) + '</button>'; }).join("") + '</div>' +
+    '<label>' + esc(jcT("cd_reason")) + '<input id="cdWhy" type="text" maxlength="185" dir="auto" autocomplete="off"></label>' +
+    '<p class="help">' + esc(jcT("cd_reason_help")) + '</p>' +
+    '<div class="row"><button class="btn" type="submit" id="cdBlockGo">' + esc(jcT("cd_block_go")) + '</button>' +
+    '<button class="btn ghost" type="button" id="cdBlockKeep">' + esc(jcT("ct_cancel")) + '</button></div></form>';
+}
+/* what's typed in an open form, kept across a language switch */
+function cdDraft(){
+  if (!cd || !cd.form) return null;
+  var d = {};
+  ["cdFrom", "cdTo", "cdLast", "cdWhy", "cdCancelWhy"].forEach(function(id){ var n = el(id); if (n) d[id] = n.value; });
+  var u = document.querySelector('input[name="cdUntil"]:checked');
+  if (u) d.until = u.value;
+  return d;
+}
+function cdWire(){
+  var today = cdToday();
+  function go(d){ if (cdBusy || !cdIsDate(d) || d < today || d > cdAdd(today, CD_AHEAD)) return false; cd.date = d; cd.form = null; loadDay(); return true; }
+  on("cdPrev", function(){ go(cdAdd(cd.date, -1)); });
+  on("cdNext", function(){ go(cdAdd(cd.date, 1)); });
+  var di = el("cdDate");
+  if (di) di.addEventListener("change", function(){ if (!go(di.value)) di.value = cd.date; });
+  on("cdRetry", function(){ loadDay(); });
+  on("cdBlock", function(){ if (cdBusy) return; cd.form = { kind: "block" }; VIEWS.courtday(); var n = el("cdFrom"); if (n) n.focus(); });
+  on("cdBlockKeep", function(){ cd.form = null; VIEWS.courtday(); });
+  on("cdCancelKeep", function(){ cd.form = null; VIEWS.courtday(); });
+  each("[data-cdcancel]", function(b){
+    if (cdBusy) return;
+    cd.form = { kind: "cancel", id: b.dataset.cdcancel }; VIEWS.courtday();
+    var n = el("cdCancelWhy"); if (n) n.focus();
+  });
+  on("cdCancelGo", function(){
+    var b = el("cdCancelGo"), why = el("cdCancelWhy").value.trim(), id = cd.form && cd.form.id;
+    if (why.length < 3) return cdMsg("REASON");
+    cdWrite(b, function(){
+      return rpc("jc_admin_booking_cancel", { p_booking: id, p_reason: why }).then(function(list){
+        if (ct && Array.isArray(list)) ct.list = list.filter(hObj);    /* the counts are right even if they left */
+        return true;
+      });
+    }, function(){ cd.form = null; loadDay(function(){ showOk(jcT("cd_done_cancel")); }); });
+  });
+  each("[data-cdunblock]", function(b){
+    if (!window.confirm(jcT("cd_confirm_remove"))) return;
+    var id = b.dataset.cdunblock;
+    cdWrite(b, function(){ return rpc("jc_admin_block_remove", { p_block: id }); },
+      function(){ loadDay(function(){ showOk(jcT("cd_done_remove")); }); });
+  });
+  var form = el("cdBlockForm");
+  if (!form) return;
+  function syncUntil(){
+    var days = document.querySelector('input[name="cdUntil"]:checked').value === "days";
+    el("cdToWrap").hidden = days; el("cdLastWrap").hidden = !days; el("cdLastHelp").hidden = !days;
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('input[name="cdUntil"]'), function(n){ n.addEventListener("change", syncUntil); });
+  syncUntil();
+  followStart(el("cdFrom"), el("cdTo"), true);
+  Array.prototype.forEach.call(document.querySelectorAll('input[name="cdUntil"]'), function(n){
+    n.addEventListener("change", function(){ if (n.value === "days" && !el("cdLast").value) el("cdLast").value = cdAdd(cd.date, 1); });
+  });
+  on("cdWhole", function(){
+    var f = el("cdFrom"), t = el("cdTo");
+    f.selectedIndex = 0; t.selectedIndex = t.options.length - 1;
+    document.querySelector('input[name="cdUntil"][value="day"]').checked = true; syncUntil();
+  });
+  each("[data-cdpre]", function(b){
+    var w = el("cdWhy");
+    w.value = b.dataset.cdpre === "other" ? "" : jcT("cd_pre_" + b.dataset.cdpre);
+    w.focus();
+  });
+  form.addEventListener("submit", function(e){ e.preventDefault(); cdBlockSubmit(); });
+}
+function cdBlockSubmit(){
+  var why = el("cdWhy").value.trim();
+  if (why.length < 3) return cdMsg("REASON");
+  var a = cd.slots[+el("cdFrom").value];
+  if (!a) return cdMsg("RANGE");
+  var name = ar() && cd.f.name_ar ? cd.f.name_ar : cd.f.name_en;
+  var days = document.querySelector('input[name="cdUntil"]:checked').value === "days";
+  var b = el("cdBlockGo");
+  if (!days) {
+    var zi = +el("cdTo").value, z = cd.slots[zi];
+    if (!z || zi < +el("cdFrom").value) return cdMsg("RANGE");
+    var n = cd.slots.slice(+el("cdFrom").value, zi + 1).filter(function(s){ return cdBooked(s) && !cdOver(s); }).length;
+    var ask = jcFmt("cd_confirm_block", { c: name, r: "⁦" + cdDayText(cd.date) + " " + cdTime(a.starts_at) + "–" + cdTime(z.ends_at) + "⁩" }) +
+      (n > 0 ? " " + jcFmt("cd_confirm_block_n", { n: n }) : "");
+    if (!window.confirm(ask)) return;
+    return cdBlockSend(b, a.starts_at, z.ends_at, why);
+  }
+  var last = el("cdLast").value;
+  if (!cdIsDate(last) || last <= cd.date || last > cdAdd(cd.date, CD_SPAN)) return cdMsg("RANGE_DAYS");
+  /* the end is the last slot of that day, as the server lays it out (community time, its own hours) */
+  cdWrite(b, function(){
+    return rpc("jc_admin_facility_day", { p_facility: cd.f.id, p_date: last }).then(function(d){
+      var s = cdSlots(d);
+      if (!s || !s.length) throw jcErr("NO_SLOTS");
+      return s[s.length - 1].ends_at;
+    });
+  }, function(end){
+    var ask = jcFmt("cd_confirm_block", { c: name, r: "⁦" + cdDayText(cd.date) + " " + cdTime(a.starts_at) + " – " + cdDayText(last) + " " + cdTime(end) + "⁩" }) +
+      " " + jcT("cd_confirm_block_days");
+    if (!window.confirm(ask)) { if (el("cdBlockGo")) el("cdBlockGo").disabled = false; return; }
+    cdBlockSend(el("cdBlockGo"), a.starts_at, end, why);
+  });
+}
+function cdBlockSend(b, from, to, why){
+  cdWrite(b, function(){
+    return rpc("jc_admin_block_create", { p_facility: cd.f.id, p_starts: from, p_ends: to, p_reason: why }).then(function(r){
+      loadCourts();                                /* upcoming counts changed: re-read now (never null a list that may be on screen) */
+      return hObj(r) || {};
+    });
+  }, function(r){
+    var n = typeof r.bookings_cancelled === "number" ? r.bookings_cancelled : 0;
+    cd.form = null;
+    loadDay(function(){ showOk(n > 0 ? jcFmt("cd_done_block", { n: n }) : jcT("cd_done_block_0")); });
+  });
+}
+/* every write: one at a time; cdBusy always comes back down; an answer after leaving changes nothing on screen */
+function cdWrite(b, call, done){
+  if (cdBusy) return;
+  var mine = cd;
+  cdBusy = true; if (b) b.disabled = true;
+  Promise.resolve().then(call).then(function(d){
+    cdBusy = false;
+    if (cd !== mine || current !== "courtday") return;
+    return done(d);
+  }).catch(function(e){
+    cdBusy = false; if (b) b.disabled = false;
+    if (cd !== mine || current !== "courtday") return;
+    if (e && e.code === "NOT_ADMIN") return fail(e);
+    if (e && e.code === "NOT_FOUND") { cd.form = null; return loadDay(function(){ cdMsg("NOT_FOUND"); }); }
+    cdMsg((e && e.code) || "UNKNOWN");
   });
 }
 
@@ -1656,7 +1952,7 @@ function wireAdminsView(){
       /* a community admin's removal also cancelled every link they made, at every level: re-read them all */
       if (what === "reload") { ad = null; return loadAdmins(function(){ showOk(jcT("adm_admins_removed")); }, adLinks); }
       if (what !== "self") return draw(jcT("adm_admins_removed"));
-      ad = null; hh = null; hlog = null; health = null; fb = null; ct = null; ctEd = null;   /* nothing of theirs stays cached (security L5) */
+      ad = null; hh = null; hlog = null; health = null; fb = null; ct = null; ctEd = null; cd = null;   /* nothing of theirs stays cached (security L5) */
       if (!canEnter()) { events = []; show("lock"); return showOk(jcT("adm_ad_self_removed")); }
       return loadHome().then(function(){ showOk(jcT("adm_ad_self_removed")); });
     });
@@ -2519,6 +2815,7 @@ el("langBtn").addEventListener("click", function(){
   if (current === "accept") return acceptView(GRANT);   /* same link, other language */
   if (current === "invite") return inviteView();
   if (current === "court" && ctEd) { ctEd.draft = courtForm(); return show("court"); }   /* never throw away the form */
+  if (current === "courtday" && cd) { cd.draft = cdDraft(); return show("courtday"); }   /* same day, same open form */
   if (current === "admins" && ad) return VIEWS.admins();   /* keeps a just-made invite link on screen */
   /* keep what's half-done: the banner draft, an open note / spot, where the pin map was moved */
   var keep = Array.prototype.map.call(document.querySelectorAll("#bannerText, [data-form] [data-in]"), function(n){ return n.value; });

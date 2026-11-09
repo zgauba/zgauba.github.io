@@ -81,7 +81,7 @@ test("list: status, pin, hours, upcoming; walk-on shows no grid; retired apart w
   await expect(c1).toContainText("Published");
   await expect(c1).toContainText("Tennis · ⁦07:00–22:00⁩ · 60-minute slots · 7 days ahead");
   await expect(c1).toContainText("Upcoming bookings: 3");
-  await expect(c1.locator("[data-ct]")).toHaveText(["Edit", "Unpublish", "Retire"]);
+  await expect(c1.locator("[data-ct]")).toHaveText(["Day view", "Edit", "Unpublish", "Retire"]);
   const c2 = page.locator('[data-court="c2"]');
   await expect(c2).toContainText("Walk-on");
   await expect(c2).toContainText("No pin");
