@@ -22,7 +22,6 @@ h2.group{font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color
 .bklist li.cancelled{border-color:var(--jc-warn)}
 .bklist .check{flex-direction:row; align-items:center; gap:8px; font-weight:600; color:var(--jc-ink); font-size:14px}
 .bklist .check input{width:20px; height:20px}
-.bkmap{height:200px; border-radius:var(--jc-radius); border:1px solid var(--jc-line); overflow:hidden}
 /* the day strip: one button per day of the window, scrolls sideways */
 .strip{display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; scrollbar-width:none}
 .strip button{flex:0 0 auto; min-width:56px; min-height:52px; font:inherit; font-size:13px; line-height:1.2; cursor:pointer;
@@ -30,3 +29,18 @@ h2.group{font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color
 .strip button b{display:block; font-size:16px}
 .strip button[aria-pressed="true"]{border-color:var(--jc-accent); box-shadow:inset 0 0 0 1px var(--jc-accent)}
 .sheet-in{border-top:1px solid var(--jc-line); padding-top:8px; display:flex; flex-direction:column; gap:8px}
+/* Zee 2026-11-09: even spacing between everything on both screens (the banner touched the day strip) */
+#view{display:flex; flex-direction:column; gap:12px}
+#view > h1, #view > p, #view > .subtabs{margin:0}
+#view > .subtabs + .msg{margin-top:-4px}
+[role="tabpanel"]{display:flex; flex-direction:column; gap:12px}
+/* the Map tab: the shared map look lives in assets/mapui.css (same classes as the event map) */
+/* the court name on its pin */
+.leaflet-tooltip.bklabel{background:var(--jc-surface); color:var(--jc-ink); border:1px solid var(--jc-line);
+  font:700 12.5px/1.3 var(--jc-font); padding:3px 8px; border-radius:8px; box-shadow:none}
+.leaflet-tooltip-top.bklabel::before{border-top-color:var(--jc-line)}
+.pop{display:flex; flex-direction:column; gap:4px}
+.pop .popacts{margin-top:4px; align-items:center}
+.bkhead{display:flex; flex-direction:column; gap:4px}
+.bkhead h1, .bkhead p{margin:0}
+.bkhead .meta{color:var(--jc-muted); font-size:14px}

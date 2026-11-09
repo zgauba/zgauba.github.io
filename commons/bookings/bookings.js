@@ -16,7 +16,11 @@ var courts = null, mine = null, listErr = null, listLoading = false;
 var day = null;          /* { f, date, slots [] | null, err, loading, pick: slot index | null, priv: bool } */
 var bkBusy = false, daySeq = 0, listSeq = 0, mineSeq = 0;
 var mineStale = false;    /* My bookings changed elsewhere and the re-read hasn't landed (code review M1) */
-var deepLink = null;      /* ?court= waiting for the list (kept for Try Again, review L2) */
+var deepLink = null;
+/* Zee 2026-11-09: sub-tabs List · Map · My bookings (?tab=), the map like the event map (full screen, Find Me) */
+var TABS = ["list", "map", "mine"];
+var tab = TABS.indexOf(params.get("tab")) >= 0 ? params.get("tab") : "list";
+var layer = "sat", mapFull = false, userPos = null;      /* ?court= waiting for the list (kept for Try Again, review L2) */
 
 /* ---------- helpers ---------- */
 function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
@@ -113,7 +117,7 @@ function refreshMine(){
   rpc("jc_my_bookings").then(function(d){
     if (seq !== mineSeq) return;
     setMine(d);
-    if (current === "list") drawMine();
+    if (current === "list" && el("bkMineBox")) drawMine();   /* never rebuild the Map / List tab under the resident (review M) */
   }, function(){});
 }
 /* only the My bookings block: no map rebuild, no jump (review M3); focus back on what was used (M2) */
@@ -128,7 +132,7 @@ function drawMine(focusId){
 
 function openCourt(f, date){
   day = { f: f, date: date || jcTzToday(cfg), slots: null, err: null, loading: false, pick: null, priv: false };
-  setUrl("court=" + encodeURIComponent(f.id));
+  setUrl("court=" + encodeURIComponent(f.id) + (tab === "list" ? "" : "&tab=" + tab));   /* a reload, then Back, keeps the tab */
   show("court");
 }
 function loadDay(then){
@@ -170,7 +174,8 @@ function draw(){ var r = jcFocusKeep(); VIEWS[current](); r(); }
 function show(name){
   current = name;
   if (map) { map.remove(); map = null; }
-  jcBack(name === "court" ? function(){ if (bkBusy) return; day = null; setUrl(null); show("list"); } : null, "back");
+  jcBack(name === "court" ? function(){ if (bkBusy) return; day = null; setUrl(tab === "list" ? null : "tab=" + tab); show("list"); } : null, "back");
+  if (name !== "list") { mapFull = false; document.body.classList.remove("mapfull"); }
   var refocus = jcFocusKeep();
   VIEWS[name]();
   refocus();
@@ -198,7 +203,7 @@ function mineHtml(){
         '<button class="mini danger" type="button" id="bkCancel-' + esc(b.id) + '" data-bkcancel="' + esc(b.id) + '" aria-label="' + esc(jcT("bk_cancel") + " " + when(b)) + '">' +
         esc(jcT("bk_cancel")) + '</button></div>') + '</li>';
   });
-  return '<h2 class="group" id="bkMineHead" tabindex="-1">' + esc(jcT("bk_mine")) + '</h2>' +
+  return '<h2 class="sr-only" id="bkMineHead" tabindex="-1">' + esc(jcT("bk_mine")) + '</h2>' +
     (rows.length ? '<ul class="bklist" id="bkMine">' + rows.join("") + '</ul>' : '<p class="help" id="bkMine">' + esc(jcT("bk_mine_none")) + '</p>');
 }
 function courtCard(f){
@@ -210,28 +215,100 @@ function courtCard(f){
       : '<div class="acts"><button class="btn small" type="button" data-open="' + esc(f.id) + '">' + esc(jcT("bk_see_times")) + '</button></div>') +
     '</li>';
 }
+/* ---------- the Map tab: like the event map (keep in step with events.js renderMap / setMapFull) ---------- */
+function popHtml(f){
+  return '<div class="pop"><b dir="auto">' + esc(courtName(f)) + '</b>' +
+    '<div class="meta">' + esc(kindText(f) + " · ⁦" + hm(f.open_time) + "–" + hm(f.close_time) + "⁩") + '</div>' +
+    (f.location_note ? '<div class="meta" dir="auto">' + esc(f.location_note) + '</div>' : '') +
+    (f.walk_on ? '<div class="meta">' + esc(jcT("bk_walk_on")) + '</div>' : '') +
+    '<div class="popacts">' + (f.walk_on ? '' : '<button class="mini" type="button" data-popopen="' + esc(f.id) + '">' + esc(jcT("bk_see_times")) + '</button>') +
+    /* as on the event map */
+    '<a target="_blank" rel="noopener" href="' + esc("https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(f.lat + "," + f.lng) + "&travelmode=walking") + '">' +
+    esc(jcT("ev_directions")) + '</a></div></div>';
+}
+function fitMap(){
+  var m = el("bkmap");
+  if (!m) return;
+  if (mapFull) { if (map) map.invalidateSize(); return; }
+  var bar = el("tabbar") ? el("tabbar").getBoundingClientRect().height : 0;
+  var top = m.getBoundingClientRect().top + window.scrollY;
+  var h = Math.max(260, Math.floor(window.innerHeight - top - bar - 12));
+  if (Math.abs(m.offsetHeight - h) < 2) return;
+  m.style.height = h + "px";
+  if (map) map.invalidateSize();
+}
+var fitTimer = null;
+function fitSoon(){ clearTimeout(fitTimer); fitTimer = setTimeout(fitMap, 120); }
+window.addEventListener("resize", fitSoon);
+window.addEventListener("orientationchange", fitSoon);
+function setMapFull(on){
+  var w = document.querySelector(".evmapwrap"), b = el("fullBtn");
+  mapFull = !!on && !!w;
+  if (w) w.classList.toggle("full", mapFull);
+  document.body.classList.toggle("mapfull", mapFull);
+  if (b) { b.textContent = jcT(mapFull ? "ev_map_close" : "ev_map_full"); b.setAttribute("aria-pressed", String(mapFull)); }
+  if (!mapFull) fitMap();
+  requestAnimationFrame(function(){ if (map) map.invalidateSize(); });
+}
+document.addEventListener("keydown", function(e){ if (e.key === "Escape" && mapFull) setMapFull(false); });
+function locate(done){
+  if (!navigator.geolocation) return showErr("LOCATE_FAILED");
+  navigator.geolocation.getCurrentPosition(function(p){ userPos = [p.coords.latitude, p.coords.longitude]; done(); },
+    function(err){ setMapFull(false); showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED"); },   /* visible, not behind the full map */
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+}
+function mapHtml(pinned){
+  if (typeof L === "undefined") return '<p class="help" id="bkNoPins">' + esc(jcT("err_NETWORK")) + '</p>';   /* no dead buttons (review L) */
+  if (!pinned.length) return '<p class="help" id="bkNoPins">' + esc(jcT("bk_no_pins")) + '</p>';
+  return '<div class="evmapwrap"><div class="evmap" id="bkmap" role="region" aria-label="' + esc(jcT("bk_map_label")) + '"></div>' +
+    '<div class="mapbtns"><button type="button" class="lang" id="layerBtn">' + esc(jcT(layer === "sat" ? "pin_street" : "pin_sat")) + '</button></div>' +
+    '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button>' +
+    '<button type="button" class="lang mapfull" id="fullBtn" aria-pressed="false">' + esc(jcT("ev_map_full")) + '</button></div>';
+}
 function drawMap(list){
+  mapFull = false; document.body.classList.remove("mapfull");
   if (typeof L === "undefined" || !el("bkmap")) return;
+  fitMap();
+  requestAnimationFrame(fitSoon);
   var c = (cfg && cfg.map) || {};
   map = L.map("bkmap", { zoomControl: true }).setView([c.lat || 24.53, c.lng || 54.43], c.zoom || 14);
-  L.tileLayer(jcTiles.street.url, jcTiles.street.opts).addTo(map);
+  var tiles = L.tileLayer(jcTiles[layer].url, jcTiles[layer].opts).addTo(map);
+  on("layerBtn", function(){
+    layer = layer === "sat" ? "street" : "sat";
+    map.removeLayer(tiles);
+    tiles = L.tileLayer(jcTiles[layer].url, jcTiles[layer].opts).addTo(map);
+    el("layerBtn").textContent = jcT(layer === "sat" ? "pin_street" : "pin_sat");
+  });
+  on("fullBtn", function(){ setMapFull(!mapFull); });
+  var me = null;
+  on("locateBtn", function(){
+    locate(function(){
+      if (!map) return;
+      if (me) me.setLatLng(userPos);
+      else me = L.circleMarker(userPos, { radius: 6, weight: 3, color: "#fff", fillColor: "#3a86ff", fillOpacity: 1 }).addTo(map);
+      map.setView(userPos, Math.max(map.getZoom(), 17));
+    });
+  });
   var styles = getComputedStyle(document.documentElement);
   var accent = styles.getPropertyValue("--jc-accent").trim() || "#3e9b76";
   var ink = styles.getPropertyValue("--jc-ink").trim() || "#f6f2e9";
   var pts = [];
   list.forEach(function(f){
     pts.push([f.lat, f.lng]);
-    /* Leaflet sets a string tooltip as HTML: the admin-typed name is escaped */
-    L.circleMarker([f.lat, f.lng], { radius: 10, weight: 3, color: ink, fillColor: accent, fillOpacity: .9 })
-      .addTo(map).bindTooltip('<span dir="auto">' + esc(courtName(f)) + '</span>', { direction: "top", offset: [0, -10] })
-      .on("click", function(){
-        if (!f.walk_on) return openCourt(f);
-        var card = document.querySelector('[data-court="' + (window.CSS && CSS.escape ? CSS.escape(f.id) : f.id) + '"]');
-        if (card && card.scrollIntoView) card.scrollIntoView({ block: "center" });
-      });
+    /* the court's name sits on its pin (Zee); Leaflet sets string content as HTML, so admin text is escaped */
+    L.circleMarker([f.lat, f.lng], { radius: 11, weight: 3, color: ink, fillColor: accent, fillOpacity: .95 }).addTo(map)
+      .bindTooltip('<span dir="auto">' + esc(courtName(f)) + '</span>', { permanent: true, direction: "top", offset: [0, -12], className: "bklabel" })
+      .bindPopup(popHtml(f), { maxWidth: 250, minWidth: 180, autoPanPaddingTopLeft: [12, 24], autoPanPaddingBottomRight: [12, 24] });
   });
-  if (pts.length > 1) map.fitBounds(pts, { padding: [28, 28], maxZoom: 17 });
-  else if (pts.length) map.setView(pts[0], 16);
+  var wrap = document.querySelector(".evmapwrap");
+  map.on("popupopen", function(pe){
+    if (wrap) wrap.classList.add("popopen");
+    var b = pe.popup.getElement() && pe.popup.getElement().querySelector("[data-popopen]");
+    if (b) b.addEventListener("click", function(){ var f = courtById(b.dataset.popopen); if (f) { setMapFull(false); openCourt(f); } });
+  });
+  map.on("popupclose", function(){ if (wrap) wrap.classList.remove("popopen"); });
+  if (pts.length > 1) map.fitBounds(pts, { padding: [40, 40], maxZoom: 18 });
+  else if (pts.length) map.setView(pts[0], 17);
 }
 
 var VIEWS = {
@@ -241,27 +318,35 @@ var VIEWS = {
 
   list: function(){
     var html = '<h1>' + esc(jcT("module_bookings")) + '</h1>' +
-      '<p class="notice" id="bkPrecedence">' + esc(jcT("bk_precedence")) + '</p>' + msgBox();
+      '<p class="notice" id="bkPrecedence">' + esc(jcT("bk_precedence")) + '</p>' +
+      jcTabsHtml("bktab-", TABS, tab, function(t){ return jcT("bk_tab_" + t); }, jcT("module_bookings"), "bkBody") + msgBox();
+    function wireTabs(){
+      jcTabsWire("bktab-", TABS, function(t){ tab = t; setUrl(t === "list" ? null : "tab=" + t); show("list"); });
+    }
     if (listErr) {
-      el("view").innerHTML = html + '<div class="row"><button class="btn ghost" type="button" id="bkRetry">' + esc(jcT("adm_ad_retry")) + '</button></div>';
-      showErr(listErr);
+      el("view").innerHTML = html + '<div ' + jcTabPanel("bktab-", tab, "bkBody") + '><div class="row"><button class="btn ghost" type="button" id="bkRetry">' +
+        esc(jcT("adm_ad_retry")) + '</button></div></div>';
+      showErr(listErr); wireTabs();
       return on("bkRetry", function(){ loadList(openDeepLink); show("list"); });
     }
     if (!courts || (mineStale && !listLoading)) {
-      el("view").innerHTML = html + '<p class="help" role="status">' + esc(jcT("working")) + '</p>';
+      el("view").innerHTML = html + '<div ' + jcTabPanel("bktab-", tab, "bkBody") + '><p class="help" role="status">' + esc(jcT("working")) + '</p></div>';
+      wireTabs();
       if (!listLoading) loadList();
       return;
     }
-    var pinned = courts.filter(hasPos);
-    html += '<div id="bkMineBox">' + mineHtml() + '</div>' +
-      '<h2 class="group">' + esc(jcT("bk_courts")) + '</h2>' +
-      (pinned.length ? '<div class="bkmap" id="bkmap" role="region" aria-label="' + esc(jcT("bk_map_label")) + '"></div>' : '') +
-      (courts.length ? '<ul class="bklist" id="bkCourts">' + courts.map(courtCard).join("") + '</ul>'
-                     : '<p class="help" id="bkCourts">' + esc(jcT("bk_none")) + '</p>');
-    el("view").innerHTML = html;
-    if (pinned.length) drawMap(pinned);
+    var pinned = courts.filter(hasPos), body;
+    if (tab === "map") body = mapHtml(pinned);
+    else if (tab === "mine") body = '<div id="bkMineBox">' + mineHtml() + '</div>';
+    else body = (hasHome() ? '' : '<p class="notice" id="bkNoHome">' + esc(jcT("bk_no_home")) + '</p>' +
+                   '<div class="row"><a class="btn ghost" href="../home/">' + esc(jcT("bk_go_home")) + '</a></div>') +
+                (courts.length ? '<ul class="bklist" id="bkCourts">' + courts.map(courtCard).join("") + '</ul>'
+                               : '<p class="help" id="bkCourts">' + esc(jcT("bk_none")) + '</p>');
+    el("view").innerHTML = html + '<div ' + jcTabPanel("bktab-", tab, "bkBody") + '>' + body + '</div>';
+    wireTabs();
+    if (tab === "map") drawMap(pinned);
     each("[data-open]", function(b){ var f = courtById(b.dataset.open); if (f) openCourt(f); });
-    wireMine();
+    if (tab === "mine") wireMine();
   },
 
   court: function(){
@@ -270,9 +355,9 @@ var VIEWS = {
     var days = [];
     for (var i = 0; i < n; i++) days.push(jcDateAdd(today, i));
     if (days.indexOf(day.date) < 0 && !day.loading) { day.date = today; day.slots = null; day.err = null; }   /* midnight passed on screen (review L1) */
-    var html = '<h1 dir="auto">' + esc(courtName(f)) + '</h1>' +
+    var html = '<div class="bkhead"><h1 dir="auto">' + esc(courtName(f)) + '</h1>' +
       '<p class="meta">' + esc(kindText(f) + " · ⁦" + hm(f.open_time) + "–" + hm(f.close_time) + "⁩") + '</p>' +
-      (f.location_note ? '<p class="meta" dir="auto">' + esc(f.location_note) + '</p>' : '') +
+      (f.location_note ? '<p class="meta" dir="auto">' + esc(f.location_note) + '</p>' : '') + '</div>' +
       '<p class="notice">' + esc(jcT("bk_precedence")) + '</p>' +
       '<div class="strip" id="bkDays" role="group" aria-label="' + esc(jcT("bk_days")) + '">' + days.map(function(d){
         return '<button type="button" id="bkDay-' + d + '" data-day="' + d + '" aria-pressed="' + (d === day.date) + '" aria-label="' + esc(jcDayText(d, { weekday: "long", month: "long" })) + '">' +
@@ -309,7 +394,9 @@ function slotRow(s, i){
   }
   if (st === "blocked" && s.block_reason) h += '<div class="meta" dir="auto">' + esc(s.block_reason) + '</div>';
   if (st === "mine" && s.booking_id && Date.parse(s.starts_at) > Date.now()) {
-    h += '<div class="acts"><button class="mini danger" type="button" id="bkCancel-' + esc(s.booking_id) + '" data-bkcancel="' + esc(s.booking_id) + '" aria-label="' +
+    h += '<div class="acts"><label class="check"><input type="checkbox" id="bkPriv-' + esc(s.booking_id) + '" data-bkpriv="' + esc(s.booking_id) + '"' +
+      (s.is_private === true ? ' checked' : '') + ' aria-label="' + esc(jcT("bk_private") + " " + jcClock(s.starts_at, cfg)) + '"> <span>' + esc(jcT("bk_private")) + '</span></label>' +
+      '<button class="mini danger" type="button" id="bkCancel-' + esc(s.booking_id) + '" data-bkcancel="' + esc(s.booking_id) + '" aria-label="' +
       esc(jcT("bk_cancel") + " " + jcClock(s.starts_at, cfg)) + '">' + esc(jcT("bk_cancel")) + '</button></div>';
   }
   if (st === "free") {
@@ -339,6 +426,7 @@ function cancelBooking(b){
     drawMine("bkMineHead"); showOk(jcT("bk_done_cancel"));
   }, function(code){
     if (code !== "NOT_FOUND") return false;
+    mineStale = true;
     if (current === "court") loadDay(function(){ bkMsg("CANCEL_GONE"); });
     else loadList(function(){ bkMsg("CANCEL_GONE"); });
     return true;
@@ -346,17 +434,30 @@ function cancelBooking(b){
 }
 function wireMine(){
   each("[data-bkcancel]", cancelBooking);
-  each("[data-bkpriv]", function(c){
+  each("[data-bkpriv]", privacyToggle, "change");
+}
+/* the Private switch: on My bookings and on my own slot in a court's day (Zee 2026-11-09) */
+function privacyToggle(c){
     var want = c.checked;
     if (bkBusy) { c.checked = !want; return; }
     bkWrite(c, function(){ return rpc("jc_booking_privacy_set", { p_booking: c.dataset.bkpriv, p_private: want }); }, function(d){
-      setMine(d); drawMine("bkPriv-" + c.dataset.bkpriv); showOk(jcT(want ? "bk_done_private" : "bk_done_public"));
+      setMine(d);
+      var fid = "bkPriv-" + c.dataset.bkpriv;
+      if (current === "court" && day) {
+        day.slots.forEach(function(s){ if (s.booking_id === c.dataset.bkpriv) s.is_private = want; });
+        draw(); if (el(fid)) el(fid).focus();
+      } else drawMine(fid);
+      showOk(jcT(want ? "bk_done_private" : "bk_done_public"));
     }, function(code){
       c.checked = !want;
-      if (code === "NOT_FOUND") { loadList(function(){ bkMsg("CANCEL_GONE"); }); return true; }
+      if (code === "NOT_FOUND") {
+        mineStale = true;                              /* My Bookings re-read on the way back (review L) */
+        if (current === "court") loadDay(function(){ bkMsg("CANCEL_GONE"); });
+        else loadList(function(){ bkMsg("CANCEL_GONE"); });
+        return true;
+      }
       return false;
     });
-  }, "change");
 }
 function wireCourt(){
   on("bkDayRetry", function(){ loadDay(); });
@@ -366,6 +467,7 @@ function wireCourt(){
     var f = el("bkDay-" + day.date); if (f) f.focus();                                  /* review M2 */
   });
   each("[data-bkcancel]", cancelBooking);
+  each("[data-bkpriv]", privacyToggle, "change");
   each("[data-bkbook]", function(b){
     if (bkBusy) return;
     day.pick = +b.dataset.bkbook; day.priv = false; draw();
