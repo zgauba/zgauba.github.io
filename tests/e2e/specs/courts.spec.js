@@ -300,6 +300,42 @@ test("code review M1: book, go straight back — My bookings shows the new booki
   release();
 });
 
+test("code review M: a late My Bookings re-read never rebuilds the Map under the resident (full screen kept)", async ({ page }) => {
+  const b = backend();
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const my = b.rpc.jc_my_bookings;
+  let slow = false;
+  b.rpc.jc_my_bookings = async (a, c) => { if (slow) await gate; return my(a, c); };
+  await open(page, b, { q: "?court=" + C1 });
+  await expect(page.locator("#bkSlots")).toBeVisible();                               // the page's own load is done
+  slow = true;
+  await row(page, 12).locator("[data-bkbook]").click();
+  await page.locator("#bkGo").click();
+  await expect(page.locator("#msg")).toContainText("Booked");
+  slow = false;
+  await page.locator("#jcBackBtn").click();
+  await expect(page.locator("#bkCourts")).toBeVisible();
+  await page.locator("#bktab-map").click();
+  await page.locator("#fullBtn").click();
+  await expect(page.locator(".evmapwrap")).toHaveClass(/full/);
+  await page.evaluate(() => { document.getElementById("bkmap").dataset.mark = "same"; });
+  release();
+  await page.waitForTimeout(300);
+  await expect(page.locator(".evmapwrap")).toHaveClass(/full/);
+  await expect(page.locator("#bkmap")).toHaveAttribute("data-mark", "same");
+});
+
+test("Find Me refused in Full Screen: the map steps out so the message shows", async ({ page, context }) => {
+  await context.clearPermissions();
+  await open(page, backend(), { q: "?tab=map" });
+  await page.evaluate(() => { navigator.geolocation.getCurrentPosition = (ok, bad) => bad({ code: 1 }); });
+  await page.locator("#fullBtn").click();
+  await page.locator("#locateBtn").click();
+  await expect(page.locator(".evmapwrap")).not.toHaveClass(/full/);
+  await expect(page.locator("#msg")).toContainText("Location is off for this site");
+});
+
 test("a deep link to a court that's gone says so and drops the link", async ({ page }) => {
   await open(page, backend(), { q: "?court=99999999-aaaa-4aaa-8aaa-000000000009" });
   await expect(page.locator("#msg")).toHaveText("That court isn't available any more.");

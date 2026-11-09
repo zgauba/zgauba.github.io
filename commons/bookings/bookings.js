@@ -117,7 +117,7 @@ function refreshMine(){
   rpc("jc_my_bookings").then(function(d){
     if (seq !== mineSeq) return;
     setMine(d);
-    if (current === "list") drawMine();
+    if (current === "list" && el("bkMineBox")) drawMine();   /* never rebuild the Map / List tab under the resident (review M) */
   }, function(){});
 }
 /* only the My bookings block: no map rebuild, no jump (review M3); focus back on what was used (M2) */
@@ -132,7 +132,7 @@ function drawMine(focusId){
 
 function openCourt(f, date){
   day = { f: f, date: date || jcTzToday(cfg), slots: null, err: null, loading: false, pick: null, priv: false };
-  setUrl("court=" + encodeURIComponent(f.id));
+  setUrl("court=" + encodeURIComponent(f.id) + (tab === "list" ? "" : "&tab=" + tab));   /* a reload, then Back, keeps the tab */
   show("court");
 }
 function loadDay(then){
@@ -254,10 +254,11 @@ document.addEventListener("keydown", function(e){ if (e.key === "Escape" && mapF
 function locate(done){
   if (!navigator.geolocation) return showErr("LOCATE_FAILED");
   navigator.geolocation.getCurrentPosition(function(p){ userPos = [p.coords.latitude, p.coords.longitude]; done(); },
-    function(err){ showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED"); },
+    function(err){ setMapFull(false); showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED"); },   /* visible, not behind the full map */
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
 }
 function mapHtml(pinned){
+  if (typeof L === "undefined") return '<p class="help" id="bkNoPins">' + esc(jcT("err_NETWORK")) + '</p>';   /* no dead buttons (review L) */
   if (!pinned.length) return '<p class="help" id="bkNoPins">' + esc(jcT("bk_no_pins")) + '</p>';
   return '<div class="evmapwrap"><div class="evmap" id="bkmap" role="region" aria-label="' + esc(jcT("bk_map_label")) + '"></div>' +
     '<div class="mapbtns"><button type="button" class="lang" id="layerBtn">' + esc(jcT(layer === "sat" ? "pin_street" : "pin_sat")) + '</button></div>' +
@@ -425,6 +426,7 @@ function cancelBooking(b){
     drawMine("bkMineHead"); showOk(jcT("bk_done_cancel"));
   }, function(code){
     if (code !== "NOT_FOUND") return false;
+    mineStale = true;
     if (current === "court") loadDay(function(){ bkMsg("CANCEL_GONE"); });
     else loadList(function(){ bkMsg("CANCEL_GONE"); });
     return true;
@@ -449,6 +451,7 @@ function privacyToggle(c){
     }, function(code){
       c.checked = !want;
       if (code === "NOT_FOUND") {
+        mineStale = true;                              /* My Bookings re-read on the way back (review L) */
         if (current === "court") loadDay(function(){ bkMsg("CANCEL_GONE"); });
         else loadList(function(){ bkMsg("CANCEL_GONE"); });
         return true;

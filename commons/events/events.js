@@ -765,7 +765,7 @@ function locate(done){
   navigator.geolocation.getCurrentPosition(function(p){
     userPos = L.latLng(p.coords.latitude, p.coords.longitude);
     done();
-  }, function(err){ showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED"); },
+  }, function(err){ setMapFull(false); showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED"); },   /* the message sits above the map: leave full screen to show it (courts review, parity) */
   { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
 }
 function dist(e){ return userPos && hasPos(e) ? userPos.distanceTo(L.latLng(e.lat, e.lng)) : null; }
