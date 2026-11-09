@@ -176,6 +176,7 @@ function show(name){
   if (map) { jcMapRemove(map); map = null; }
   jcBack(name === "court" ? function(){ if (bkBusy) return; day = null; setUrl(tab === "list" ? null : "tab=" + tab); show("list"); } : null, "back");
   if (name !== "list") { mapFull = false; document.body.classList.remove("mapfull"); }
+  jcHelp(name === "court" ? "court" : name === "list" ? "courts" : null);   /* the ? button, as on Events / My Home / Organizer */
   var refocus = jcFocusKeep();
   VIEWS[name]();
   refocus();
@@ -206,9 +207,16 @@ function mineHtml(){
   return '<h2 class="sr-only" id="bkMineHead" tabindex="-1">' + esc(jcT("bk_mine")) + '</h2>' +
     (rows.length ? '<ul class="bklist" id="bkMine">' + rows.join("") + '</ul>' : '<p class="help" id="bkMine">' + esc(jcT("bk_mine_none")) + '</p>');
 }
+/* courts admins (community / bookings scope): an Admin way into Organizer Tools, as on event cards */
+function canAdmin(){
+  var sc = (state && state.me && state.me.admin_scopes) || [];
+  return sc.indexOf("community") >= 0 || sc.indexOf("bookings") >= 0;
+}
+function adminHref(f){ return "../admin/?tab=courts&court=" + encodeURIComponent(f.id); }
 function courtCard(f){
   var meta = [kindText(f), "⁦" + hm(f.open_time) + "–" + hm(f.close_time) + "⁩"];
-  return '<li data-court="' + esc(f.id) + '"><b dir="auto">' + esc(courtName(f)) + '</b>' +
+  return '<li data-court="' + esc(f.id) + '"><div class="evtop"><b dir="auto">' + esc(courtName(f)) + '</b>' +
+    (canAdmin() ? '<a class="badge" href="' + adminHref(f) + '" aria-label="' + esc(jcT("ev_admin") + ": " + courtName(f)) + '">' + esc(jcT("ev_admin")) + '</a>' : '') + '</div>' +
     '<div class="meta">' + esc(meta.join(" · ")) + '</div>' +
     (f.location_note ? '<div class="meta" dir="auto">' + esc(f.location_note) + '</div>' : '') +
     (f.walk_on ? '<div class="meta">' + esc(jcT("bk_walk_on")) + '</div>'
@@ -355,7 +363,8 @@ var VIEWS = {
     var days = [];
     for (var i = 0; i < n; i++) days.push(jcDateAdd(today, i));
     if (days.indexOf(day.date) < 0 && !day.loading) { day.date = today; day.slots = null; day.err = null; }   /* midnight passed on screen (review L1) */
-    var html = '<div class="bkhead"><h1 dir="auto">' + esc(courtName(f)) + '</h1>' +
+    var html = '<div class="bkhead"><div class="evtitle"><h1 dir="auto">' + esc(courtName(f)) + '</h1>' +
+      (canAdmin() ? '<a class="lang adminbtn" id="bkAdmin" href="' + adminHref(f) + '">' + esc(jcT("ev_admin")) + '</a>' : '') + '</div>' +
       '<p class="meta">' + esc(kindText(f) + " · ⁦" + hm(f.open_time) + "–" + hm(f.close_time) + "⁩") + '</p>' +
       (f.location_note ? '<p class="meta" dir="auto">' + esc(f.location_note) + '</p>' : '') + '</div>' +
       '<p class="notice">' + esc(jcT("bk_precedence")) + '</p>' +

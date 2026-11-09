@@ -38,3 +38,12 @@ proven by tests that reproduce the exact CI error without it.
 - **Screenshots (WebKit, iPhone 13):**
   - The day view: the pill is centred and inside its box; all five states are visible.
   - The court page: Over / Free.
+
+## Follow-up (same day): "yours" in blue
+
+- **Feedback:** Zee: low contrast between Free and Your booking, since both were green.
+- **Change:** "Yours" gets its own hue, `--jc-mine` (#8fb4ff, soft blue), which no other slot state uses. The whole row is
+  outlined in blue and the label is filled blue with dark ink (8.6:1).
+- **Checks:**
+  - Full suite: 1002/1002.
+  - A WebKit screenshot of my slot among free ones (`bk-mine.png`, gated by `SHOT_DIR`): clearly distinct.

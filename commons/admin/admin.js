@@ -13,6 +13,7 @@
 var state = null, cfg = null, current = null;
 /* ?event=<id> — the events list's Admin badge: open that event's editor once loaded */
 var OPEN_EVENT = new URLSearchParams(location.search).get("event");
+var OPEN_COURT = new URLSearchParams(location.search).get("court");   /* from a court's Admin button on Courts */
 /* ?eventadmin=<token> — a community admin's grant link (T5.2 PR B): asked, never auto-accepted */
 var GRANT = new URLSearchParams(location.search).get("eventadmin");
 if (GRANT && !/^[A-Za-z0-9_-]{16,64}$/.test(GRANT)) GRANT = null;
@@ -1440,6 +1441,16 @@ function loadCourts(){
     if (!isCourtsAdmin()) return;                     /* the right ended while it was on its way (review L2 / L4) */
     ct = { list: Array.isArray(r[0]) ? r[0].filter(hObj) : [], rules: hObj(r[1]) || {} };
     var note = ctNote; ctNote = null;
+    var want = OPEN_COURT;
+    OPEN_COURT = null;                                  /* once, wherever they are now: never a jump later (review L1) */
+    if (want && current === "home" && admTab === "courts") {
+      var oc = courtById(want);
+      try { history.replaceState(null, "", "?tab=courts"); } catch(e){}                /* Back returns to the courts list */
+      if (oc && !oc.walk_on) { cd = { f: oc, date: cdToday(), slots: null, err: null, loading: false, form: null, draft: null }; return show("courtday"); }
+      show("home");                                     /* a walk-on court has no day view: the list */
+      if (!oc) ctMsg("NOT_FOUND");
+      return;
+    }
     if (current === "home" && admTab === "courts") {
       /* the list lands after the page: a message already on screen ("Done…", "Saved.") must survive the redraw */
       var m = el("msg"), keep = m && m.textContent ? { c: m.className, t: m.textContent } : null;

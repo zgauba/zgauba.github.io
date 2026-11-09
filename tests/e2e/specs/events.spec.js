@@ -3,6 +3,21 @@ const { test, expect } = require("@playwright/test");
 const { stubBackend, ok, raise, CONFIG, MEMBER, MEMBER_NO_PIN, HOME_V12 } = require("./stub");
 const { eventsBackend, adminBackend, signIn, LIVE_ID, PAST_ID, SCHEMA, LIVE, PAST, ENTRIES, STATS } = require("./backends");
 
+// Find Me pans the map, and a tap by screen position can land where the pin was, or on a button / the tab bar
+// now over it (CI WebKit flakes). Wait until the pin stops moving, then send the tap to the pin itself, once
+// (a second tap closes the popup again).
+async function tapWhenStill(page, loc) {
+  let last = null;
+  await expect.poll(async () => {
+    const b = await loc.boundingBox();
+    const k = b && Math.round(b.x) + "," + Math.round(b.y);
+    const still = k !== null && k === last;
+    last = k;
+    return still;
+  }, { intervals: [250], timeout: 10000 }).toBe(true);
+  await loc.dispatchEvent("click");
+}
+
 test("list: live events with View + Sign up (no status pill), then Past with 'see the numbers'", async ({ page }) => {
   const eb = eventsBackend();
   const { calls } = await stubBackend(page, { rpc: eb.rpc });
@@ -230,8 +245,7 @@ test("tap a pin: answers, note, walking directions + view pin; distance after Fi
   await signIn(page);
   await page.goto("events/?id=" + LIVE_ID);
   await page.locator("#locateBtn").click();
-  await page.waitForTimeout(300);
-  await page.locator("#map .leaflet-marker-icon").first().click({ force: true });
+  await tapWhenStill(page, page.locator("#map .leaflet-marker-icon").first());
   const pop = page.locator(".leaflet-popup-content");
   await expect(pop).toContainText("Villa 3");
   await expect(pop).toContainText("Candy · Door");

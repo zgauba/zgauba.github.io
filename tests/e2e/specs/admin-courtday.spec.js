@@ -419,3 +419,20 @@ for (const lang of ["en", "ar"]) {
     await axe();
   });
 }
+
+// Zee 2026-11-09 (consistency): the Admin button on a court in Courts lands on that court's day view.
+test("?tab=courts&court= opens that court's day view once; Back is the courts list; an unknown court says so", async ({ page }) => {
+  await page.clock.install({ time: T_MORNING });
+  const { calls } = await stubBackend(page, { rpc: backend().rpc });
+  await signIn(page);
+  await page.goto("admin/?tab=courts&court=c1");
+  await expect(page.locator(".cdlist")).toBeVisible();
+  await expect(page.locator("h1")).toHaveText("Court 1");
+  expect(lastCall(calls, "jc_admin_facility_day").args).toEqual({ p_facility: "c1", p_date: D });
+  await expect(page).toHaveURL(/\?tab=courts$/);                                    // a reload doesn't re-open it
+  await page.locator("#jcBackBtn").click();
+  await expect(page.locator('[data-ct="day"][data-id="c1"]')).toBeVisible();
+  await page.goto("admin/?tab=courts&court=gone");
+  await expect(page.locator("#msg")).toHaveText("That court is no longer listed.");
+  await expect(page.locator('[data-ct="day"][data-id="c1"]')).toBeVisible();
+});

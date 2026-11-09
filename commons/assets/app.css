@@ -102,3 +102,14 @@ dialog.sheet::backdrop{background:rgba(0,0,0,.6)}
 /* My Home → account: organizers' own button above the box; others a quiet link at the bottom */
 a#toAdmin.btn{display:block; text-align:center; margin-bottom:12px}
 .orglink{margin-top:18px; text-align:center}
+
+/* Shared by every module (Zee 2026-11-09: consistency) — moved from events/events.css.
+   A card's Admin badge (organizers: straight to its editor), and a page title with its Admin button at the end. */
+.badge{flex:0 0 auto; font-size:11px; font-weight:800; letter-spacing:.04em;
+  text-transform:uppercase; text-decoration:none; border-radius:var(--jc-radius-pill); padding:4px 10px;
+  color:var(--jc-accent); border:1px solid var(--jc-accent)}
+a.badge:visited{color:var(--jc-accent)}
+.evtop{display:flex; align-items:flex-start; justify-content:space-between; gap:10px}
+.evtitle{display:flex; align-items:flex-start; gap:10px}
+.evtitle h1{flex:1 1 auto; min-width:0; overflow-wrap:anywhere}
+.evtitle .adminbtn, .evtitle .adminbtn:visited{flex:0 0 auto; margin-top:2px; text-decoration:none; color:var(--jc-ink)}
