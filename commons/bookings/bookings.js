@@ -14,12 +14,18 @@ if (COURT && !/^[0-9a-f-]{36}$/i.test(COURT)) COURT = null;
 var state = null, cfg = null, current = null, map = null;
 var courts = null, mine = null, listErr = null, listLoading = false;
 var day = null;          /* { f, date, slots [] | null, err, loading, pick: slot index | null, priv: bool } */
-var bkBusy = false, daySeq = 0, listSeq = 0;
+var bkBusy = false, daySeq = 0, listSeq = 0, mineSeq = 0;
+var mineStale = false;    /* My bookings changed elsewhere and the re-read hasn't landed (code review M1) */
+var deepLink = null;      /* ?court= waiting for the list (kept for Try Again, review L2) */
 
 /* ---------- helpers ---------- */
 function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
 function showErr(code){ var m = el("msg"); if (!m) return; m.className = "msg err"; m.textContent = jcErrText({ code: code }); }
-function showOk(text){ var m = el("msg"); if (!m) return; m.className = "msg ok"; m.textContent = text; }
+function showOk(text){
+  var m = el("msg"); if (!m) return;
+  m.className = "msg ok"; m.textContent = text;
+  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });           /* a write far down the list (review M3) */
+}
 function bkMsg(code){
   var t = jcT("bk_err_" + code);
   if (t === "bk_err_" + code) return showErr(code);
@@ -82,6 +88,7 @@ function loadList(then){
     listLoading = false;
     courts = Array.isArray(r[0]) ? r[0].filter(function(f){ return hObj(f) && typeof f.id === "string"; }) : [];
     mine = Array.isArray(r[1]) ? r[1].filter(function(b){ return hObj(b) && typeof b.id === "string" && typeof b.starts_at === "string"; }) : [];
+    mineStale = false;
     if (current === "list") show("list");
     if (then) then();
   }, function(e){
@@ -93,7 +100,31 @@ function loadList(then){
   });
 }
 /* My bookings only (after a book / cancel / privacy change elsewhere) */
-function setMine(d){ if (Array.isArray(d)) mine = d.filter(function(b){ return hObj(b) && typeof b.id === "string" && typeof b.starts_at === "string"; }); }
+function setMine(d){
+  if (!Array.isArray(d)) return;
+  mineSeq++;                                         /* any later answer wins over an older re-read (review M1) */
+  mine = d.filter(function(b){ return hObj(b) && typeof b.id === "string" && typeof b.starts_at === "string"; });
+  mineStale = false;
+}
+/* after a booking: re-read My bookings; until it lands the list is re-read on the way back */
+function refreshMine(){
+  var seq = ++mineSeq;
+  mineStale = true;
+  rpc("jc_my_bookings").then(function(d){
+    if (seq !== mineSeq) return;
+    setMine(d);
+    if (current === "list") drawMine();
+  }, function(){});
+}
+/* only the My bookings block: no map rebuild, no jump (review M3); focus back on what was used (M2) */
+function drawMine(focusId){
+  var box = el("bkMineBox");
+  if (!box) return show("list");
+  box.innerHTML = mineHtml();
+  wireMine();
+  var f = focusId && el(focusId);
+  if (f) f.focus(); else if (focusId) { var h = el("bkMineHead"); if (h) h.focus(); }
+}
 
 function openCourt(f, date){
   day = { f: f, date: date || jcTzToday(cfg), slots: null, err: null, loading: false, pick: null, priv: false };
@@ -116,15 +147,22 @@ function loadDay(then){
     if (current !== "court") return;
     var code = e.code || "UNKNOWN";
     if (code === "MODULE_OFF") return show("off");
-    if (code === "OUT_OF_WINDOW" && mine_.date !== jcTzToday(cfg)) { mine_.date = jcTzToday(cfg); return loadDay(); }  /* midnight passed */
+    if (code === "OUT_OF_WINDOW" && mine_.date !== jcTzToday(cfg)) { mine_.date = jcTzToday(cfg); return loadDay(then); }  /* midnight passed (review L1) */
     if (code === "NOT_FOUND" || code === "WALK_ON" || code === "NO_HOME") return backToList(code);
     mine_.err = code; draw();
   });
 }
 function backToList(code){
   day = null; courts = null; setUrl(null);
+  loadList(function(){ bkMsg(code); });              /* one load, not two (review L3) */
   show("list");
-  loadList(function(){ bkMsg(code); });
+}
+function openDeepLink(){
+  if (!deepLink || current !== "list") return;
+  var f = courtById(deepLink);
+  deepLink = null;
+  if (f && !f.walk_on) return openCourt(f);
+  setUrl(null); bkMsg(f ? "WALK_ON" : "NOT_FOUND");   /* never a silent dead link (review L2) */
 }
 function draw(){ var r = jcFocusKeep(); VIEWS[current](); r(); }
 
@@ -155,12 +193,12 @@ function mineHtml(){
       (b.is_private === true ? '<span class="chip">' + esc(jcT("bk_private_chip")) + '</span>' : '') + '</div>' +
       '<div class="meta">' + esc(when(b)) + '</div>' +
       (started ? '' :
-        '<div class="acts"><label class="check"><input type="checkbox" data-bkpriv="' + esc(b.id) + '"' + (b.is_private === true ? ' checked' : '') +
-        '> <span>' + esc(jcT("bk_private")) + '</span></label>' +
-        '<button class="mini danger" type="button" data-bkcancel="' + esc(b.id) + '" aria-label="' + esc(jcT("bk_cancel") + " " + when(b)) + '">' +
+        '<div class="acts"><label class="check"><input type="checkbox" id="bkPriv-' + esc(b.id) + '" data-bkpriv="' + esc(b.id) + '"' + (b.is_private === true ? ' checked' : '') +
+        ' aria-label="' + esc(jcT("bk_private") + " " + when(b)) + '"> <span>' + esc(jcT("bk_private")) + '</span></label>' +
+        '<button class="mini danger" type="button" id="bkCancel-' + esc(b.id) + '" data-bkcancel="' + esc(b.id) + '" aria-label="' + esc(jcT("bk_cancel") + " " + when(b)) + '">' +
         esc(jcT("bk_cancel")) + '</button></div>') + '</li>';
   });
-  return '<h2 class="group">' + esc(jcT("bk_mine")) + '</h2>' +
+  return '<h2 class="group" id="bkMineHead" tabindex="-1">' + esc(jcT("bk_mine")) + '</h2>' +
     (rows.length ? '<ul class="bklist" id="bkMine">' + rows.join("") + '</ul>' : '<p class="help" id="bkMine">' + esc(jcT("bk_mine_none")) + '</p>');
 }
 function courtCard(f){
@@ -207,15 +245,15 @@ var VIEWS = {
     if (listErr) {
       el("view").innerHTML = html + '<div class="row"><button class="btn ghost" type="button" id="bkRetry">' + esc(jcT("adm_ad_retry")) + '</button></div>';
       showErr(listErr);
-      return on("bkRetry", function(){ loadList(); show("list"); });
+      return on("bkRetry", function(){ loadList(openDeepLink); show("list"); });
     }
-    if (!courts) {
-      el("view").innerHTML = html + '<p class="help">' + esc(jcT("working")) + '</p>';
+    if (!courts || (mineStale && !listLoading)) {
+      el("view").innerHTML = html + '<p class="help" role="status">' + esc(jcT("working")) + '</p>';
       if (!listLoading) loadList();
       return;
     }
     var pinned = courts.filter(hasPos);
-    html += mineHtml() +
+    html += '<div id="bkMineBox">' + mineHtml() + '</div>' +
       '<h2 class="group">' + esc(jcT("bk_courts")) + '</h2>' +
       (pinned.length ? '<div class="bkmap" id="bkmap" role="region" aria-label="' + esc(jcT("bk_map_label")) + '"></div>' : '') +
       (courts.length ? '<ul class="bklist" id="bkCourts">' + courts.map(courtCard).join("") + '</ul>'
@@ -231,12 +269,13 @@ var VIEWS = {
     var f = day.f, today = jcTzToday(cfg), n = Math.min(Math.max(+f.window_days || 1, 1), 30);
     var days = [];
     for (var i = 0; i < n; i++) days.push(jcDateAdd(today, i));
+    if (days.indexOf(day.date) < 0 && !day.loading) { day.date = today; day.slots = null; day.err = null; }   /* midnight passed on screen (review L1) */
     var html = '<h1 dir="auto">' + esc(courtName(f)) + '</h1>' +
       '<p class="meta">' + esc(kindText(f) + " · ⁦" + hm(f.open_time) + "–" + hm(f.close_time) + "⁩") + '</p>' +
       (f.location_note ? '<p class="meta" dir="auto">' + esc(f.location_note) + '</p>' : '') +
       '<p class="notice">' + esc(jcT("bk_precedence")) + '</p>' +
       '<div class="strip" id="bkDays" role="group" aria-label="' + esc(jcT("bk_days")) + '">' + days.map(function(d){
-        return '<button type="button" data-day="' + d + '" aria-pressed="' + (d === day.date) + '" aria-label="' + esc(jcDayText(d, { weekday: "long", month: "long" })) + '">' +
+        return '<button type="button" id="bkDay-' + d + '" data-day="' + d + '" aria-pressed="' + (d === day.date) + '" aria-label="' + esc(jcDayText(d, { weekday: "long", month: "long" })) + '">' +
           esc(jcDayText(d, { day: undefined, month: undefined })) + '<b>' + esc(String(+d.slice(8))) + '</b></button>';
       }).join("") + '</div>' + msgBox();
     if (day.err) {
@@ -245,7 +284,7 @@ var VIEWS = {
       return wireCourt();
     }
     if (!day.slots) {
-      el("view").innerHTML = html + '<p class="help">' + esc(jcT("working")) + '</p>';
+      el("view").innerHTML = html + '<p class="help" role="status">' + esc(jcT("working")) + '</p>';
       wireCourt();
       if (!day.loading) loadDay();
       return;
@@ -259,7 +298,7 @@ var VIEWS = {
 
 function slotRow(s, i){
   var st = s.state === "mine" || s.state === "booked" || s.state === "blocked" || s.state === "free" ? s.state : "past";
-  if (st === "free" && over(s)) st = "past";
+  if (st === "free" && Date.parse(s.starts_at) <= Date.now()) st = "past";    /* started: the server refuses a past start */
   var h = '<li class="s-' + st + '" data-slot="' + i + '"><div class="head"><b class="time">⁦' + esc(jcClock(s.starts_at, cfg) + "–" + jcClock(s.ends_at, cfg)) + '⁩</b>' +
     '<span class="chip' + (st === "mine" ? ' mine' : '') + '">' + esc(jcT("bk_st_" + st)) + '</span>' +
     (st === "mine" && s.is_private === true ? '<span class="chip">' + esc(jcT("bk_private_chip")) + '</span>' : '') + '</div>';
@@ -270,20 +309,20 @@ function slotRow(s, i){
   }
   if (st === "blocked" && s.block_reason) h += '<div class="meta" dir="auto">' + esc(s.block_reason) + '</div>';
   if (st === "mine" && s.booking_id && Date.parse(s.starts_at) > Date.now()) {
-    h += '<div class="acts"><button class="mini danger" type="button" data-bkcancel="' + esc(s.booking_id) + '" aria-label="' +
+    h += '<div class="acts"><button class="mini danger" type="button" id="bkCancel-' + esc(s.booking_id) + '" data-bkcancel="' + esc(s.booking_id) + '" aria-label="' +
       esc(jcT("bk_cancel") + " " + jcClock(s.starts_at, cfg)) + '">' + esc(jcT("bk_cancel")) + '</button></div>';
   }
   if (st === "free") {
     if (day.pick === i) {
       h += '<div class="sheet-in" id="bkSheet">' +
         '<p>' + esc(jcFmt("bk_confirm", { c: courtName(day.f), d: jcDayText(day.date), t: jcClock(s.starts_at, cfg) + "–" + jcClock(s.ends_at, cfg) })) + '</p>' +
-        '<label class="check"><input type="checkbox" id="bkPrivate"' + (day.priv ? ' checked' : '') + '> <span>' + esc(jcT("bk_private")) + '</span></label>' +
+        '<label class="check"><input type="checkbox" id="bkPrivate"' + (day.priv ? ' checked' : '') + (bkBusy ? ' disabled' : '') + '> <span>' + esc(jcT("bk_private")) + '</span></label>' +
         '<p class="help">' + esc(jcT("bk_private_help")) + '</p>' +
         '<p class="help">' + esc(jcFmt("bk_rules", { d: rule("per_home_per_day", 1), a: rule("per_home_active", 2) })) + '</p>' +
-        '<div class="acts"><button class="btn small" type="button" id="bkGo">' + esc(jcT("bk_book_go")) + '</button>' +
+        '<div class="acts"><button class="btn small" type="button" id="bkGo"' + (bkBusy ? ' disabled' : '') + '>' + esc(jcT("bk_book_go")) + '</button>' +
         '<button class="btn ghost small" type="button" id="bkKeep">' + esc(jcT("ct_cancel")) + '</button></div></div>';
     } else if (hasHome()) {
-      h += '<div class="acts"><button class="mini" type="button" data-bkbook="' + i + '" aria-label="' +
+      h += '<div class="acts"><button class="mini" type="button" id="bkBook-' + i + '" data-bkbook="' + i + '" aria-label="' +
         esc(jcT("bk_book") + " " + jcClock(s.starts_at, cfg)) + '">' + esc(jcT("bk_book")) + '</button></div>';
     }
   }
@@ -293,11 +332,11 @@ function slotRow(s, i){
 /* ---------- wiring ---------- */
 function cancelBooking(b){
   if (!window.confirm(jcT("bk_confirm_cancel"))) return;
-  var id = b.dataset.bkcancel;
+  var id = b.dataset.bkcancel, d0 = day;
   bkWrite(b, function(){ return rpc("jc_booking_cancel", { p_booking: id }); }, function(d){
     setMine(d);
-    if (current === "court") return loadDay(function(){ showOk(jcT("bk_done_cancel")); });
-    show("list"); showOk(jcT("bk_done_cancel"));
+    if (current === "court") { if (day === d0) loadDay(function(){ showOk(jcT("bk_done_cancel")); }); return; }   /* review L4 */
+    drawMine("bkMineHead"); showOk(jcT("bk_done_cancel"));
   }, function(code){
     if (code !== "NOT_FOUND") return false;
     if (current === "court") loadDay(function(){ bkMsg("CANCEL_GONE"); });
@@ -311,7 +350,7 @@ function wireMine(){
     var want = c.checked;
     if (bkBusy) { c.checked = !want; return; }
     bkWrite(c, function(){ return rpc("jc_booking_privacy_set", { p_booking: c.dataset.bkpriv, p_private: want }); }, function(d){
-      setMine(d); show("list"); showOk(jcT(want ? "bk_done_private" : "bk_done_public"));
+      setMine(d); drawMine("bkPriv-" + c.dataset.bkpriv); showOk(jcT(want ? "bk_done_private" : "bk_done_public"));
     }, function(code){
       c.checked = !want;
       if (code === "NOT_FOUND") { loadList(function(){ bkMsg("CANCEL_GONE"); }); return true; }
@@ -324,6 +363,7 @@ function wireCourt(){
   each("[data-day]", function(b){
     if (bkBusy || b.dataset.day === day.date || !jcIsDate(b.dataset.day)) return;
     day.date = b.dataset.day; loadDay();
+    var f = el("bkDay-" + day.date); if (f) f.focus();                                  /* review M2 */
   });
   each("[data-bkcancel]", cancelBooking);
   each("[data-bkbook]", function(b){
@@ -338,6 +378,7 @@ function wireCourt(){
     var s = day.slots && day.slots[day.pick];
     if (!s) return;
     var priv = el("bkPrivate").checked === true, mine_ = day;
+    el("bkPrivate").disabled = true;                   /* what's ticked is what's sent (review L5) */
     bkWrite(el("bkGo"), function(){
       return rpc("jc_booking_book", { p_facility: mine_.f.id, p_starts: s.starts_at, p_private: priv });
     }, function(r){
@@ -346,12 +387,13 @@ function wireCourt(){
       day.pick = null;
       if (sl) { day.slots = sl; draw(); } else loadDay();
       showOk(jcT(priv ? "bk_done_book_private" : "bk_done_book"));
-      rpc("jc_my_bookings").then(setMine, function(){});
+      refreshMine();
     }, function(code){
       if (code === "SLOT_TAKEN" || code === "SLOT_BLOCKED" || code === "OUT_OF_WINDOW" || code === "BAD_SLOT") {
         loadDay(function(){ bkMsg(code); }); return true;
       }
       if (code === "NOT_FOUND" || code === "WALK_ON" || code === "NO_HOME") { backToList(code); return true; }
+      if (el("bkPrivate")) el("bkPrivate").disabled = false;
       return false;
     });
   });
@@ -385,10 +427,8 @@ jcState().then(function(s){
     if (cfg && !moduleOn()) return show("off");   /* the kill switch: nothing asked of the server */
     jcHit("bookings");
     current = "list";
-    loadList(function(){
-      var f = COURT && courtById(COURT);
-      if (f && !f.walk_on && current === "list") openCourt(f);
-    });
+    deepLink = COURT;
+    loadList(openDeepLink);
     show("list");
   });
 }, function(e){

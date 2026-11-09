@@ -90,6 +90,8 @@ Last groomed: 2026-11-02
       steps; needs ≥ 2 invite-made community admins in different homes), hide the admin / organizer code rows and
       "Enter Another Code", and make `jc_admin_code_rotate` refuse retired scopes. The join code stays. Pre-launch.
 
+- [ ] 2026-11-09 (R4c security L5) **"No third parties" vs map tiles**: map pages fetch tiles from OpenStreetMap / Esri (IP + tile coordinates). Soften `join_privacy` ("map tiles load from OpenStreetMap / Esri") or self-host tiles. Pre-launch.
+
 ## Done
 
 - [x] 2026-11-02 — Monorepo switchover: pushed, old repo Pages disabled +

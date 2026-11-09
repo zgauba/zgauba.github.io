@@ -228,6 +228,77 @@ test("the Private switch on My bookings sends the choice; an organizer cancel sh
   expect(lastCall(calls, "jc_booking_privacy_set").args).toEqual({ p_booking: "m1", p_private: false });
 });
 
+test("a free slot that starts while the page is open turns Over on the next redraw (no Book on it)", async ({ page }) => {
+  await open(page, backend(), { q: "?court=" + C1 });
+  await expect(row(page, 11).locator("[data-bkbook]")).toHaveCount(1);
+  await page.clock.fastForward("01:40:00");                                          // 10:30 → 12:10 in Dubai
+  await row(page, 13).locator("[data-bkbook]").click();                              // any redraw
+  await expect(row(page, 11)).toContainText("Over");
+  await expect(row(page, 11).locator("[data-bkbook]")).toHaveCount(0);
+  await expect(row(page, 12)).toContainText("Over");                                 // started 10 minutes ago: the server would refuse it
+  await expect(row(page, 12).locator("[data-bkbook]")).toHaveCount(0);
+});
+
+test("a booking being played now: no Private switch, no Cancel (the server would refuse both)", async ({ page }) => {
+  await open(page, backend({ mine: [{ id: "m0", starts: at(D, 10) }, { id: "m1", starts: at(D, 18) }] }));
+  await expect(page.locator('#bkMine li[data-bk="m0"] input, #bkMine li[data-bk="m0"] button')).toHaveCount(0);
+  await expect(page.locator('#bkMine li[data-bk="m1"] [data-bkcancel]')).toHaveCount(1);
+});
+
+test("a failed Private switch puts the tick back and says why", async ({ page }) => {
+  const b = backend({ mine: [{ id: "m1", starts: at(D, 18) }] });
+  b.rpc.jc_booking_privacy_set = () => raise("NETWORK_X");
+  await open(page, b);
+  await page.locator('[data-bkpriv="m1"]').check();
+  await expect(page.locator("#msg")).toHaveClass(/err/);
+  await expect(page.locator('[data-bkpriv="m1"]')).not.toBeChecked();
+  await expect(page.locator('[data-bkpriv="m1"]')).toBeEnabled();
+});
+
+test("a slow day that lands after a newer one is dropped", async ({ page }) => {
+  const b = backend({ others: [{ starts: at("2026-11-11", 9), home: V40 }] });      // only the 11th has a booking
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const day = b.rpc.jc_facility_day;
+  b.rpc.jc_facility_day = async (a, c) => { if (a.p_date === "2026-11-11") await gate; return day(a, c); };
+  const { calls } = await open(page, b, { q: "?court=" + C1 });
+  await expect(page.locator("#bkSlots")).toBeVisible();
+  await page.locator('[data-day="2026-11-11"]').click();
+  await expect.poll(() => calls.filter((c) => c.name === "jc_facility_day").length).toBe(2);
+  await page.locator('[data-day="2026-11-12"]').click();
+  await expect(page.locator("#bkSlots")).toBeVisible();
+  release();
+  await page.waitForTimeout(300);
+  await expect(page.locator('[data-day="2026-11-12"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#bkSlots li.s-booked")).toHaveCount(0);
+});
+
+test("code review M1: book, go straight back — My bookings shows the new booking even before the re-read lands", async ({ page }) => {
+  const b = backend();
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const my = b.rpc.jc_my_bookings;
+  let slow = false;
+  b.rpc.jc_my_bookings = async (a, c) => { if (slow) await gate; return my(a, c); };
+  await open(page, b);
+  await page.locator(`[data-open="${C1}"]`).click();
+  slow = true;
+  await row(page, 12).locator("[data-bkbook]").click();
+  await page.locator("#bkGo").click();
+  await expect(page.locator("#msg")).toContainText("Booked");
+  slow = false;                                                                      // the list's own re-read is quick
+  await page.locator("#jcBackBtn").click();
+  await expect(page.locator("#bkMine li")).toHaveCount(1);
+  await expect(page.locator("#bkMine li")).toContainText("⁦12:00–13:00⁩");
+  release();
+});
+
+test("a deep link to a court that's gone says so and drops the link", async ({ page }) => {
+  await open(page, backend(), { q: "?court=99999999-aaaa-4aaa-8aaa-000000000009" });
+  await expect(page.locator("#msg")).toHaveText("That court isn't available any more.");
+  expect(page.url()).not.toContain("court=");
+});
+
 test("no home: told to claim it first, no Book buttons, nothing asked of the day", async ({ page }) => {
   const b = backend({ me: MEMBER_NO_HOME });
   const { calls } = await open(page, b);
