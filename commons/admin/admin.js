@@ -1595,20 +1595,12 @@ function saveCourt(){
 var CD_AHEAD = 90;     /* Zee 2026-11-09: today → 90 days ahead; past days hidden */
 var CD_SPAN = 30;      /* a multi-day block ends at most 30 days after its first day (server: ≤ 31 days) */
 var CD_PRESETS = ["maintenance", "event", "official", "other"];
-function cdTz(){ return (cfg && cfg.tz) || "Asia/Dubai"; }
-function cdToday(){
-  try {
-    var p = {};
-    new Intl.DateTimeFormat("en-US", { timeZone: cdTz(), year: "numeric", month: "2-digit", day: "2-digit" })
-      .formatToParts(new Date()).forEach(function(x){ p[x.type] = x.value; });
-    return p.year + "-" + p.month + "-" + p.day;
-  } catch(e){ return new Date().toISOString().slice(0, 10); }
-}
-function cdAdd(d, n){ var t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); }
-function cdIsDate(d){ return typeof d === "string" && /^\d{4}-\d\d-\d\d$/.test(d) && !isNaN(Date.parse(d + "T00:00:00Z")) && cdAdd(d, 0) === d; }
-function cdLoc(){ return ar() ? "ar-AE-u-nu-latn" : "en-GB"; }
-function cdDayText(d){ return new Date(d + "T12:00:00Z").toLocaleDateString(cdLoc(), { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }); }
-function cdTime(iso){ return new Date(iso).toLocaleTimeString(cdLoc(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: cdTz() }); }
+/* the shared community-time helpers live in api.js (R4c reuses them) */
+function cdToday(){ return jcTzToday(cfg); }
+function cdAdd(d, n){ return jcDateAdd(d, n); }
+function cdIsDate(d){ return jcIsDate(d); }
+function cdDayText(d){ return jcDayText(d); }
+function cdTime(iso){ return jcClock(iso, cfg); }
 function cdOver(s){ return Date.parse(s.ends_at) <= Date.now(); }
 function cdBooked(s){ return (s.state === "booked" || s.state === "mine") && !!s.booking_id; }
 function cdSlots(d){

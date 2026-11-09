@@ -167,6 +167,37 @@ function jcHomeLabel(h){
   return jcFmt(key, { n: h.number, b: h.building });
 }
 
+/* Community-time dates (R4b-2 / R4c). A court's day is a date in the COMMUNITY's zone (cfg.tz), never the phone's:
+   a resident abroad, or an admin with a travelling phone, must see the community's today and its clock times. */
+function jcTz(cfg){ return (cfg && typeof cfg.tz === "string" && cfg.tz) || "Asia/Dubai"; }
+function jcTzToday(cfg){
+  try {
+    var p = {};
+    new Intl.DateTimeFormat("en-US", { timeZone: jcTz(cfg), year: "numeric", month: "2-digit", day: "2-digit" })
+      .formatToParts(new Date()).forEach(function(x){ p[x.type] = x.value; });
+    return p.year + "-" + p.month + "-" + p.day;
+  } catch(e){ return new Date().toISOString().slice(0, 10); }
+}
+/* calendar arithmetic on "YYYY-MM-DD" (no zone involved) */
+function jcDateAdd(d, n){ var t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); }
+function jcIsDate(d){ return typeof d === "string" && /^\d{4}-\d\d-\d\d$/.test(d) && !isNaN(Date.parse(d + "T00:00:00Z")) && jcDateAdd(d, 0) === d; }
+function jcLocale(){ return jcLang() === "ar" ? "ar-AE-u-nu-latn" : "en-GB"; }
+/* "Tue 10 Nov" for a community date */
+function jcDayText(d, opts){
+  return new Date(d + "T12:00:00Z").toLocaleDateString(jcLocale(), Object.assign({ weekday: "short", day: "numeric", month: "short" }, opts || {}, { timeZone: "UTC" }));
+}
+/* "18:00" for an instant, on the community's clock */
+function jcClock(iso, cfg){ return new Date(iso).toLocaleTimeString(jcLocale(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: jcTz(cfg) }); }
+/* the community date an instant falls on */
+function jcDateOf(iso, cfg){
+  try {
+    var p = {};
+    new Intl.DateTimeFormat("en-US", { timeZone: jcTz(cfg), year: "numeric", month: "2-digit", day: "2-digit" })
+      .formatToParts(new Date(iso)).forEach(function(x){ p[x.type] = x.value; });
+    return p.year + "-" + p.month + "-" + p.day;
+  } catch(e){ return String(iso).slice(0, 10); }
+}
+
 /* Village display name from a jc_config_get config (falls back to the key). */
 function jcVillageName(cfg, key){
   var v = ((cfg && cfg.villages) || []).filter(function(x){ return x.key === key; })[0];
