@@ -20,7 +20,7 @@ declare
     'jc_event_stats_get', 'jc_admin_events_list', 'jc_admin_event_save', 'jc_admin_event_publish',
     'jc_admin_event_signups', 'jc_admin_entries_list', 'jc_admin_entry_moderate', 'jc_event_close',
     -- S3
-    'jc_facilities_list', 'jc_facility_day', 'jc_booking_create', 'jc_booking_cancel', 'jc_my_bookings',
+    'jc_facilities_list', 'jc_facility_day', 'jc_booking_create', 'jc_booking_cancel', 'jc_my_bookings', 'jc_my_bookings_past',
     'jc_admin_facilities_list', 'jc_admin_facility_save', 'jc_admin_facility_status',
     'jc_admin_facility_day', 'jc_admin_booking_cancel', 'jc_admin_booking_name_clear',
     'jc_admin_block_create', 'jc_admin_block_remove',
@@ -145,7 +145,7 @@ begin
   if (select string_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', ', ' order by p.proname)
         from pg_proc p where p.pronamespace = 'public'::regnamespace
          and (p.proname in ('jc_facilities_list', 'jc_facility_day', 'jc_booking_create', 'jc_booking_cancel',
-                            'jc_my_bookings', 'jc_booking_book', 'jc_booking_privacy_set')
+                            'jc_my_bookings', 'jc_my_bookings_past', 'jc_booking_book', 'jc_booking_privacy_set')
               or p.proname like 'jc\_admin\_facilit%' or p.proname like 'jc\_admin\_block\_%'
               or p.proname like 'jc\_admin\_booking\_%'))
      <> 'jc_admin_block_create(p_facility uuid, p_starts timestamp with time zone, p_ends timestamp with time zone, p_reason text), '
@@ -157,7 +157,7 @@ begin
         'jc_booking_cancel(p_booking uuid), '
         'jc_booking_create(p_facility uuid, p_starts timestamp with time zone, p_display_name text), '
         'jc_booking_privacy_set(p_booking uuid, p_private boolean), jc_facilities_list(), '
-        'jc_facility_day(p_facility uuid, p_date date), jc_my_bookings()' then
+        'jc_facility_day(p_facility uuid, p_date date), jc_my_bookings(), jc_my_bookings_past()' then
     raise exception 'FAIL G19 a courts signature changed (or gained an overload): %',
       (select string_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')', ', ' order by p.proname)
          from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname like 'jc\_%book%'); end if;
