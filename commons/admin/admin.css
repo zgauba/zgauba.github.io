@@ -144,9 +144,12 @@ label.check span small{display:block; color:var(--jc-muted); font-size:12.5px; f
 #ctForm .row label{flex:1 1 0}
 #ctForm input[type=time]{width:100%}
 /* R4b-2 — a court's day view */
-.cdbar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:8px 0}
-.cdbar .cddate{flex:1 1 140px}
-.cdbar input[type=date]{width:100%}
+/* Zee 2026-11-09: ‹ date › — the iPhone date pill has a wide built-in minimum, so the middle column must be allowed to shrink */
+.cdbar{display:grid; grid-template-columns:48px minmax(0,1fr) 48px; align-items:center; gap:8px; margin:8px 0}
+.cdbar .cdstep{width:48px; min-width:0; height:44px; padding:0; font-size:26px; line-height:1}
+[dir=rtl] .cdbar .cdstep span{display:inline-block; transform:scaleX(-1)}
+.cdbar .cddate{display:block; min-width:0; margin:0}
+.cdbar input[type=date]{display:block; width:100%; min-width:0; max-width:100%; height:44px; box-sizing:border-box; text-align:center}
 .cdday{font-weight:600; margin:0 0 8px}
 .cdlist .cdhead{display:flex; flex-wrap:wrap; align-items:center; gap:6px}
 .cdlist .cdtime{font-variant-numeric:tabular-nums}

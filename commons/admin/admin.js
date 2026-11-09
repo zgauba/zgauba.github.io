@@ -884,9 +884,9 @@ var VIEWS = {
     var name = ar() && cd.f.name_ar ? cd.f.name_ar : cd.f.name_en, today = cdToday(), max = cdAdd(today, CD_AHEAD);
     var html = '<h1 dir="auto">' + esc(name) + '</h1>' +
       '<p class="help">' + esc(jcT("cd_help")) + '</p>' +
-      '<div class="cdbar"><button class="btn ghost small" type="button" id="cdPrev"' + (cd.date <= today ? ' disabled' : '') + '>' + esc(jcT("cd_prev")) + '</button>' +
+      '<div class="cdbar"><button class="btn ghost small cdstep" type="button" id="cdPrev" aria-label="' + esc(jcT("cd_prev")) + '"' + (cd.date <= today ? ' disabled' : '') + '><span aria-hidden="true">‹</span></button>' +
       '<label class="cddate"><span class="sr-only">' + esc(jcT("cd_date")) + '</span><input id="cdDate" type="date" min="' + today + '" max="' + max + '" value="' + esc(cd.date) + '"></label>' +
-      '<button class="btn ghost small" type="button" id="cdNext"' + (cd.date >= max ? ' disabled' : '') + '>' + esc(jcT("cd_next")) + '</button></div>' +
+      '<button class="btn ghost small cdstep" type="button" id="cdNext" aria-label="' + esc(jcT("cd_next")) + '"' + (cd.date >= max ? ' disabled' : '') + '><span aria-hidden="true">›</span></button></div>' +
       '<p class="cdday" id="cdDay">' + esc(cdDayText(cd.date)) + '</p>' + msgBox();
     if (cd.err) {
       el("view").innerHTML = html + '<div class="row"><button class="btn ghost" type="button" id="cdRetry">' + esc(jcT("adm_ad_retry")) + '</button></div>';
