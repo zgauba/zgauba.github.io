@@ -5,14 +5,8 @@
 a.evcard:visited{color:var(--jc-ink)}
 .evlist b{display:block; font-size:16px}
 .evlist small{color:var(--jc-muted); font-size:13px}
-.evtop{display:flex; align-items:flex-start; justify-content:space-between; gap:10px}
 .evacts{display:flex; gap:8px}
 .evacts .btn{flex:1; font-size:14px; padding:10px 12px}
-/* organizers: straight to this event's editor (Zee, T5.2 polish) */
-.badge{flex:0 0 auto; font-size:11px; font-weight:800; letter-spacing:.04em;
-  text-transform:uppercase; text-decoration:none; border-radius:var(--jc-radius-pill); padding:4px 10px;
-  color:var(--jc-accent); border:1px solid var(--jc-accent)}
-a.badge:visited{color:var(--jc-accent)}
 h2.group{font-size:13px; letter-spacing:.06em; text-transform:uppercase; color:var(--jc-muted); margin:18px 0 8px}
 .evhead .sub{margin-bottom:6px}
 .evhead h1{margin-bottom:2px}
@@ -139,10 +133,6 @@ textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-
 .pop .rep{font:inherit; font-weight:700; color:var(--jc-danger); background:none; border:0; padding:4px 0; cursor:pointer; text-decoration:underline}
 .pop .rep:disabled{opacity:.5; cursor:progress}
 
-/* the event's Admin button: on the title's line, at its end (Zee, 2026-11-07 — it used to take a row of its own) */
-.evtitle{display:flex; align-items:flex-start; gap:10px}
-.evtitle h1{flex:1 1 auto; min-width:0; overflow-wrap:anywhere}
-.evtitle #evAdmin, .evtitle #evAdmin:visited{flex:0 0 auto; margin-top:2px; text-decoration:none; color:var(--jc-ink)}
 
 /* R2b-1: "Adjusted by an organizer · 7:42 PM" / "An organizer removed your sign-up." */
 .status.orgline{color:var(--jc-warn)}

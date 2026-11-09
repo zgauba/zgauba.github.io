@@ -361,7 +361,11 @@ test("Map tab: like the event map — names on the pins, Streets / Full Screen /
   await expect(page.locator(".evmapwrap")).not.toHaveClass(/full/);
   await page.locator("#locateBtn").click();
   await expect(page.locator(".leaflet-interactive")).toHaveCount(2);                 // the court + you
-  await page.locator(".leaflet-interactive").first().click({ force: true });
+  // Find Me pans the map to you; a tap during the pan lands where the pin was (CI WebKit flake, #83): tap until it opens
+  await expect(async () => {
+    await page.locator(".leaflet-interactive").first().click({ force: true });
+    await expect(page.locator(".leaflet-popup")).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
   await expect(page.locator(".leaflet-popup")).toContainText("Tennis · ⁦07:00–22:00⁩");
   await expect(page.locator(".leaflet-popup .popacts a")).toHaveText("Directions");                // as on the event map
   await expect(page.locator(".leaflet-popup .popacts a")).toHaveAttribute("href", /google\.com\/maps\/dir\/.*destination=24\.5301%2C54\.4312/);
@@ -420,6 +424,40 @@ test("a tab switch in the middle of a map zoom throws nothing", async ({ page })
   await page.waitForTimeout(100);
   expect(errors).toEqual([]);
 });
+
+// Zee 2026-11-09 (consistency between modules): the ? Help button and, for courts admins, Admin — as on Events.
+test("Help on the list and on a court; Admin (to Organizer Tools) only for courts admins", async ({ page }) => {
+  await open(page, backend());
+  await page.locator("#jcHelpBtn").click();
+  await expect(page.locator("#jcHelp h2")).toHaveText("Courts");
+  await expect(page.locator("#jcHelp li")).toHaveCount(5);
+  await page.locator("#jcHelpClose").click();
+  await expect(page.locator("#view .badge")).toHaveCount(0);                         // a resident: no Admin
+  await page.locator(`[data-open="${C1}"]`).click();
+  await expect(page.locator("#bkSlots")).toBeVisible();
+  await expect(page.locator("#bkAdmin")).toHaveCount(0);
+  await page.locator("#jcHelpBtn").click();
+  await expect(page.locator("#jcHelp h2")).toHaveText("This court");
+  await expect(page.locator("#jcHelp")).toContainText("Green is free, blue is yours");
+});
+
+for (const scope of ["community", "bookings", "events"]) {
+  test(`Admin for a ${scope} admin: ${scope === "events" ? "none" : "on each card and the court page, into its day view"}`, async ({ page }) => {
+    const shown = scope !== "events";
+    await open(page, backend({ me: Object.assign({}, MEMBER, { admin_scopes: [scope] }) }));
+    await expect(page.locator(`#bkCourts li[data-court="${C1}"] .badge`)).toHaveCount(shown ? 1 : 0);
+    if (shown) await expect(page.locator(`#bkCourts li[data-court="${C1}"] .badge`)).toHaveAttribute("href", "../admin/?tab=courts&court=" + C1);
+    await page.locator(`[data-open="${C1}"]`).click();
+    await expect(page.locator("#bkSlots")).toBeVisible();
+    await expect(page.locator("#bkAdmin")).toHaveCount(shown ? 1 : 0);
+    if (shown) {
+      await expect(page.locator("#bkAdmin")).toHaveText("Admin");
+      const [a, h] = [await page.locator("#bkAdmin").boundingBox(), await page.locator("h1").boundingBox()];
+      expect(Math.abs(a.y - h.y)).toBeLessThan(20);                                 // on the title's line, as on an event
+      if (process.env.SHOT_DIR && scope === "community") await page.screenshot({ path: process.env.SHOT_DIR + "/bk-admin.png" });
+    }
+  });
+}
 
 test("no home: told to claim it first, no Book buttons, nothing asked of the day", async ({ page }) => {
   const b = backend({ me: MEMBER_NO_HOME });
