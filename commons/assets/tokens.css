@@ -35,6 +35,8 @@
   --jc-warn:#f2b33c;
   --jc-danger:#ef7b7b;
   --jc-info:#58c4d4;          /* allergy-friendly / informational marker */
+  --jc-mine:#8fb4ff;          /* "yours" on court slots: a hue no other slot state uses (Zee 2026-11-09: green on green) */
+  --jc-mine-ink:#0b1633;      /* text on --jc-mine */
   /* shape & type */
   --jc-radius:14px;
   --jc-radius-pill:999px;

@@ -388,6 +388,7 @@ test("my own slot on the court's day has the Private switch too", async ({ page 
   await row(page, 18).locator('[data-bkpriv="m1"]').uncheck();
   await expect(page.locator("#msg")).toHaveText("Others now see your home on this booking.");
   await expect(row(page, 18).locator(".chip")).toHaveText(["Your booking"]);
+  if (process.env.SHOT_DIR) { await row(page, 18).scrollIntoViewIfNeeded(); await page.screenshot({ path: process.env.SHOT_DIR + "/bk-mine.png" }); }
 });
 
 test("spacing: the banner, the day strip and the slots never touch", async ({ page }) => {
