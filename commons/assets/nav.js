@@ -2,14 +2,14 @@
    A REGISTRY of destinations; each is offered only while available, re-checked on EVERY render
    against the live config the page just loaded (a module flag is the compliance kill switch):
    - a module destination needs its flag on AND its page to exist (page: false = not built yet;
-     R4c flips bookings to true when bookings/ ships — the only change Courts needs);
+     bookings/ shipped in R4c);
    - Organizer Tools needs some admin role (any admin scope, an event, or owner). Display only:
      every admin RPC is still gated by the server.
    My Home is never stored and never filtered: it is always the last button. */
 var JC_DEST = [
   { key: "commons",   path: "",           icon: "mark",      label: "tab_home",         auto: true },
   { key: "events",    path: "events/",    icon: "events",    label: "module_events",    auto: true, module: "events",   page: true },
-  { key: "bookings",  path: "bookings/",  icon: "bookings",  label: "module_bookings",  auto: true, module: "bookings", page: false },
+  { key: "bookings",  path: "bookings/",  icon: "bookings",  label: "module_bookings",  auto: true, module: "bookings", page: true },
   { key: "pets",      path: "pets/",      icon: "pets",      label: "feat_pets",        auto: true, module: "pets",     page: false },
   { key: "community", path: "community/", icon: "community", label: "module_community", auto: true,                     page: false },
   { key: "admin",     path: "admin/",     icon: "tools",     label: "tab_admin",        admin: true }
