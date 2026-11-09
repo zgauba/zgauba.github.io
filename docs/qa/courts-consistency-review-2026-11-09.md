@@ -54,3 +54,11 @@ The reviewer verified:
 - **Screenshots (WebKit, iPhone 13):**
   - my slot in blue among free ones;
   - a court as a community admin, with ? in the top bar and Admin on the title line.
+
+## CI follow-up: the map-tap flakes
+
+The Events "tap a pin" test failed once on CI WebKit, the same family as the Courts Map tab test. After Find Me pans
+the map, a tap by screen position can land where the pin used to be, or on a button or the tab bar now over it.
+
+- Both tests now wait until the pin stops moving, then send the tap to the pin itself (`tapWhenStill`).
+- 240 stress runs passed on WebKit at 8 workers. The full suite passed 1012/1012.

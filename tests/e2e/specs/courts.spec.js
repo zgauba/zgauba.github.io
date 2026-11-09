@@ -99,6 +99,21 @@ async function open(page, b, opts = {}) {
 }
 const row = (page, h) => page.locator("#bkSlots li", { has: page.locator(".time", { hasText: String(h).padStart(2, "0") + ":00–" }) });
 
+// Find Me pans the map, and a tap by screen position can land where the pin was, or on a button / the tab bar
+// now over it (CI WebKit flakes). Wait until the pin stops moving, then send the tap to the pin itself, once
+// (a second tap closes the popup again).
+async function tapWhenStill(page, loc) {
+  let last = null;
+  await expect.poll(async () => {
+    const b = await loc.boundingBox();
+    const k = b && Math.round(b.x) + "," + Math.round(b.y);
+    const still = k !== null && k === last;
+    last = k;
+    return still;
+  }, { intervals: [250], timeout: 10000 }).toBe(true);
+  await loc.dispatchEvent("click");
+}
+
 test("tabs List · Map · My Bookings (List first); the precedence line; courts with hours; walk-on has no times", async ({ page }) => {
   const b = backend({ mine: [{ id: "m1", starts: at("2026-11-11", 18) }],
     others: [], blocks: [] });
@@ -361,11 +376,7 @@ test("Map tab: like the event map — names on the pins, Streets / Full Screen /
   await expect(page.locator(".evmapwrap")).not.toHaveClass(/full/);
   await page.locator("#locateBtn").click();
   await expect(page.locator(".leaflet-interactive")).toHaveCount(2);                 // the court + you
-  // Find Me pans the map to you; a tap during the pan lands where the pin was (CI WebKit flake, #83): tap until it opens
-  await expect(async () => {
-    await page.locator(".leaflet-interactive").first().click({ force: true });
-    await expect(page.locator(".leaflet-popup")).toBeVisible({ timeout: 1000 });
-  }).toPass({ timeout: 10000 });
+  await tapWhenStill(page, page.locator(".leaflet-interactive").first());
   await expect(page.locator(".leaflet-popup")).toContainText("Tennis · ⁦07:00–22:00⁩");
   await expect(page.locator(".leaflet-popup .popacts a")).toHaveText("Directions");                // as on the event map
   await expect(page.locator(".leaflet-popup .popacts a")).toHaveAttribute("href", /google\.com\/maps\/dir\/.*destination=24\.5301%2C54\.4312/);
