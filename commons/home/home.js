@@ -40,7 +40,7 @@ function backTo(rel){ return encodeURIComponent(rel); }
 
 var keepCenter = null;   /* pin view: map position survives a re-render (language toggle) */
 function show(name, arg){
-  if (map) { keepCenter = name === "pin" ? map.getCenter() : null; map.remove(); map = null; }
+  if (map) { keepCenter = name === "pin" ? map.getCenter() : null; jcMapRemove(map); map = null; }
   else keepCenter = null;
   current = name;
   var refocus = jcFocusKeep();

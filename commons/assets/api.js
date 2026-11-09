@@ -186,6 +186,15 @@ function jcLocale(){ return jcLang() === "ar" ? "ar-AE-u-nu-latn" : "en-GB"; }
 function jcDayText(d, opts){
   return new Date(d + "T12:00:00Z").toLocaleDateString(jcLocale(), Object.assign({ weekday: "short", day: "numeric", month: "short" }, opts || {}, { timeZone: "UTC" }));
 }
+/* Take a Leaflet map down safely. Leaflet 1.9.4 leaves a 250 ms "zoom finished" timer running after
+   remove(); a tab switch inside that window threw "_leaflet_pos" of undefined (the flaky map tests,
+   and a real phone tapping fast). Clearing the animating flag makes that late timer a no-op. */
+function jcMapRemove(m){
+  if (!m) return;
+  try { m.stop(); } catch(e){}
+  m._animatingZoom = false;
+  m.remove();
+}
 /* "18:00" for an instant, on the community's clock */
 function jcClock(iso, cfg){ return new Date(iso).toLocaleTimeString(jcLocale(), { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: jcTz(cfg) }); }
 /* the community date an instant falls on */

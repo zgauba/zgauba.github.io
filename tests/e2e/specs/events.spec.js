@@ -383,6 +383,22 @@ test("non-numeric coordinates are treated as unpinned (no marker, no crash)", as
   } finally { ENTRIES.pop(); }
 });
 
+// The flaky "_leaflet_pos" (3 CI flakes): Leaflet's 250 ms end-of-zoom timer outlived map.remove() when a tab
+// switch landed mid-zoom. Forced here: start a zoom and switch tab in the same tick.
+test("a tab switch in the middle of a map zoom throws nothing", async ({ page }) => {
+  const eb = eventsBackend();
+  await stubBackend(page, { rpc: eb.rpc });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await expect(page.locator("#map .leaflet-marker-icon")).not.toHaveCount(0);
+  await page.evaluate(() => { map.setZoom(map.getZoom() - 1); document.getElementById("tab-list").click(); });
+  await expect(page.locator("#tab-list")).toHaveAttribute("aria-selected", "true");
+  await page.waitForTimeout(500);                                                    // past Leaflet's 250 ms timer
+  expect(errors).toEqual([]);
+});
+
 // PR #27 review M2 + L1: partial Arabic falls back per choice to English; a choice stored
 // as "constructor" never reads Object's built-ins.
 test("partly translated choices: Arabic where given, English for the rest; 'constructor' is just a word", async ({ page }) => {
