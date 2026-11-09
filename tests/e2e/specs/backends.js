@@ -318,6 +318,11 @@ function adminBackend(opts = {}) {
         return ok(st.scopes);
       },
       jc_admin_exit: () => { st.scopes = []; return ok(null); },
+      // R4b-1b: the Courts tab (community or bookings); admin-courts.spec.js has the full courts backend
+      jc_admin_facilities_list: () => (st.scopes.includes("community") || st.scopes.includes("bookings") ? ok([]) : raise("NOT_ADMIN")),
+      jc_admin_booking_rules: () => (st.scopes.includes("community") || st.scopes.includes("bookings")
+        ? ok({ enabled: false, per_home_per_day: 1, per_home_active: 2, configured: {}, retention_days: 90, defaults: { window_days: 7, slot_minutes: 60 } })
+        : raise("NOT_ADMIN")),
       jc_admin_events_list: () => (admin() || st.adminEvents.length ? ok(visible()) : raise("NOT_ADMIN")),
       // create: organizers only; edit: organizers or that event's admins (jc_assert_event_admin)
       jc_admin_event_save: (a) => {
