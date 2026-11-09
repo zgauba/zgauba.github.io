@@ -28,6 +28,7 @@ function backend(opts = {}) {
     // other homes' bookings: { starts, home | null (private / hidden), court }
     others: (opts.others || []).map((x) => Object.assign({ court: C1 }, x)),
     blocks: (opts.blocks || []).map((x) => Object.assign({ court: C1 }, x)),
+    past: opts.past || [], pastError: opts.pastError || null,
     mine: (opts.mine || []).map((x) => Object.assign({ court: C1, status: "booked", is_private: false, cancel_reason: null }, x)),
   };
   let n = 0;
@@ -55,6 +56,7 @@ function backend(opts = {}) {
     jc_me_get: (a, c) => (c.signedIn ? ok(st.me) : raise("NOT_SIGNED_IN")),
     jc_facilities_list: () => off() || ok(st.courts.map((c) => Object.assign({}, c))),
     jc_my_bookings: () => off() || ok(st.me.home ? myList() : []),
+    jc_my_bookings_past: () => off() || (st.pastError ? raise(st.pastError) : ok(st.me.home ? st.past : [])),
     jc_facility_day: (a) => {
       if (off()) return off();
       if (!st.me.home) return raise("NO_HOME");
@@ -533,3 +535,84 @@ for (const lang of ["en", "ar"]) {
     await axe();
   });
 }
+
+// ---------- R4d: My Bookings → Past (jc_my_bookings_past; the server decides which rows — own home, since joining, 90 days) ----------
+const PAST = [
+  { id: "p2", facility_id: C1, facility: "Court 1", facility_ar: "ملعب ١", starts_at: at("2026-11-08", 18), ends_at: at("2026-11-08", 19), status: "cancelled", cancel_reason: "Court blocked: Maintenance" },
+  { id: "p1", facility_id: C1, facility: "Court 1", facility_ar: "ملعب ١", starts_at: at("2026-11-05", 9), ends_at: at("2026-11-05", 10), status: "booked", cancel_reason: null },
+];
+
+test("Past under Upcoming: Done / Cancelled with the organizers' reason, in the server's order; re-read on each visit", async ({ page }) => {
+  const b = backend({ mine: [{ id: "m1", starts: at("2026-11-11", 18) }], past: PAST });
+  const { calls } = await open(page, b, { q: "?tab=mine" });
+  await expect(page.locator("#bkMine li")).toHaveCount(1);                              // Upcoming unchanged
+  await expect(page.locator("#bkPastHead")).toHaveText("Past");
+  const rows = page.locator("#bkPast li");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toContainText("Cancelled");
+  await expect(rows.nth(0)).toContainText("Cancelled by the organizers: Court blocked: Maintenance");
+  await expect(rows.nth(0)).toContainText("Sun 8 Nov · ⁦18:00–19:00⁩");                   // community time, phone in London
+  await expect(rows.nth(1).locator(".chip")).toHaveText("Done");
+  await expect(page.locator("#bkPastBox")).toContainText("Bookings are kept for 90 days.");
+  await expect(rows.locator("button, input")).toHaveCount(0);                            // read-only
+  if (process.env.SHOT_DIR) { await page.locator("#bkPastHead").scrollIntoViewIfNeeded(); await page.screenshot({ path: process.env.SHOT_DIR + "/bk-past.png", fullPage: true }); }
+  const axe = await new AxeBuilder({ page }).include("#view").analyze();
+  expect(axe.violations.map((v) => v.id)).toEqual([]);
+  const n = calls.filter((c) => c.name === "jc_my_bookings_past").length;
+  expect(n).toBe(1);
+  await page.locator("#bktab-list").click();
+  await page.locator("#bktab-mine").click();
+  await expect(page.locator("#bkPast li")).toHaveCount(2);
+  expect(calls.filter((c) => c.name === "jc_my_bookings_past").length).toBe(n + 1);      // fresh each visit
+  await page.locator("#langBtn").click();
+  await expect(page.locator("#bkPastHead")).toHaveText("السابقة");
+  await expect(page.locator("#bkPast li").nth(1).locator(".chip")).toHaveText("تم");
+  await expect(page.locator("#bkPast li").nth(1)).toContainText("ملعب ١");
+  expect(calls.filter((c) => c.name === "jc_my_bookings_past").length).toBe(n + 1);      // a language switch doesn't re-ask
+});
+
+test("Past: empty says so", async ({ page }) => {
+  await open(page, backend({ past: [] }), { q: "?tab=mine" });
+  await expect(page.locator("#bkPast")).toHaveText("No past bookings yet.");
+});
+
+test("Past: a failure there leaves Upcoming and offers Try Again", async ({ page }) => {
+  const b = backend({ mine: [{ id: "m1", starts: at("2026-11-11", 18) }], pastError: "UNKNOWN" });
+  await open(page, b, { q: "?tab=mine" });
+  await expect(page.locator("#bkPastBox")).toContainText("Couldn't load past bookings.");
+  await expect(page.locator("#bkMine li")).toHaveCount(1);
+  b.st.pastError = null; b.st.past = PAST;
+  await page.locator("#bkPastRetry").click();
+  await expect(page.locator("#bkPast li")).toHaveCount(2);
+});
+
+test("Past: no home → never asked", async ({ page }) => {
+  const { calls } = await open(page, backend({ me: MEMBER_NO_HOME }), { q: "?tab=mine" });
+  await expect(page.locator("#bkNoHome")).toBeVisible();
+  await expect(page.locator("#bkPastBox")).toHaveCount(0);
+  expect(calls.some((c) => c.name === "jc_my_bookings_past")).toBe(false);
+});
+
+test("Past: hostile court names and reasons stay text", async ({ page }) => {
+  const evil = "<img src=x onerror=window.__x=1>";
+  await open(page, backend({ past: [Object.assign({}, PAST[0], { facility: evil, cancel_reason: evil })] }), { q: "?tab=mine" });
+  await expect(page.locator("#bkPast li")).toContainText(evil);
+  expect(await page.evaluate(() => window.__x)).toBeUndefined();
+  await expect(page.locator("#bkPast img")).toHaveCount(0);
+});
+
+// R4d code review: an Upcoming action redraws only Upcoming — Past stays, not re-asked; Past's MODULE_OFF is the off page.
+test("Past survives cancelling an upcoming booking; MODULE_OFF from Past shows the off page", async ({ page }) => {
+  page.on("dialog", (d) => d.accept());
+  const b = backend({ mine: [{ id: "m1", starts: at("2026-11-11", 18) }], past: PAST });
+  const { calls } = await open(page, b, { q: "?tab=mine" });
+  await expect(page.locator("#bkPast li")).toHaveCount(2);
+  await page.locator('[data-bkcancel="m1"]').click();
+  await expect(page.locator("#bkMine")).toHaveText("No upcoming bookings.");
+  await expect(page.locator("#bkPast li")).toHaveCount(2);
+  expect(calls.filter((c) => c.name === "jc_my_bookings_past").length).toBe(1);
+  b.st.pastError = "MODULE_OFF";
+  await page.locator("#bktab-list").click();
+  await page.locator("#bktab-mine").click();
+  await expect(page.locator("#bkOff")).toBeVisible();
+});

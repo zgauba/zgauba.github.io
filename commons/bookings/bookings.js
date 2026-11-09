@@ -15,6 +15,7 @@ var state = null, cfg = null, current = null, map = null;
 var courts = null, mine = null, listErr = null, listLoading = false;
 var day = null;          /* { f, date, slots [] | null, err, loading, pick: slot index | null, priv: bool } */
 var bkBusy = false, daySeq = 0, listSeq = 0, mineSeq = 0;
+var past = null, pastErr = null, pastLoading = false, pastSeq = 0;   /* R4d: My Bookings → Past (null = not read yet) */
 var mineStale = false;    /* My bookings changed elsewhere and the re-read hasn't landed (code review M1) */
 var deepLink = null;
 /* Zee 2026-11-09: sub-tabs List · Map · My bookings (?tab=), the map like the event map (full screen, Find Me) */
@@ -195,7 +196,7 @@ function mineHtml(){
         '<div class="meta" dir="auto">' + esc(jcFmt("bk_cancelled_by_org", { r: b.cancel_reason || "" })) + '</div></li>';
     }
     var started = Date.parse(b.starts_at) <= Date.now();
-    return '<li class="s-mine" data-bk="' + esc(b.id) + '"><div class="head"><b dir="auto">' + esc(name) + '</b>' +
+    return '<li class="slot slot-mine s-mine" data-bk="' + esc(b.id) + '"><div class="head"><b dir="auto">' + esc(name) + '</b>' +
       (b.is_private === true ? '<span class="chip">' + esc(jcT("bk_private_chip")) + '</span>' : '') + '</div>' +
       '<div class="meta">' + esc(when(b)) + '</div>' +
       (started ? '' :
@@ -204,8 +205,47 @@ function mineHtml(){
         '<button class="mini danger" type="button" id="bkCancel-' + esc(b.id) + '" data-bkcancel="' + esc(b.id) + '" aria-label="' + esc(jcT("bk_cancel") + " " + when(b)) + '">' +
         esc(jcT("bk_cancel")) + '</button></div>') + '</li>';
   });
-  return '<h2 class="sr-only" id="bkMineHead" tabindex="-1">' + esc(jcT("bk_mine")) + '</h2>' +
+  return '<h2 class="group" id="bkMineHead" tabindex="-1">' + esc(jcT("bk_upcoming")) + '</h2>' +
     (rows.length ? '<ul class="bklist" id="bkMine">' + rows.join("") + '</ul>' : '<p class="help" id="bkMine">' + esc(jcT("bk_mine_none")) + '</p>');
+}
+/* R4d: Past — the home's ended bookings (made since you joined, last 90 days), read each time My Bookings opens.
+   Its own request: a failure here never hides Upcoming. Only this block redraws when it lands. */
+function loadPast(){
+  var seq = ++pastSeq;
+  pastLoading = true; pastErr = null;
+  rpc("jc_my_bookings_past").then(function(d){
+    if (seq !== pastSeq) return;
+    pastLoading = false;
+    past = Array.isArray(d) ? d.filter(function(b){ return hObj(b) && typeof b.id === "string" && typeof b.starts_at === "string" && typeof b.ends_at === "string"; }) : [];   /* review L3 */
+    drawPast();
+  }, function(e){
+    if (seq !== pastSeq) return;
+    pastLoading = false;
+    if (e && e.code === "MODULE_OFF") return show("off");
+    pastErr = (e && e.code) || "UNKNOWN";
+    drawPast();
+  });
+}
+function drawPast(){
+  var box = el("bkPastBox");
+  if (!box) return;
+  box.innerHTML = pastHtml();
+  on("bkPastRetry", function(){ loadPast(); drawPast(); var h = el("bkPastHead"); if (h) h.focus(); });   /* focus not lost (review L1) */
+}
+function pastHtml(){
+  var h = '<h2 class="group" id="bkPastHead" tabindex="-1">' + esc(jcT("bk_past")) + '</h2>';
+  if (pastErr) return h + '<p class="help">' + esc(jcT("bk_past_err")) + '</p>' +
+    '<div class="row"><button class="btn ghost small" type="button" id="bkPastRetry">' + esc(jcT("adm_ad_retry")) + '</button></div>';
+  if (!past) return h + '<p class="help">' + esc(jcT("working")) + '</p>';
+  if (!past.length) return h + '<p class="help" id="bkPast">' + esc(jcT("bk_past_none")) + '</p>';
+  return h + '<ul class="bklist" id="bkPast">' + past.map(function(b){
+    var name = ar() && b.facility_ar ? b.facility_ar : (b.facility || "");
+    var done = b.status === "booked";
+    return '<li class="slot slot-past" data-past="' + esc(b.id) + '"><div class="head"><b dir="auto">' + esc(name) + '</b>' +
+      '<span class="chip slotchip">' + esc(jcT(done ? "bk_done" : "bk_cancelled")) + '</span></div>' +
+      '<div class="meta">' + esc(when(b)) + '</div>' +
+      (done ? '' : '<div class="meta" dir="auto">' + esc(jcFmt("bk_cancelled_by_org", { r: b.cancel_reason || "" })) + '</div>') + '</li>';
+  }).join("") + '</ul><p class="help">' + esc(jcT("bk_past_kept")) + '</p>';
 }
 /* courts admins (community / bookings scope): an Admin way into Organizer Tools, as on event cards */
 function canAdmin(){
@@ -329,7 +369,10 @@ var VIEWS = {
       '<p class="notice" id="bkPrecedence">' + esc(jcT("bk_precedence")) + '</p>' +
       jcTabsHtml("bktab-", TABS, tab, function(t){ return jcT("bk_tab_" + t); }, jcT("module_bookings"), "bkBody") + msgBox();
     function wireTabs(){
-      jcTabsWire("bktab-", TABS, function(t){ tab = t; setUrl(t === "list" ? null : "tab=" + t); show("list"); });
+      jcTabsWire("bktab-", TABS, function(t){
+        if (t === "mine" && tab !== "mine") { past = null; pastErr = null; pastSeq++; pastLoading = false; }   /* fresh each visit */
+        tab = t; setUrl(t === "list" ? null : "tab=" + t); show("list");
+      });
     }
     if (listErr) {
       el("view").innerHTML = html + '<div ' + jcTabPanel("bktab-", tab, "bkBody") + '><div class="row"><button class="btn ghost" type="button" id="bkRetry">' +
@@ -345,7 +388,7 @@ var VIEWS = {
     }
     var pinned = courts.filter(hasPos), body;
     if (tab === "map") body = mapHtml(pinned);
-    else if (tab === "mine") body = '<div id="bkMineBox">' + mineHtml() + '</div>';
+    else if (tab === "mine") body = '<div id="bkMineBox">' + mineHtml() + '</div>' + (hasHome() ? '<section id="bkPastBox" aria-live="polite">' + pastHtml() + '</section>' : '');
     else body = (hasHome() ? '' : '<p class="notice" id="bkNoHome">' + esc(jcT("bk_no_home")) + '</p>' +
                    '<div class="row"><a class="btn ghost" href="../home/">' + esc(jcT("bk_go_home")) + '</a></div>') +
                 (courts.length ? '<ul class="bklist" id="bkCourts">' + courts.map(courtCard).join("") + '</ul>'
@@ -354,7 +397,7 @@ var VIEWS = {
     wireTabs();
     if (tab === "map") drawMap(pinned);
     each("[data-open]", function(b){ var f = courtById(b.dataset.open); if (f) openCourt(f); });
-    if (tab === "mine") wireMine();
+    if (tab === "mine") { wireMine(); if (hasHome() && !past && !pastLoading && !pastErr) loadPast(); else drawPast(); }
   },
 
   court: function(){
