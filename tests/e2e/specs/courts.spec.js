@@ -99,14 +99,15 @@ async function open(page, b, opts = {}) {
 }
 const row = (page, h) => page.locator("#bkSlots li", { has: page.locator(".time", { hasText: String(h).padStart(2, "0") + ":00–" }) });
 
-test("list: the precedence line, my bookings, courts with hours; walk-on has no times; the tab is there", async ({ page }) => {
+test("tabs List · Map · My Bookings (List first); the precedence line; courts with hours; walk-on has no times", async ({ page }) => {
   const b = backend({ mine: [{ id: "m1", starts: at("2026-11-11", 18) }],
     others: [], blocks: [] });
   await open(page, b);
   await expect(page.locator("#bkPrecedence")).toHaveText("Official community-management bookings take precedence.");
-  await expect(page.locator("#bkMine li")).toHaveCount(1);
-  await expect(page.locator("#bkMine li")).toContainText("Court 1");
-  await expect(page.locator("#bkMine li")).toContainText("Wed 11 Nov · ⁦18:00–19:00⁩");
+  await expect(page.locator('[role="tab"]')).toHaveText(["List", "Map", "My Bookings"]);
+  await expect(page.locator("#bktab-list")).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#bkmap")).toHaveCount(0);
+  await expect(page.locator("#bkMine")).toHaveCount(0);
   const c1 = page.locator(`[data-court="${C1}"]`);
   await expect(c1).toContainText("Tennis · ⁦07:00–22:00⁩");
   await expect(c1).toContainText("By the beach park");
@@ -114,7 +115,11 @@ test("list: the precedence line, my bookings, courts with hours; walk-on has no 
   const c2 = page.locator(`[data-court="${C2}"]`);
   await expect(c2).toContainText("Walk-on: no booking needed.");
   await expect(c2.locator("[data-open]")).toHaveCount(0);
-  await expect(page.locator("#bkmap")).toHaveCount(1);                              // one court has a pin
+  await page.locator("#bktab-mine").click();
+  await expect(page.locator("#bkMine li")).toHaveCount(1);
+  await expect(page.locator("#bkMine li")).toContainText("Court 1");
+  await expect(page.locator("#bkMine li")).toContainText("Wed 11 Nov · ⁦18:00–19:00⁩");
+  expect(page.url()).toContain("?tab=mine");
   await expect(page.locator('#tabbar a[data-tab="bookings"]')).toHaveAttribute("aria-current", "page");
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/bk-list.png", fullPage: true });
 });
@@ -195,7 +200,7 @@ for (const [code, text, reread] of [
 
 test("cancel from My bookings and from the day; a booking already gone says so", async ({ page }) => {
   const b = backend({ mine: [{ id: "m1", starts: at(D, 18) }, { id: "m2", starts: at("2026-11-11", 9) }] });
-  const { calls } = await open(page, b);
+  const { calls } = await open(page, b, { q: "?tab=mine" });
   page.once("dialog", (d) => d.dismiss());
   await page.locator('#bkMine [data-bkcancel="m2"]').click();
   expect(calls.some((c) => c.name === "jc_booking_cancel")).toBe(false);
@@ -204,6 +209,7 @@ test("cancel from My bookings and from the day; a booking already gone says so",
   await expect(page.locator("#msg")).toHaveText("Cancelled.");
   expect(lastCall(calls, "jc_booking_cancel").args).toEqual({ p_booking: "m2" });
   await expect(page.locator("#bkMine li")).toHaveCount(1);
+  await page.locator("#bktab-list").click();
   await page.locator(`[data-open="${C1}"]`).click();
   await expect(row(page, 18)).toContainText("Your booking");
   b.st.mine[0].status = "cancelled";                                               // gone in the meantime
@@ -216,7 +222,7 @@ test("cancel from My bookings and from the day; a booking already gone says so",
 test("the Private switch on My bookings sends the choice; an organizer cancel shows its reason", async ({ page }) => {
   const b = backend({ mine: [{ id: "m1", starts: at(D, 18) },
     { id: "m3", starts: at("2026-11-12", 9), status: "cancelled", cancel_reason: "Court blocked: Resurfacing" }] });
-  const { calls } = await open(page, b);
+  const { calls } = await open(page, b, { q: "?tab=mine" });
   await expect(page.locator('#bkMine li[data-bk="m3"]')).toContainText("Cancelled by the organizers: Court blocked: Resurfacing");
   await expect(page.locator('#bkMine li[data-bk="m3"] button, #bkMine li[data-bk="m3"] input')).toHaveCount(0);
   await page.locator('[data-bkpriv="m1"]').check();
@@ -240,7 +246,7 @@ test("a free slot that starts while the page is open turns Over on the next redr
 });
 
 test("a booking being played now: no Private switch, no Cancel (the server would refuse both)", async ({ page }) => {
-  await open(page, backend({ mine: [{ id: "m0", starts: at(D, 10) }, { id: "m1", starts: at(D, 18) }] }));
+  await open(page, backend({ mine: [{ id: "m0", starts: at(D, 10) }, { id: "m1", starts: at(D, 18) }] }), { q: "?tab=mine" });
   await expect(page.locator('#bkMine li[data-bk="m0"] input, #bkMine li[data-bk="m0"] button')).toHaveCount(0);
   await expect(page.locator('#bkMine li[data-bk="m1"] [data-bkcancel]')).toHaveCount(1);
 });
@@ -248,7 +254,7 @@ test("a booking being played now: no Private switch, no Cancel (the server would
 test("a failed Private switch puts the tick back and says why", async ({ page }) => {
   const b = backend({ mine: [{ id: "m1", starts: at(D, 18) }] });
   b.rpc.jc_booking_privacy_set = () => raise("NETWORK_X");
-  await open(page, b);
+  await open(page, b, { q: "?tab=mine" });
   await page.locator('[data-bkpriv="m1"]').check();
   await expect(page.locator("#msg")).toHaveClass(/err/);
   await expect(page.locator('[data-bkpriv="m1"]')).not.toBeChecked();
@@ -288,6 +294,7 @@ test("code review M1: book, go straight back — My bookings shows the new booki
   await expect(page.locator("#msg")).toContainText("Booked");
   slow = false;                                                                      // the list's own re-read is quick
   await page.locator("#jcBackBtn").click();
+  await page.locator("#bktab-mine").click();
   await expect(page.locator("#bkMine li")).toHaveCount(1);
   await expect(page.locator("#bkMine li")).toContainText("⁦12:00–13:00⁩");
   release();
@@ -297,6 +304,71 @@ test("a deep link to a court that's gone says so and drops the link", async ({ p
   await open(page, backend(), { q: "?court=99999999-aaaa-4aaa-8aaa-000000000009" });
   await expect(page.locator("#msg")).toHaveText("That court isn't available any more.");
   expect(page.url()).not.toContain("court=");
+});
+
+test("Map tab: like the event map — names on the pins, Streets / Full Screen / Find Me; a pin opens the court", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 24.531, longitude: 54.432 });
+  await open(page, backend(), { q: "?tab=map" });
+  await expect(page.locator("#bktab-map")).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".leaflet-tooltip.bklabel")).toHaveText(["Court 1"]);     // the walk-on court has no pin
+  const h = await page.locator("#bkmap").evaluate((n) => n.getBoundingClientRect().height);
+  expect(h).toBeGreaterThan(300);                                                    // fills the screen above the tab bar
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/bk-map.png" });
+  await expect(page.locator("#layerBtn")).toHaveText("Street");
+  await page.locator("#layerBtn").click();
+  await expect(page.locator("#layerBtn")).toHaveText("Satellite");
+  await page.locator("#fullBtn").click();
+  await expect(page.locator(".evmapwrap")).toHaveClass(/full/);
+  await expect(page.locator("#fullBtn")).toHaveText("Close Map");
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".evmapwrap")).not.toHaveClass(/full/);
+  await page.locator("#locateBtn").click();
+  await expect(page.locator(".leaflet-interactive")).toHaveCount(2);                 // the court + you
+  await page.locator(".leaflet-interactive").first().click({ force: true });
+  await expect(page.locator(".leaflet-popup")).toContainText("Tennis · ⁦07:00–22:00⁩");
+  await expect(page.locator(".leaflet-popup .popacts a")).toHaveText("Directions");                // as on the event map
+  await expect(page.locator(".leaflet-popup .popacts a")).toHaveAttribute("href", /google\.com\/maps\/dir\/.*destination=24\.5301%2C54\.4312/);
+  await page.locator("[data-popopen]").click();
+  await expect(page.locator("#bkSlots")).toBeVisible();
+  await page.locator("#jcBackBtn").click();
+  await expect(page.locator("#bktab-map")).toHaveAttribute("aria-selected", "true");   // back to the tab it came from
+});
+
+test("Map tab with no pinned court says so", async ({ page }) => {
+  await open(page, backend({ courts: [COURT({ lat: null, lng: null })] }), { q: "?tab=map" });
+  await expect(page.locator("#bkNoPins")).toHaveText("No courts are on the map yet. The List tab has them all.");
+});
+
+test("my own slot on the court's day has the Private switch too", async ({ page }) => {
+  const b = backend({ mine: [{ id: "m1", starts: at(D, 18) }] });
+  const { calls } = await open(page, b, { q: "?court=" + C1 });
+  await expect(row(page, 18).locator(".chip")).toHaveText(["Your booking"]);
+  await row(page, 18).locator('[data-bkpriv="m1"]').check();
+  await expect(page.locator("#msg")).toHaveText("Now private: others see just \"Booked\".");
+  expect(lastCall(calls, "jc_booking_privacy_set").args).toEqual({ p_booking: "m1", p_private: true });
+  await expect(row(page, 18).locator(".chip")).toHaveText(["Your booking", "Private"]);
+  await expect(page.locator("#bkPriv-m1")).toBeFocused();
+  await row(page, 18).locator('[data-bkpriv="m1"]').uncheck();
+  await expect(page.locator("#msg")).toHaveText("Others now see your home on this booking.");
+  await expect(row(page, 18).locator(".chip")).toHaveText(["Your booking"]);
+});
+
+test("spacing: the banner, the day strip and the slots never touch", async ({ page }) => {
+  await open(page, backend(), { q: "?court=" + C1 });
+  await expect(page.locator("#bkSlots")).toBeVisible();
+  const gap = await page.evaluate(() => {
+    const a = document.querySelector("#view > .notice").getBoundingClientRect(), b = document.querySelector("#bkDays").getBoundingClientRect();
+    const c = document.querySelector("#bkSlots").getBoundingClientRect();
+    return [b.top - a.bottom, c.top - b.bottom];
+  });
+  expect(gap[0]).toBeGreaterThanOrEqual(8);
+  expect(gap[1]).toBeGreaterThanOrEqual(8);
+  if (process.env.SHOT_DIR) {
+    await page.screenshot({ path: process.env.SHOT_DIR + "/bk-court.png" });
+    await page.locator("#jcBackBtn").click();
+    await page.screenshot({ path: process.env.SHOT_DIR + "/bk-listtab.png" });
+  }
 });
 
 test("no home: told to claim it first, no Book buttons, nothing asked of the day", async ({ page }) => {
@@ -342,7 +414,7 @@ test("hostile court names, notes, reasons and home numbers stay text", async ({ 
 });
 
 for (const lang of ["en", "ar"]) {
-  test(`axe ${lang}: the list, then a day with the booking sheet open`, async ({ page }) => {
+  test(`axe ${lang}: each tab, then a day with the booking sheet open`, async ({ page }) => {
     await open(page, backend({ mine: [{ id: "m1", starts: at(D, 18) }], others: [{ starts: at(D, 14), home: V40 }] }), { lang });
     await expect(page.locator("#bkCourts")).toBeVisible();
     const axe = async () => {
@@ -350,6 +422,12 @@ for (const lang of ["en", "ar"]) {
       expect(r.violations.map((v) => v.id + ": " + v.nodes.map((n) => n.target).join(" "))).toEqual([]);
     };
     await axe();
+    await page.locator("#bktab-map").click();
+    await expect(page.locator("#bkmap")).toBeVisible();
+    await axe();
+    await page.locator("#bktab-mine").click();
+    await axe();
+    await page.locator("#bktab-list").click();
     await page.locator(`[data-open="${C1}"]`).click();
     await row(page, 12).locator("[data-bkbook]").click();
     await expect(page.locator("#bkSheet")).toBeVisible();

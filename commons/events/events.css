@@ -40,7 +40,6 @@ body.evfit main{padding-bottom:0}
 .seg2 button{flex:1; font:inherit; font-weight:700; cursor:pointer; color:var(--jc-muted); background:var(--jc-surface);
   border:1px solid var(--jc-line); border-radius:10px; padding:8px}
 .seg2 button[aria-pressed="true"]{color:var(--jc-ink); border-color:var(--jc-accent)}
-.evmap{height:46vh; min-height:260px; border-radius:var(--jc-radius); overflow:hidden; border:1px solid var(--jc-line)}
 .entries{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
 .entries li{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:10px; padding:10px 12px; font-size:14px}
 .entries li.mine{border-color:var(--jc-accent)}
@@ -50,20 +49,6 @@ body.evfit main{padding-bottom:0}
 .orgnote{background:var(--jc-surface-2); border:1px solid var(--jc-warn); border-radius:10px; padding:10px 12px; font-size:14px}
 .orgnote b{color:var(--jc-warn); font-size:12.5px; text-transform:uppercase; letter-spacing:.04em}
 .orgnote p{margin:4px 0 0; white-space:pre-wrap; overflow-wrap:anywhere}
-.evmapwrap{position:relative}
-/* physical right, as .pinmap .layers: Leaflet's zoom stays top-left in Arabic too */
-.evmapwrap .mapbtns{position:absolute; top:10px; right:10px; z-index:600; display:flex; gap:6px}
-.evmapwrap .maplocate{position:absolute; bottom:28px; right:10px; z-index:600;
-  background:var(--jc-accent); color:var(--jc-accent-ink); border-color:var(--jc-accent); padding:9px 18px; font-size:14px}
-.popacts{display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:2px}
-.popacts a{font-weight:700; color:var(--jc-accent); padding:4px 0}   /* ~28px to tap */
-/* Leaflet's popup chrome, re-skinned with tokens (no raw colors) */
-.leaflet-popup-content-wrapper, .leaflet-popup-tip{background:var(--jc-surface); color:var(--jc-ink);
-  border:1px solid var(--jc-line)}
-.leaflet-container a.leaflet-popup-close-button{color:var(--jc-muted)}
-.pop{font:13px/1.45 var(--jc-font); min-width:170px}
-.pop .meta{color:var(--jc-muted)}
-.pop .note{margin-top:3px; white-space:pre-wrap; overflow-wrap:anywhere}
 .status{font-size:13.5px; margin:0}
 .status.ok{color:var(--jc-good)}
 .field{display:flex; flex-direction:column; gap:6px}
@@ -148,10 +133,6 @@ textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-
 .gauge i{width:6px; height:12px; border-radius:2px; background:var(--jc-line)}
 .gauge i.on{background:var(--jc-accent)}
 /* "Map Labels": a button over the map, the key in a popup window (5b.2) */
-/* a pin's popup open: the overlay buttons and their (invisible) row wrapper — which sit above Leaflet's panes — step aside so they can't
-   cover the popup or its close button; the zoom buttons too (5b.2) */
-.evmapwrap.popopen .lang, .evmapwrap.popopen .mapbtns, .evmapwrap.popopen .leaflet-control-zoom{visibility:hidden}
-.leaflet-popup-content{margin:12px 14px}
 /* dialog.sheet: shared, in app.css */
 .legend h3{margin:10px 0 6px; font-size:13px; color:var(--jc-muted); font-weight:700}
 /* "They're Out of Treats": a text link like Directions / Google Maps (red = it tells a neighbor something) */
@@ -163,15 +144,5 @@ textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-
 .evtitle h1{flex:1 1 auto; min-width:0; overflow-wrap:anywhere}
 .evtitle #evAdmin, .evtitle #evAdmin:visited{flex:0 0 auto; margin-top:2px; text-decoration:none; color:var(--jc-ink)}
 
-/* the map, bigger: fills the screen (a CSS expand — iOS Safari has no element Fullscreen API) */
-.evmapwrap .mapfull{position:absolute; bottom:28px; left:10px; z-index:600; padding:9px 14px; font-size:14px}
-body.mapfull{overflow:hidden}
-.evmapwrap.full{position:fixed; inset:0; z-index:1100; background:var(--jc-bg)}   /* over the tab bar (1000) */
-.evmapwrap.full .evmap{height:100% !important; min-height:0; border:0; border-radius:0}
-.evmapwrap.full .mapbtns{top:calc(10px + env(safe-area-inset-top))}
-.evmapwrap.full .leaflet-top{top:env(safe-area-inset-top)}
-.evmapwrap.full .mapfull, .evmapwrap.full .maplocate{bottom:calc(28px + env(safe-area-inset-bottom))}
 /* R2b-1: "Adjusted by an organizer · 7:42 PM" / "An organizer removed your sign-up." */
 .status.orgline{color:var(--jc-warn)}
-/* full screen: Close Map stays reachable while a pin's popup is open (the popopen rule hides the other overlays) */
-.evmapwrap.full.popopen .mapfull{visibility:visible}
