@@ -43,7 +43,7 @@ function hasStoredSession(){
 }
 
 function moduleCard(key, enabled){
-  return '<div class="card">' + jcIcon(key, 26) + '<h2>' + esc(jcT("module_" + key)) + '</h2>' +
+  return '<div class="card">' + jcIcon(key, 26) + '<h2 dir="auto">' + esc(jcModTitle(key)) + '</h2>' +
     '<p>' + esc(jcT("module_" + key + "_desc")) + '</p>' +
     (enabled ? '<a class="go" href="' + esc(key) + '/">' + esc(jcT("cta_" + key)) + '</a>'
              : '<span class="pill">' + esc(jcT("coming_soon")) + '</span>') + '</div>';

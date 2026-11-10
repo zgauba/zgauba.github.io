@@ -349,8 +349,8 @@ function shellFromSaved(){
 function shellPicked(d){ return { tabs: d.order.filter(function(k){ return d.on.indexOf(k) >= 0; }), start: d.start }; }
 function shellDirty(){ return !!shellDraft && JSON.stringify(shellPicked(shellDraft)) !== JSON.stringify(shellPicked(shellFromSaved())); }
 function shellLi(k, i, d){
-  var dest = jcDest(k), name = jcT(dest.label), on = d.on.indexOf(k) >= 0;
-  return '<li data-dest="' + esc(k) + '"><span class="nm">' + jcIcon(dest.icon, 20) + '<span>' + esc(name) + '</span></span>' +
+  var dest = jcDest(k), name = jcDestLabel(dest), on = d.on.indexOf(k) >= 0;
+  return '<li data-dest="' + esc(k) + '"><span class="nm">' + jcIcon(dest.icon, 20) + '<span dir="auto">' + esc(name) + '</span></span>' +
     '<button type="button" class="sw" role="switch" data-act="toggle" aria-checked="' + on + '" aria-label="' +
       esc(jcFmt("set_show", { x: name })) + '"' + (!on && d.on.length >= JC_BAR_MAX ? ' disabled' : '') + '>' +
       esc(jcT(on ? "set_on" : "set_off")) + '</button>' +
@@ -370,7 +370,7 @@ function shellHtml(){
       (d.on.length >= JC_BAR_MAX ? '<p class="help" id="shellFull">' + esc(jcT("set_full")) + '</p>' : '') +
       '<fieldset class="starts"><legend>' + esc(jcT("set_start")) + '</legend>' + starts.map(function(k){
         return '<label class="radio"><input type="radio" name="startPage" id="start-' + esc(k) + '" value="' + esc(k) + '"' +
-          (k === checked ? ' checked' : '') + '>' + esc(jcT(jcDest(k).label)) + '</label>';
+          (k === checked ? ' checked' : '') + '><span dir="auto">' + esc(jcDestLabel(jcDest(k))) + '</span></label>';
       }).join("") + '</fieldset>' +
       '<p class="help">' + esc(jcT("set_start_help")) + '</p>' +
       '<p class="msg" id="shellMsg" role="alert"></p>' +

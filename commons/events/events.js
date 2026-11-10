@@ -207,7 +207,7 @@ function headSub(ev, entries){
 /* ---------- views ---------- */
 var VIEWS = {
   list: function(){
-    el("view").innerHTML = '<h1>' + esc(jcT("ev_title")) + '</h1><p class="sub">' + esc(jcT("ev_sub")) + '</p>' +
+    el("view").innerHTML = '<h1 dir="auto">' + esc(jcModTitle("events")) + '</h1><p class="sub">' + esc(jcT("ev_sub")) + '</p>' +
       msgBox() + '<div id="lists"><p class="sub">' + esc(jcT("working")) + '</p></div>';
     rpc("jc_events_list").then(function(evs){
       /* upcoming: soonest first (undated last); past: most recent first (server order) */
@@ -1058,7 +1058,7 @@ function paint(){
   var name = jcCommunityName(cfg, state && state.me && state.me.community);
   el("homeLink").textContent = name;
   el("langBtn").textContent = jcT("toggle_label");
-  document.title = jcT("ev_title") + " — " + name;
+  document.title = jcModTitle("events") + " — " + name;
   if (state && state.status === "member") jcTabBar("../", "events", cfg);
 }
 

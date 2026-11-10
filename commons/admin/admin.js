@@ -254,7 +254,7 @@ function show(name){
   /* back, in the top bar: sign-ups → the events list; pin move → the sign-ups */
   jcBack(name === "signups" ? leaveSignups
        : name === "pinmove" ? function(){ pm = null; show("signups"); }
-       : name === "feedback" || name === "health" || name === "households" || name === "admins" ? function(){ show("home"); }
+       : name === "feedback" || name === "health" || name === "households" || name === "admins" || name === "names" ? function(){ show("home"); }
        : name === "adminlog" ? function(){ show("households"); }
        : name === "court" ? function(){ ctEd = null; show("home"); }
        : name === "courtday" ? function(){ cd = null; admTab = "courts"; show("home"); }
@@ -440,7 +440,9 @@ function admCommunityHtml(){
       '<div class="panel fbentry"><button class="btn ghost" type="button" id="healthOpen">' +
       esc(jcT("adm_h_open")) + '</button></div>' +
       '<div class="panel fbentry"><button class="btn ghost" type="button" id="hhOpen">' +
-      esc(jcT("adm_hh_open")) + '</button></div>' : '') +
+      esc(jcT("adm_hh_open")) + '</button></div>' +
+      '<div class="panel fbentry"><button class="btn ghost" type="button" id="mnOpen">' +
+      esc(jcT("adm_mn_open")) + '</button></div>' : '') +
     (owner ? '<div class="panel fbentry"><button class="btn' + (fb && fb.unread ? '' : ' ghost') + '" type="button" id="fbOpen">' +
       esc(fb ? jcFmt("adm_fb_open", { n: fb.unread }) : jcT("adm_fb_title")) + '</button></div>' : '');
   if (has("community")) {
@@ -495,9 +497,9 @@ var VIEWS = {
     var html =
       '<h1>' + esc(jcT("adm_title")) + '</h1>' +
       '<p class="sub">' + esc(scopes.length
-        ? jcFmt("adm_scopes", { s: scopes.map(function(s){ return jcT("scope_" + s); }).join(" · ") })
+        ? jcFmt("adm_scopes", { s: scopes.map(scopeName).join(" · ") })
         : isEventAdmin() ? jcT("adm_event_admin_sub") : jcT("adm_owner_sub")) + '</p>' +
-      (tabs.length > 1 ? jcTabsHtml("atab-", tabs, admTab, function(t){ return jcT("adm_tab_" + t); }, jcT("adm_title"), "admPanel") : '') +
+      (tabs.length > 1 ? jcTabsHtml("atab-", tabs, admTab, admTabLabel, jcT("adm_title"), "admPanel") : '') +
       msgBox();
     var panel = ADM_TABS.filter(function(x){ return x.key === admTab; })[0].html();
     html += tabs.length > 1 ? '<div ' + jcTabPanel("atab-", admTab, "admPanel") + '>' + panel + '</div>' : panel;
@@ -513,6 +515,7 @@ var VIEWS = {
     on("fbOpen", function(){ show("feedback"); });
     on("healthOpen", function(){ health = null; show("health"); });
     on("hhOpen", function(){ hh = null; show("households"); });
+    on("mnOpen", function(){ mnDraft = null; show("names"); });
     on("adOpen", function(){ ad = null; show("admins"); });
     Array.prototype.forEach.call(document.querySelectorAll("[data-act]"), function(b){
       b.addEventListener("click", function(){ act(b.dataset.act, b.dataset.id, b); });
@@ -808,6 +811,45 @@ var VIEWS = {
      village with its members. Names are what the server sends (display name or masked email). */
   /* R4b-1a — admins at every level: named people, one-time invite links, one-tap Remove (community admins only;
      the server enforces it) */
+  /* RM — Section Names (community admins; the server enforces it): per module a name (EN + AR, or neither)
+     and an optional title. Saving one section never touches another; empty boxes = the usual name. */
+  names: function(){
+    var html = '<h1>' + esc(jcT("adm_mn_title")) + '</h1><p class="sub">' + esc(jcT("adm_mn_sub")) + '</p>' + msgBox();
+    if (!cfg) { el("view").innerHTML = html; el("msg").className = "msg err"; el("msg").textContent = jcT("error_config"); return; }
+    var d = mnDraft || {};
+    el("view").innerHTML = html + MN_KEYS.map(function(k){
+      var st = mnStored(k), v = Object.prototype.hasOwnProperty.call(d, k) && hObj(d[k]) ? d[k] : st, set = !!(st.name_en || st.title_en || st.title_ar);
+      return '<form class="panel mnform" data-mn="' + k + '" novalidate>' +
+        '<h2 class="group">' + jcIcon(k, 20) + ' ' + esc(jcT(JC_MOD_NAME[k])) + '</h2>' +
+        MN_FIELDS.map(function(f){
+          var val = String(v[f.k] || "");
+          return '<label>' + esc(jcT("adm_mn_" + f.k)) +
+            '<input type="text" data-f="' + f.k + '" maxlength="' + f.max + '" dir="' + f.dir + '" lang="' + (f.dir === "rtl" ? "ar" : "en") +
+              '" autocomplete="off" spellcheck="false" value="' + esc(val) + '">' +
+            '<small class="help" data-count="' + f.k + '">' + esc(jcFmt("adm_mn_count", { n: val.length, m: f.max })) + '</small></label>';
+        }).join("") +
+        '<p class="help">' + esc(jcT("adm_mn_hint")) + '</p>' +
+        '<div class="row"><button class="btn" type="submit">' + esc(jcT("adm_mn_save")) + '</button>' +
+        (set ? '<button class="btn ghost" type="button" data-mnreset="' + k + '">' + esc(jcT("adm_mn_reset")) + '</button>' : '') +
+        '</div></form>';
+    }).join("");
+    Array.prototype.forEach.call(document.querySelectorAll("[data-mn]"), function(form){
+      var k = form.dataset.mn;
+      Array.prototype.forEach.call(form.querySelectorAll("[data-f]"), function(inp){
+        inp.addEventListener("input", function(){
+          var f = MN_FIELDS.filter(function(x){ return x.k === inp.dataset.f; })[0];
+          form.querySelector('[data-count="' + f.k + '"]').textContent = jcFmt("adm_mn_count", { n: inp.value.length, m: f.max });
+        });
+      });
+      form.addEventListener("submit", function(ev){ ev.preventDefault(); mnSave(k, mnRead()[k], form); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-mnreset]"), function(b){
+      b.addEventListener("click", function(){
+        mnSave(b.dataset.mnreset, { name_en: "", name_ar: "", title_en: "", title_ar: "" }, b.form);
+      });
+    });
+  },
+
   admins: function(){
     var html = '<h1>' + esc(jcT("adm_ad_title")) + '</h1><p class="sub">' + esc(jcT("adm_ad_sub")) + '</p>' + msgBox();
     if (adErr) {
@@ -1033,6 +1075,55 @@ var VIEWS = {
 
 /* ---------- Households (R1) ---------- */
 /* admin-log actions in words; anything else shows its own name */
+/* ---------- RM — section names ---------- */
+/* The built-in role / tab / scope words name a module: show the community's own section name instead.
+   Not 'community' — there it means the community-admin role, not The Community section. */
+function scopeName(s){ return s === "events" || s === "bookings" || s === "pets" ? jcModName(s) : jcT("scope_" + s); }
+function adScopeName(s){ return s === "bookings" || s === "pets" ? jcFmt("adm_ad_scope_mod", { m: jcModName(s) }) : jcT("adm_ad_scope_" + s); }
+function admTabLabel(t){ return t === "events" ? jcModName("events") : t === "courts" ? jcModName("bookings") : jcT("adm_tab_" + t); }
+var MN_KEYS = ["events", "bookings", "pets", "community"];
+var MN_FIELDS = [{ k: "name_en", max: 14, dir: "ltr" }, { k: "name_ar", max: 18, dir: "rtl" },
+                 { k: "title_en", max: 40, dir: "ltr" }, { k: "title_ar", max: 40, dir: "rtl" }];
+var mnDraft = null;       /* { <module>: {name_en, …} } typed, not saved — survives a language switch */
+var mnBusy = false;
+function mnStored(k){
+  var l = cfg && hObj(cfg.labels), e = (l && Object.prototype.hasOwnProperty.call(l, k) && hObj(l[k])) || {}, n = hObj(e.name) || {}, t = hObj(e.title) || {};
+  return { name_en: n.en || "", name_ar: n.ar || "", title_en: t.en || "", title_ar: t.ar || "" };
+}
+function mnRead(){
+  var d = {};
+  Array.prototype.forEach.call(document.querySelectorAll("[data-mn]"), function(form){
+    var v = {};
+    Array.prototype.forEach.call(form.querySelectorAll("[data-f]"), function(inp){ v[inp.dataset.f] = inp.value; });
+    d[form.dataset.mn] = v;
+  });
+  return d;
+}
+function mnSave(k, v, form){
+  if (mnBusy) return;
+  mnBusy = true;
+  Array.prototype.forEach.call(form.querySelectorAll("button"), function(b){ b.disabled = true; });
+  mnDraft = mnRead();
+  rpc("jc_admin_module_label_set", { p_module: k, p_name_en: v.name_en, p_name_ar: v.name_ar,
+                                     p_title_en: v.title_en, p_title_ar: v.title_ar }).then(function(labels){
+    mnBusy = false;
+    cfg = Object.assign({}, cfg, { labels: hObj(labels) || {} });
+    if (mnDraft) delete mnDraft[k];
+    paint();                                  /* the bar and this page's title follow at once */
+    VIEWS.names();
+    showOk(jcFmt("adm_mn_saved", { m: jcModName(k) }));
+  }, function(e){
+    mnBusy = false;
+    if (e.code === "NOT_ADMIN") return fail(e);
+    VIEWS.names();
+    var t = jcT("adm_mn_err_" + e.code);
+    if (t === "adm_mn_err_" + e.code) return showErr(e.code);
+    var m = el("msg"); if (!m) return;
+    m.className = "msg err"; m.textContent = t;
+    if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
+  });
+}
+
 var LOG_KEYS = { home_edit: "y", home_pin_set: "y", home_suppress: "y", member_remove: "y", invite_approve: "y",
   invite_decline: "y", code_rotate: "y", broadcast_set: "y", notice_resolve: "y", event_save: "y", event_publish: "y",
   event_signups: "y", event_announce: "y", event_close: "y", event_autoclose: "y", entry_moderate: "y", entry_pin_set: "y",
@@ -1040,7 +1131,9 @@ var LOG_KEYS = { home_edit: "y", home_pin_set: "y", home_suppress: "y", member_r
   broadcast_tie: "y",
   /* R4b-2: courts + per-module admins (R4a / R4a-2) */
   facility_save: "y", facility_status: "y", block_create: "y", block_remove: "y", booking_cancel: "y",
-  module_admin_link: "y", module_admin_accept: "y", module_admin_revoke: "y" };
+  module_admin_link: "y", module_admin_accept: "y", module_admin_revoke: "y",
+  /* RM */
+  module_label_set: "y" };
 /* the homes list, well-formed rows only (a null row would throw while drawing) */
 function hhShape(d){
   if (!hObj(d) || !Array.isArray(d.homes) || !Array.isArray(d.pending)) return null;
@@ -1896,7 +1989,7 @@ function adScopeHtml(s){
       esc(jcT("adm_admins_cancel_link")) + '</button></li>';
   }));
   var url = jcOwn(adLinks, s);
-  return '<h2 class="group">' + esc(jcT("adm_ad_scope_" + s)) + '</h2>' +
+  return '<h2 class="group">' + esc(adScopeName(s)) + '</h2>' +
     '<div class="panel adminsbox" data-scope="' + s + '"><p class="help">' + esc(jcT("adm_ad_can_" + s)) + '</p>' +
     (rows.length ? '<ul class="adminlist">' + rows.join("") + '</ul>' : '<p class="help">' + esc(jcT("adm_ad_none")) + '</p>') +
     (url
@@ -1950,7 +2043,7 @@ function wireAdminsView(){
     var s = b.dataset.adrm;
     if (adBusy) return;
     var ask = s === "community" ? jcFmt("adm_ad_remove_confirm_community", { n: b.dataset.name })
-                                : jcFmt("adm_ad_remove_confirm", { n: b.dataset.name, r: jcT("adm_ad_scope_" + s) });
+                                : jcFmt("adm_ad_remove_confirm", { n: b.dataset.name, r: adScopeName(s) });
     if (!window.confirm(ask)) return;
     write(b, function(){
       return rpc("jc_module_admin_revoke", { p_scope: s, p_user: b.dataset.user, p_link: null }).then(function(d){
@@ -2010,7 +2103,7 @@ function inviteView(){
     rpc("jc_module_admin_accept", { p_token: inv.token }).then(function(res){
       INVITE = null; inviteForget();
       var role = jcOwn(INVITE_ROLES, res && res.scope) ? res.scope : null;
-      var done = role ? jcFmt("inv_done", { r: jcT("adm_ad_scope_" + role) }) : jcT("inv_done_any");
+      var done = role ? jcFmt("inv_done", { r: adScopeName(role) }) : jcT("inv_done_any");
       return rpc("jc_me_get").then(function(me){
         scopes = me.admin_scopes || []; adminEvents = me.admin_events || []; owner = !!me.is_owner;
         if (canEnter()) return loadHome().then(function(){ showOk(done); });
@@ -2833,6 +2926,7 @@ el("langBtn").addEventListener("click", function(){
   if (current === "court" && ctEd) { ctEd.draft = courtForm(); return show("court"); }   /* never throw away the form */
   if (current === "courtday" && cd) { cd.draft = cdDraft(); return show("courtday"); }   /* same day, same open form */
   if (current === "admins" && ad) return VIEWS.admins();   /* keeps a just-made invite link on screen */
+  if (current === "names") { mnDraft = mnRead(); return VIEWS.names(); }   /* never throw away a half-typed name */
   /* keep what's half-done: the banner draft, an open note / spot, where the pin map was moved */
   var keep = Array.prototype.map.call(document.querySelectorAll("#bannerText, [data-form] [data-in]"), function(n){ return n.value; });
   var view = vmap ? { c: vmap.getCenter(), z: vmap.getZoom() } : null;

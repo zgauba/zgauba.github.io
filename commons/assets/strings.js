@@ -19,7 +19,7 @@ var JC_STRINGS = {
     module_events_desc: "Community celebrations, mapped. Sign your home up and manage your own listing.",
     module_bookings: "Courts",
     module_bookings_desc: "Book community courts and facilities.",
-    module_pets: "Pets of Jubail",
+    module_pets: "Pets",   /* RM: Jubail's "Pets of Jubail" is its own config title now */
     module_pets_desc: "The neighborhood pet directory.",
     module_community: "The Community",
     /* platform entry (signed out) is community-agnostic: generic titles where the
@@ -202,7 +202,7 @@ var JC_STRINGS = {
     ev_sub: "What the neighborhood is up to",
     ev_past: "Past",
     ev_none: "Nothing planned right now. Check back soon.",
-    ev_off: "Events aren't open yet in your community.",
+    ev_off: "This section isn't open yet in your community.",
     ev_homes_in: "{n} homes in",
     ev_open: "sign-ups open",
     ev_closed: "sign-ups closed",
@@ -334,7 +334,7 @@ var JC_STRINGS = {
     st_baseline: "Hand-recorded from the original Halloween site.",
     mh_history: "Our Year",
     mh_history_none: "No events yet.",
-    err_MODULE_OFF: "Events aren't open yet in your community.",
+    err_MODULE_OFF: "This section isn't open yet in your community.",
     err_SIGNUPS_CLOSED: "Sign-ups for this event are closed.",
     err_NO_PIN: "Pin your home first — visitors use it to find you.",
     /* T5.2 PR 2 — organizer tools */
@@ -730,7 +730,7 @@ var JC_STRINGS = {
     ct_err_NOT_FOUND: "That court is no longer listed.",
     /* R4c — Courts (residents) */
     bk_precedence: "Official community-management bookings take precedence.",
-    bk_off: "Courts aren't open yet in your community.",
+    bk_off: "This section isn't open yet in your community.",
     bk_no_home: "Claim your home first to book a court.",
     bk_go_home: "Go to My Home",
     bk_mine: "My bookings",
@@ -1033,7 +1033,27 @@ var JC_STRINGS = {
     err_LINK_EXPIRED: "That reset link has expired, was already used, or was opened in a different browser. Request a new one here and open it in this browser.",
     err_SAME_PASSWORD: "That's your current password. Choose a different one.",
     err_NETWORK: "Couldn't reach Commons. Check your connection and try again.",
-    err_UNKNOWN: "Something went wrong. Try again in a moment."
+    err_UNKNOWN: "Something went wrong. Try again in a moment.",
+    /* RM — Section Names (Organizer Tools → Community; community admins) */
+    adm_mn_open: "Section Names",
+    adm_mn_title: "Section Names",
+    adm_mn_sub: "Rename the sections of the app for your community. Leave a section empty to keep its usual name.",
+    adm_mn_name_en: "Name in English (bottom bar and tabs)",
+    adm_mn_name_ar: "Name in Arabic",
+    adm_mn_title_en: "Page title in English (optional)",
+    adm_mn_title_ar: "Page title in Arabic (optional)",
+    adm_mn_count: "{n}/{m}",
+    adm_mn_hint: "A name needs both English and Arabic. Clear every box and save to go back to the usual name.",
+    adm_mn_save: "Save",
+    adm_mn_reset: "Use the Usual Name",
+    adm_mn_saved: "Saved. Everyone sees “{m}” the next time they open Commons.",
+    adm_mn_err_NAME_BOTH: "Give the name in both English and Arabic, or leave both empty.",
+    adm_mn_err_TOO_LONG: "That's too long. A name fits the bottom bar: up to 14 letters in English, 18 in Arabic. A title: up to 40.",
+    adm_mn_err_BAD_CHARS: "Use letters, numbers, spaces and simple punctuation only. The Arabic name uses Arabic letters, without diacritics.",
+    adm_mn_err_RESERVED_NAME: "That name is already used elsewhere in the app. Choose another.",
+    adm_mn_err_NAME_TAKEN: "Another section already has that name.",
+    adm_log_module_label_set: "Renamed a section",
+    adm_ad_scope_mod: "{m} admins"
   },
   ar: {
     dir: "rtl",
@@ -1047,7 +1067,7 @@ var JC_STRINGS = {
     module_events_desc: "احتفالات المجتمع على الخريطة — سجّل منزلك وأدِر مشاركتك بنفسك.",
     module_bookings: "الملاعب",
     module_bookings_desc: "احجز ملاعب ومرافق المجتمع.",
-    module_pets: "حيوانات الجبيل الأليفة",
+    module_pets: "الحيوانات الأليفة",
     module_pets_desc: "دليل حيوانات الحي الأليفة.",
     /* T5.0a draft — pending native review */
     module_community: "المجتمع",
@@ -1226,7 +1246,7 @@ var JC_STRINGS = {
     ev_sub: "ما يجري في الحي",
     ev_past: "السابقة",
     ev_none: "لا شيء مخطط حالياً. عُد قريباً.",
-    ev_off: "الفعاليات غير متاحة بعد في مجتمعك.",
+    ev_off: "هذا القسم غير متاح بعد في مجتمعك.",
     ev_homes_in: "{n} منزلاً مشاركاً",
     ev_open: "التسجيل مفتوح",
     ev_closed: "التسجيل مغلق",
@@ -1357,7 +1377,7 @@ var JC_STRINGS = {
     st_baseline: "سُجّلت يدوياً من موقع الهالوين الأصلي.",
     mh_history: "عامنا",
     mh_history_none: "لا فعاليات بعد.",
-    err_MODULE_OFF: "الفعاليات غير متاحة بعد في مجتمعك.",
+    err_MODULE_OFF: "هذا القسم غير متاح بعد في مجتمعك.",
     err_SIGNUPS_CLOSED: "التسجيل في هذه الفعالية مغلق.",
     err_NO_PIN: "حدّد موقع منزلك أولاً — يستخدمه الزوار للعثور عليك.",
     /* T5.2 PR 2 — organizer tools (DRAFT — pending native review) */
@@ -1753,7 +1773,7 @@ var JC_STRINGS = {
     ct_err_NOT_FOUND: "هذا الملعب لم يعد مدرجاً.",
     /* R4c — DRAFT, pending Arabic review */
     bk_precedence: "حجوزات إدارة المجتمع الرسمية لها الأولوية.",
-    bk_off: "الملاعب غير متاحة بعد في مجتمعك.",
+    bk_off: "هذا القسم غير متاح بعد في مجتمعك.",
     bk_no_home: "سجّل منزلك أولاً لتحجز ملعباً.",
     bk_go_home: "إلى منزلي",
     bk_mine: "حجوزاتي",
@@ -2056,7 +2076,27 @@ var JC_STRINGS = {
     err_LINK_EXPIRED: "انتهت صلاحية رابط الاستعادة، أو استُخدم من قبل، أو فُتح في متصفح آخر. اطلب رابطاً جديداً من هنا وافتحه في هذا المتصفح.",
     err_SAME_PASSWORD: "هذه كلمة مرورك الحالية. اختر كلمة مرور مختلفة.",
     err_NETWORK: "تعذّر الوصول إلى كومنز. تحقّق من اتصالك وحاول مرة أخرى.",
-    err_UNKNOWN: "حدث خطأ ما. حاول مرة أخرى بعد قليل."
+    err_UNKNOWN: "حدث خطأ ما. حاول مرة أخرى بعد قليل.",
+    /* RM — أسماء الأقسام (needs native-speaker review) */
+    adm_mn_open: "أسماء الأقسام",
+    adm_mn_title: "أسماء الأقسام",
+    adm_mn_sub: "غيّر أسماء أقسام التطبيق لمجتمعك. اترك القسم فارغًا ليبقى اسمه المعتاد.",
+    adm_mn_name_en: "الاسم بالإنجليزية (الشريط السفلي والتبويبات)",
+    adm_mn_name_ar: "الاسم بالعربية",
+    adm_mn_title_en: "عنوان الصفحة بالإنجليزية (اختياري)",
+    adm_mn_title_ar: "عنوان الصفحة بالعربية (اختياري)",
+    adm_mn_count: "{n}/{m}",
+    adm_mn_hint: "يحتاج الاسم إلى الإنجليزية والعربية معًا. امسح كل الخانات واحفظ للعودة إلى الاسم المعتاد.",
+    adm_mn_save: "احفظ",
+    adm_mn_reset: "استخدم الاسم المعتاد",
+    adm_mn_saved: "تم الحفظ. سيرى الجميع «{m}» عند فتح كومنز في المرة القادمة.",
+    adm_mn_err_NAME_BOTH: "اكتب الاسم بالإنجليزية والعربية معًا، أو اترك الاثنين فارغين.",
+    adm_mn_err_TOO_LONG: "النص طويل جدًا. الاسم حتى 14 حرفًا بالإنجليزية و18 بالعربية، والعنوان حتى 40.",
+    adm_mn_err_BAD_CHARS: "استخدم الحروف والأرقام والمسافات وعلامات الترقيم البسيطة فقط. الاسم العربي بحروف عربية دون تشكيل.",
+    adm_mn_err_RESERVED_NAME: "هذا الاسم مستخدم في مكان آخر في التطبيق. اختر اسمًا آخر.",
+    adm_mn_err_NAME_TAKEN: "قسم آخر يحمل هذا الاسم بالفعل.",
+    adm_log_module_label_set: "غيّر اسم قسم",
+    adm_ad_scope_mod: "مشرفو {m}"
   }
 };
 
