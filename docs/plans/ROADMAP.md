@@ -14,7 +14,7 @@
 pre-launch phases below — and the launch gate (R8) passes. The launch gate is the **last** step.
 The `e2e` test community stays the place to try everything; Jubail's modules stay OFF until R8.
 
-## Done (as of 2026-11-08)
+## Done (as of 2026-11-10)
 
 | Phase | What shipped |
 |---|---|
@@ -28,6 +28,9 @@ The `e2e` test community stays the place to try everything; Jubail's modules sta
 | R1.1 | Households: fix / set a home's pin (map + confirm naming the home + Undo) — PR #67 |
 | R2b-1 | Organizer event-night acts (mark a home done / open, set or clear its supply, remove a no-show; household told, never who) + event page polish (Admin button on the title line, full-screen map) — PR #68 (DB `r2b_1_organizer_acts`) |
 | R2b-2 | Per-event safety box (security line + lost-child meeting point), holiday lights look + template, clean event text on write — PR #69 (DB `r2b_2_safety_lights`). **R2 complete.** |
+| R3 | App shell: "Save as an app" (R3b), your bar + start page + Settings (R3a), accessibility pass with shared WAI-ARIA tabs (R3c). **R3 complete.** |
+| R4 | Courts: schema to spec + module / unified per-person admins (R4a–R4a-3), Admins screen + court editor (R4b-1), admin Day view (R4b-2), residents book (R4c), My Bookings → Past (R4d) — PRs #71–#85. **R4 complete** (Courts stays off for Jubail until R8). |
+| R5a | Pets DB to spec (known & fine, territory, care record, sightings rules + retention, missing-pet show-home opt-in, members-only WhatsApp group link) — DB `r5a_pets`, applied 2026-11-10. Clients next: R5b / R5c / R5d (`docs/plans/R5-pets.md`) |
 
 Detail: `docs/architecture.md` (Stack Manifest) and the reviews in `docs/qa/`.
 

@@ -90,6 +90,11 @@ Last groomed: 2026-11-02
       steps; needs ≥ 2 invite-made community admins in different homes), hide the admin / organizer code rows and
       "Enter Another Code", and make `jc_admin_code_rotate` refuse retired scopes. The join code stays. Pre-launch.
 
+- [ ] 2026-11-10 (Zee) **Organizers rename modules**: community admins set each module's display name (EN + AR) —
+      e.g. "Pets of Jubail" → their own — instead of the fixed `strings.js` names. Open: where it shows (bar label,
+      page title, hub card, installed-app shortcuts), length caps for the bar, fallback to the default name, AR
+      required or optional. Names are public-safe, so `modules.<m>.name_en/_ar` (returned by `jc_config_get`) fits.
+      Own `/plan-change`; sequence after R5.
 - [ ] 2026-11-09 (R4c security L5) **"No third parties" vs map tiles**: map pages fetch tiles from OpenStreetMap / Esri (IP + tile coordinates). Soften `join_privacy` ("map tiles load from OpenStreetMap / Esri") or self-host tiles. Pre-launch.
 
 ## Done
