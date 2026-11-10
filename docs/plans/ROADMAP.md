@@ -133,7 +133,7 @@ courts and their location**.
   If any court charges, Commons coordinates intent only; payment stays with management.
 - Open: no-show handling — wait for real data (booking accountability is a candidate opt-in PII slot).
 
-### RM — Renamable modules (platform)  ·  DB + app  ·  **next, before R5b** (Zee 2026-11-10)
+### RM — Renamable modules (platform)  ·  DB + app  ·  RM-a ✓ applied 2026-11-10 (PR #88); RM-b client in review (`docs/plans/RM-renamable-modules.md`)
 Every module has a **fixed internal key** (code, URLs, flag — never changes), a **display name per community**
 (EN + AR, in community config) and an optional **brand name** shown as the section title. Applies to events,
 bookings, pets now and `directory` (The Neighbourhood Edit) later; **today's labels become the defaults**, so

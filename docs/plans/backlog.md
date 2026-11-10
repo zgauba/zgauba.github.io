@@ -90,7 +90,10 @@ Last groomed: 2026-11-02
       steps; needs ≥ 2 invite-made community admins in different homes), hide the admin / organizer code rows and
       "Enter Another Code", and make `jc_admin_code_rotate` refuse retired scopes. The join code stays. Pre-launch.
 
-- [ ] 2026-11-10 (Zee) **Organizers rename modules** → scheduled as ROADMAP **RM**, next (before R5b). RM-a (DB) in progress.
+- [ ] 2026-11-10 (Zee) **Organizers rename modules** → scheduled as ROADMAP **RM**, next (before R5b). RM-a applied (PR #88); RM-b client.
+- [ ] 2026-11-10 (Zee) **Buttons follow a renamed section**: hub-card buttons ("See Events", "Book a Court", "Add a Pet") and
+      the Events back label still use the built-in words after a rename (RM Q1 kept sentences generic). Option: per-module
+      button text in `module_labels` (EN + AR, same allow-lists), or name-free verbs ("Open", "Book Now").
 - [ ] 2026-11-10 (RM-a security L1) **`jc_assert_admin` cross-community filter**: the code-grant lookup doesn't check
       `g.community_id = v_comm`. Latent while an account belongs to one community; fix in its own migration + test before
       any multi-community account (super-admin track).

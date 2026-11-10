@@ -11,7 +11,7 @@ body.has-tabbar{padding-bottom:calc(60px + env(safe-area-inset-bottom))}
 /* RM: a community can rename sections (≤ 14 EN / 18 AR). Buttons never grow past their share (min-width:0);
    a long word breaks inside its button; at most two lines. */
 .tabbar a{min-width:0}
-.tabbar a span{max-width:100%; text-align:center; overflow-wrap:anywhere; -webkit-hyphens:auto; hyphens:auto;
+.tabbar a span{max-width:100%; text-align:center; overflow-wrap:anywhere;
   display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden}
 .tabbar a .ico{color:var(--jc-muted)}
 .tabbar a[aria-current="page"]{color:var(--jc-ink); background:var(--jc-surface-2)}

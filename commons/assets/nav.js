@@ -24,7 +24,7 @@ function jcDest(key){
 }
 /* A destination's label: a module (and The Community) shows the community's own section name (RM). */
 function jcDestLabel(d){
-  return Object.prototype.hasOwnProperty.call(JC_MOD_NAME, d.key) ? jcModName(d.key) : jcT(d.label);
+  return Object.prototype.hasOwnProperty.call(JC_MOD_NAME, d.key) ? jcModName(d.key) : jcT(d.label);   /* RM-ok */
 }
 function jcIsAdmin(me){
   me = me || {};
@@ -104,8 +104,11 @@ function jcTabBar(root, active, cfg){
       (it.key === active ? ' aria-current="page"' : '') + '>' +
       jcIcon(it.icon, 20) + '<span dir="auto">' + esc(jcDestLabel(it)) + '</span></a>';
   }).join("");
-  /* RM: a renamed section may take two lines — the page keeps clear of the bar's real height */
-  document.body.style.paddingBottom = Math.max(nav.offsetHeight, 60) + "px";
+  /* RM: a renamed section may take two lines — the page keeps clear of the bar's real height, re-measured
+     whenever the bar changes size (fonts loading, rotation, text zoom) (review M3) */
+  var fit = function(){ document.body.style.paddingBottom = Math.max(nav.offsetHeight, 60) + "px"; };
+  fit();
+  if (!nav.jcFit && window.ResizeObserver) { nav.jcFit = new ResizeObserver(fit); nav.jcFit.observe(nav); }
   jcBanner(cfg);
   var back = el("jcBackBtn");                 /* language switch: the back label follows (review) */
   if (back) back.setAttribute("aria-label", jcT(back.dataset.key));
@@ -262,7 +265,7 @@ function jcHelpOpen(key){
     items.push("<li>" + esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>") + "</li>");
   }
   /* RM: the Events / Courts sheets are titled with the section's own name */
-  var head = key === "events" ? jcModName("events") : key === "courts" ? jcModName("bookings") : jcT("help_" + key + "_title");
+  var head = key === "events" ? jcModName("events") : key === "courts" ? jcModName("bookings") : jcT("help_" + key + "_title");   /* RM-ok */
   d.setAttribute("aria-label", head);
   d.innerHTML = '<div class="sheethead"><h2 dir="auto">' + esc(head) + '</h2>' +
     '<button type="button" class="lang" id="jcHelpClose">' + esc(jcT("close")) + '</button></div>' +

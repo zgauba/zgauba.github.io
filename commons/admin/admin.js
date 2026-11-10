@@ -420,7 +420,7 @@ function noticeHome(h){
 /* creating events is the community's step (T5.2 D2) */
 function admEventsHtml(){
   return (isOrganizer() ? '<div class="row"><button class="btn" type="button" id="newEv">' + esc(jcT("adm_new")) + '</button></div>' : '') +
-    '<h2 class="group">' + esc(jcT("adm_events")) + '</h2>' +
+    '<h2 class="group">' + esc(jcModName("events")) + '</h2>' +
     (events.length ? '<ul class="aevents">' + events.map(eventRow).join("") + '</ul>'
                    : '<p class="help">' + esc(jcT("adm_none")) + '</p>');
 }
@@ -829,8 +829,8 @@ var VIEWS = {
             '<small class="help" data-count="' + f.k + '">' + esc(jcFmt("adm_mn_count", { n: val.length, m: f.max })) + '</small></label>';
         }).join("") +
         '<p class="help">' + esc(jcT("adm_mn_hint")) + '</p>' +
-        '<div class="row"><button class="btn" type="submit">' + esc(jcT("adm_mn_save")) + '</button>' +
-        (set ? '<button class="btn ghost" type="button" data-mnreset="' + k + '">' + esc(jcT("adm_mn_reset")) + '</button>' : '') +
+        '<div class="row"><button class="btn" type="submit"' + (mnBusy ? ' disabled' : '') + '>' + esc(jcT("adm_mn_save")) + '</button>' +
+        (set ? '<button class="btn ghost" type="button" data-mnreset="' + k + '"' + (mnBusy ? ' disabled' : '') + '>' + esc(jcT("adm_mn_reset")) + '</button>' : '') +
         '</div></form>';
     }).join("");
     Array.prototype.forEach.call(document.querySelectorAll("[data-mn]"), function(form){
@@ -1078,9 +1078,9 @@ var VIEWS = {
 /* ---------- RM — section names ---------- */
 /* The built-in role / tab / scope words name a module: show the community's own section name instead.
    Not 'community' — there it means the community-admin role, not The Community section. */
-function scopeName(s){ return s === "events" || s === "bookings" || s === "pets" ? jcModName(s) : jcT("scope_" + s); }
-function adScopeName(s){ return s === "bookings" || s === "pets" ? jcFmt("adm_ad_scope_mod", { m: jcModName(s) }) : jcT("adm_ad_scope_" + s); }
-function admTabLabel(t){ return t === "events" ? jcModName("events") : t === "courts" ? jcModName("bookings") : jcT("adm_tab_" + t); }
+function scopeName(s){ return s === "events" || s === "bookings" || s === "pets" ? jcModName(s) : jcT("scope_" + s); }   /* RM-ok */
+function adScopeName(s){ return s === "bookings" || s === "pets" ? jcFmt("adm_ad_scope_mod", { m: jcModName(s) }) : jcT("adm_ad_scope_" + s); }   /* RM-ok */
+function admTabLabel(t){ return t === "events" ? jcModName("events") : t === "courts" ? jcModName("bookings") : jcT("adm_tab_" + t); }   /* RM-ok */
 var MN_KEYS = ["events", "bookings", "pets", "community"];
 var MN_FIELDS = [{ k: "name_en", max: 14, dir: "ltr" }, { k: "name_ar", max: 18, dir: "rtl" },
                  { k: "title_en", max: 40, dir: "ltr" }, { k: "title_ar", max: 40, dir: "rtl" }];
@@ -1110,11 +1110,13 @@ function mnSave(k, v, form){
     cfg = Object.assign({}, cfg, { labels: hObj(labels) || {} });
     if (mnDraft) delete mnDraft[k];
     paint();                                  /* the bar and this page's title follow at once */
+    if (current !== "names") return;          /* left the screen while saving: never draw it over another (review M1) */
     VIEWS.names();
     showOk(jcFmt("adm_mn_saved", { m: jcModName(k) }));
   }, function(e){
     mnBusy = false;
     if (e.code === "NOT_ADMIN") return fail(e);
+    if (current !== "names") return;
     VIEWS.names();
     var t = jcT("adm_mn_err_" + e.code);
     if (t === "adm_mn_err_" + e.code) return showErr(e.code);
@@ -1588,7 +1590,7 @@ function admCourtsHtml(){
   return (r.enabled === true ? '' : '<p class="notice" id="ctOff">' + esc(jcT("ct_module_off")) + '</p>') +
     '<p class="help" id="ctRules">' + esc(jcFmt("ct_rules", { d: r.per_home_per_day, a: r.per_home_active, k: r.retention_days || 90 })) + '</p>' +
     '<div class="row"><button class="btn" type="button" id="ctNew">' + esc(jcT("ct_new")) + '</button></div>' +
-    '<h2 class="group">' + esc(jcT("ct_list")) + '</h2>' +
+    '<h2 class="group">' + esc(jcModName("bookings")) + '</h2>' +
     (live.length ? '<ul class="sulist ctlist">' + live.map(courtRow).join("") + '</ul>' : '<p class="help">' + esc(jcT("ct_none")) + '</p>') +
     (gone.length ? '<h2 class="group">' + esc(jcT("ct_retired")) + '</h2><ul class="sulist ctlist">' + gone.map(courtRow).join("") + '</ul>' : '');
 }

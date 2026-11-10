@@ -25,8 +25,10 @@ test("no screen reads a built-in section name except through jcModName / jcModTi
     else if (p.endsWith(".js") && !/assets\/(api|strings)\.js$/.test(p)) files.push(p);
   } })(root);
   const bad = /jcT\("(module_(events|bookings|pets|community)|ev_title|feat_pets|adm_tab_(events|courts)|scope_(events|bookings|pets)|adm_ad_scope_(bookings|pets)|help_(events|courts)_title)"\)/;
+  // the concatenated / registry forms too — allowed only on lines marked RM-ok (the deliberate fallbacks)
+  const bad2 = /jcT\("(scope_|adm_tab_|adm_ad_scope_)" \+|jcT\("help_" \+ \w+ \+ "_title"\)|jcT\(\w+\.label\)|jcT\(jcDest\(/;
   const hits = files.flatMap((p) => fs.readFileSync(p, "utf8").split("\n")
-    .map((l, i) => (bad.test(l) ? path.relative(root, p) + ":" + (i + 1) : null)).filter(Boolean));
+    .map((l, i) => (bad.test(l) || (bad2.test(l) && !/RM-ok/.test(l)) ? path.relative(root, p) + ":" + (i + 1) : null)).filter(Boolean));
   expect(hits).toEqual([]);
 });
 
@@ -142,7 +144,7 @@ for (const [lang, names] of [
       const s = a.querySelector("span"), r = s.getBoundingClientRect(), ar = a.getBoundingClientRect();
       const lh = parseFloat(getComputedStyle(s).lineHeight) || 13.2;
       return { t: s.textContent, lines: Math.round(r.height / lh),
-               spill: r.left < ar.left - 0.5 || r.right > ar.right + 0.5 || s.scrollWidth > s.clientWidth + 1,
+               spill: r.left < ar.left - 0.5 || r.right > ar.right + 0.5 || s.scrollWidth > s.clientWidth + 1 || s.scrollHeight > s.clientHeight + 1,
                off: ar.left < -0.5 || ar.right > 360.5 };   // pushed off a 360 px screen (innerWidth grows with the overflow)
     }));
     const pad = await page.evaluate(() => [parseFloat(getComputedStyle(document.body).paddingBottom), document.getElementById("tabbar").offsetHeight]);
@@ -243,4 +245,65 @@ test("Section Names is for community admins only", async ({ page }) => {
   await page.goto("admin/?tab=community");
   await expect(page.locator("#atab-community")).toBeVisible();
   await expect(page.locator("#mnOpen")).toHaveCount(0);
+});
+
+// Review M4: '&' and an apostrophe are allowed by the server — shown literally everywhere, never as markup.
+test("a name with & and ' shows literally in the bar, aria-labels and the browser title", async ({ page }) => {
+  const b = residentBackend({ labels: { bookings: { name: { en: "R&D 'Club'", ar: "النادي" } } } });
+  await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await expect(page.locator("#tabbar a[data-tab=bookings] span")).toHaveText("R&D 'Club'");
+  await expect(page.locator("#tabbar a")).toHaveCount(4);
+  await page.goto("bookings/");
+  await expect(page).toHaveTitle(/^R&D 'Club' — /);
+  await expect(page.locator(".subtabs")).toHaveAttribute("aria-label", "R&D 'Club'");
+  await page.goto("home/?tab=account");
+  await expect(page.locator('#shellSec li[data-dest="bookings"] [data-act="toggle"]')).toHaveAttribute("aria-label", "Show R&D 'Club' in the bar");
+});
+
+test("another community's cached names never show; built-in labels while the config fails", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("jc_labels", JSON.stringify({ id: "elsewhere", labels: { bookings: { name: { en: "Elsewhere", ar: "مكان" } } } })));
+  const b = residentBackend();
+  b.st.configFails = true;
+  await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await page.goto("bookings/");
+  await expect(page).toHaveTitle(/^Courts — /);
+});
+
+test("losing community admin mid-save: no stale editor, back to what this person can still do", async ({ page }) => {
+  const b = namesBackend();
+  const { calls } = await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openNames(page);
+  b.st.scopes = ["events"];
+  const f = page.locator('form[data-mn="bookings"]');
+  await f.locator('[data-f="name_en"]').fill("Sports");
+  await f.locator('[data-f="name_ar"]').fill("الرياضة");
+  await f.getByRole("button", { name: "Save" }).click();
+  await expect(page.locator("#mnOpen")).toHaveCount(0);
+  await expect(page.locator("h1")).toHaveText("Organizer Tools");
+  expect(calls.filter((c) => c.name === "jc_me_get").length).toBeGreaterThan(1);
+});
+
+test("Back while a save is in flight: the editor is not drawn over Organizer Tools", async ({ page }) => {
+  const b = namesBackend();
+  let release;
+  const inner = b.rpc.jc_admin_module_label_set;
+  b.rpc.jc_admin_module_label_set = (a) => new Promise((r) => { release = () => r(inner(a)); });
+  await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openNames(page);
+  const f = page.locator('form[data-mn="bookings"]');
+  await f.locator('[data-f="name_en"]').fill("Sports");
+  await f.locator('[data-f="name_ar"]').fill("الرياضة");
+  await f.getByRole("button", { name: "Save" }).click();
+  await expect(f.getByRole("button", { name: "Save" })).toBeDisabled();
+  await page.locator("#jcBackBtn").click();
+  await expect(page.locator("h1")).toHaveText("Organizer Tools");
+  await expect.poll(() => typeof release).toBe("function");
+  release();
+  await expect(page.locator("#tabbar a[data-tab=bookings] span")).toHaveText("Sports");   // the bar still follows
+  await expect(page.locator("h1")).toHaveText("Organizer Tools");
+  await expect(page.locator("form[data-mn]")).toHaveCount(0);
 });
