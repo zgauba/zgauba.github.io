@@ -1,7 +1,7 @@
 # R5 — Pets of Jubail: plan (`/plan-change`, 2026-11-10)
 
 > Status: **approved 2026-11-10 (W1 = a). R5a applied 2026-11-10** (`20261110090000_r5a_pets`, 1159 checks live,
-> review `docs/qa/R5a-review-2026-11-10.md`). Next: R5b residents. Client carry-overs from review: sighting copy says
+> review `docs/qa/R5a-review-2026-11-10.md`). Next: **RM renamable modules** (Zee 2026-11-10), then R5b residents. Client carry-overs from review: sighting copy says
 > "within 48 h"; WhatsApp link set as an attribute with `rel="noopener noreferrer"`.
 
 ## Decisions (Zee, 2026-11-10)
