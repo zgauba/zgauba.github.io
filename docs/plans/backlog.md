@@ -90,7 +90,10 @@ Last groomed: 2026-11-02
       steps; needs ≥ 2 invite-made community admins in different homes), hide the admin / organizer code rows and
       "Enter Another Code", and make `jc_admin_code_rotate` refuse retired scopes. The join code stays. Pre-launch.
 
-- [ ] 2026-11-10 (Zee) **Organizers rename modules** → scheduled as ROADMAP **RM**, next (before R5b).
+- [ ] 2026-11-10 (Zee) **Organizers rename modules** → scheduled as ROADMAP **RM**, next (before R5b). RM-a (DB) in progress.
+- [ ] 2026-11-10 (RM-a security L1) **`jc_assert_admin` cross-community filter**: the code-grant lookup doesn't check
+      `g.community_id = v_comm`. Latent while an account belongs to one community; fix in its own migration + test before
+      any multi-community account (super-admin track).
 - [ ] 2026-11-10 "**What's On in Abu Dhabi**" off-island events calendar — blocked on who keeps it updated.
 - [ ] 2026-11-10 **Resident submissions for events** (separate from Neighbourhood Edit recommendations).
 - [ ] 2026-11-09 (R4c security L5) **"No third parties" vs map tiles**: map pages fetch tiles from OpenStreetMap / Esri (IP + tile coordinates). Soften `join_privacy` ("map tiles load from OpenStreetMap / Esri") or self-host tiles. Pre-launch.

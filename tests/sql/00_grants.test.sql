@@ -50,7 +50,9 @@ declare
     -- R4a-2 (per-person module admins by invite link)
     'jc_module_admin_link_create', 'jc_module_admin_accept', 'jc_module_admins_list', 'jc_module_admin_revoke',
     -- R5a (pets to spec)
-    'jc_pet_missing_home_set', 'jc_admin_pet_care_set', 'jc_pets_group_get', 'jc_admin_pets_group_set'];
+    'jc_pet_missing_home_set', 'jc_admin_pet_care_set', 'jc_pets_group_get', 'jc_admin_pets_group_set',
+    -- RM-a (renamable modules)
+    'jc_admin_module_label_set'];
 begin
   -- Pre-launch suite: fixtures are written into 'jubail' and rolled back. Refuse to run
   -- once real residents exist — post-launch tests must move to a test community.
