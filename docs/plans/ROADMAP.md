@@ -133,7 +133,15 @@ courts and their location**.
   If any court charges, Commons coordinates intent only; payment stays with management.
 - Open: no-show handling — wait for real data (booking accountability is a candidate opt-in PII slot).
 
-### R5 — Pets of Jubail  ·  app (+ small DB if the sightings decision changes)
+### RM — Renamable modules (platform)  ·  DB + app  ·  **next, before R5b** (Zee 2026-11-10)
+Every module has a **fixed internal key** (code, URLs, flag — never changes), a **display name per community**
+(EN + AR, in community config) and an optional **brand name** shown as the section title. Applies to events,
+bookings, pets now and `directory` (The Neighbourhood Edit) later; **today's labels become the defaults**, so
+nothing changes on screen until an admin renames. Names are public-safe → `modules.<key>` config (read via
+`jc_config_get`). Needs its own `/plan-change`: where names show (bar, page titles, hub cards, Settings, app
+install), length caps for the bar, AR required or falling back, who renames (community admins).
+
+### R5 — Pets of Jubail  ·  R5a ✓ applied 2026-11-10 (PR #86); then R5b → R5c → R5d (`docs/plans/R5-pets.md`)
 Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas "Jubail Pets Concept" + PDF.
 - Directory: **owned** · **community "known & fine"** · **stray under care** (care record: sterilized,
   dewormed, vaccination, under treatment — kept by the carer group).
@@ -150,6 +158,8 @@ Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas 
 ### R6 — The Community: map + directory  ·  app (+ DB if needed)
 - Find any villa on the island and get directions (`jc_directory_list` exists; hidden homes stay hidden).
 - Optional per-home extras stay opt-in (zero-PII default).
+- **Community information** (Zee 2026-11-10): bus routes / timetables, waste collection, other practical info as
+  editor-maintained static content in this section (`docs/plans/neighbourhood-edit-brief.md` → follow-on).
 
 ### R7 — Launch prep (not features)
 - **Retire the shared `events` organizer code** (Step C, parked until testing is done) → per-event admins only.
@@ -185,8 +195,16 @@ From `docs/qa/SYNTHESIS-2026-11-03.md` T6, plus items found since:
 
 ## After launch
 
-- **Recommendations directory** (neighbor's vendor list, today on Wix Spaces) — in discussion; needs the
-  right controls for her. See "Recommendations: where the data lives" below.
+- **The Neighbourhood Edit — FAST FOLLOWER, first after launch** (Zee 2026-11-10: "launch without it, fast
+  follower"). Module key `directory`, tab "Services" / «الخدمات», brand "The Neighbourhood Edit". Curated local
+  vendors: categories + subcategories, Call / WhatsApp / Website / Instagram / Flyer buttons, the curator's
+  phone editor (scoped `directory` admin), resident submissions → moderation queue, household "used by N ≥ 3"
+  signal, no negative path, one-tap hide. Brief: `docs/plans/neighbourhood-edit-brief.md`.
+  - **Vendor consent to be listed** (many vendors are individuals with personal numbers) — required before any
+    listing goes live; **how** is designed at its `/plan-change` (Zee: details later).
+  - **Start now, in parallel:** ask the curator whether her Wix content is a CMS collection (CSV export → import)
+    or hand-built pages (manual transcription) — that sets the size of the import.
+  - Depends on RM (renamable modules).
 - **Suggested walking route** (nearest-neighbor + 2-opt loop over stocked homes; `route` flag off) and
   **kilometers walked** (on-device only, "at least X km", nothing sent).
 - **Second community / B2B** — trigger: a second community asks. Needs the platform console + per-community
@@ -224,6 +242,15 @@ of its wording + design (R8) and the event itself need to be ready by early Janu
 - **No two build agents on overlapping files** (2026-11-06) — `admin.js`, `strings.js`, `events.js` are shared
   by almost every phase, so builds run one at a time; planning, reviews and audits may run alongside.
 
+## Decisions (2026-11-10)
+
+- **Renamable modules (RM) next, then R5b** — fixed keys, per-community display names (EN + AR), optional brand.
+- **The Neighbourhood Edit: launch without it, fast follower** (first after launch); in-app phone editor +
+  moderation queue (supersedes the 2026-11-06 Google Sheet sync decision).
+- **Vendor consent** to be listed is a requirement of the Edit; its mechanics are planned later.
+- Pets: sightings stored only for missing pets / strays (reporter erased within 48 h, rows gone after 30 days);
+  map secondary; My Pets inside Pets **and** in My Home; WhatsApp button = copy message + open the group.
+
 ## Superseded ideas (from the Oct–Nov planning conversations)
 
 | Earlier idea | What we do instead |
@@ -238,8 +265,12 @@ of its wording + design (R8) and the event itself need to be ready by early Janu
 | Recovery PIN | Dropped |
 | Organizer copies a home's control link | Obsolete — accounts replaced edit links |
 | Halloween baseline "125 homes" | 124 (127 entries, 3 removed) — `docs/halloween-2026-final.md` |
+| Recommendations via Google Sheet + "Update Commons" script (2026-11-06) | The Neighbourhood Edit: in-app phone editor + moderation queue (2026-11-10) |
 
 ## Recommendations: where the data lives (options for the post-launch directory)
+
+> **Superseded 2026-11-10** by the in-app editor (option C) — see `docs/plans/neighbourhood-edit-brief.md`.
+> Kept for the record.
 
 Zee's question: could the database be a Google Sheet she edits?
 

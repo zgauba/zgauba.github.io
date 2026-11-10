@@ -72,7 +72,7 @@ Last groomed: 2026-11-02
 - [ ] Per-event safety info block (static: security number + agreed meeting
       point; stores nothing).
 - [ ] Pet directory (concept canvas exists): owned / community / stray-under-care
-      boards, care record, missing toggle; passcode-gated; no donations.
+      boards, care record, missing toggle; passcode-gated; no donations. → ROADMAP R5 (R5a done 2026-11-10).
 - [ ] Haq Al Laila event theme (~Sat Jan 23, 2027 ±1 day): indigo/gold lantern
       palette; native-speaker review before launch.
 - [ ] December holiday-lights map re-skin (idea).
@@ -90,11 +90,9 @@ Last groomed: 2026-11-02
       steps; needs ≥ 2 invite-made community admins in different homes), hide the admin / organizer code rows and
       "Enter Another Code", and make `jc_admin_code_rotate` refuse retired scopes. The join code stays. Pre-launch.
 
-- [ ] 2026-11-10 (Zee) **Organizers rename modules**: community admins set each module's display name (EN + AR) —
-      e.g. "Pets of Jubail" → their own — instead of the fixed `strings.js` names. Open: where it shows (bar label,
-      page title, hub card, installed-app shortcuts), length caps for the bar, fallback to the default name, AR
-      required or optional. Names are public-safe, so `modules.<m>.name_en/_ar` (returned by `jc_config_get`) fits.
-      Own `/plan-change`; sequence after R5.
+- [ ] 2026-11-10 (Zee) **Organizers rename modules** → scheduled as ROADMAP **RM**, next (before R5b).
+- [ ] 2026-11-10 "**What's On in Abu Dhabi**" off-island events calendar — blocked on who keeps it updated.
+- [ ] 2026-11-10 **Resident submissions for events** (separate from Neighbourhood Edit recommendations).
 - [ ] 2026-11-09 (R4c security L5) **"No third parties" vs map tiles**: map pages fetch tiles from OpenStreetMap / Esri (IP + tile coordinates). Soften `join_privacy` ("map tiles load from OpenStreetMap / Esri") or self-host tiles. Pre-launch.
 
 ## Done
