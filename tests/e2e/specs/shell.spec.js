@@ -51,14 +51,14 @@ async function newVisit(context, rpc) {
 }
 
 for (const [name, prefs] of [["key missing", undefined], ["{}", {}]]) {
-  test(`no prefs (${name}): today's bar; Courts shows (its page exists since R4c), Pets never without its page`, async ({ page }) => {
+  test(`no prefs (${name}): today's bar; Courts (R4c) and Pets (R5b-1) show now their pages exist; The Community never without its page`, async ({ page }) => {
     const b = shellBackend({ prefs, modules: { events: { enabled: true }, bookings: { enabled: true }, pets: { enabled: true } } });
     await stubBackend(page, { rpc: b.rpc });
     await signIn(page);
-    await expect.poll(() => bar(page)).toEqual(["commons", "events", "bookings", "home"]);
+    await expect.poll(() => bar(page)).toEqual(["commons", "events", "bookings", "pets", "home"]);
     await expect(page.locator('#tabbar a[aria-current="page"]')).toHaveAttribute("data-tab", "commons");
     await page.goto("home/");
-    await expect.poll(() => bar(page)).toEqual(["commons", "events", "bookings", "home"]);
+    await expect.poll(() => bar(page)).toEqual(["commons", "events", "bookings", "pets", "home"]);
     await expect(page.locator('#tabbar a[aria-current="page"]')).toHaveAttribute("data-tab", "home");
   });
 }

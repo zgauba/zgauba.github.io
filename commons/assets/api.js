@@ -176,7 +176,9 @@ function jcSafeNext(next){
            /* T5.2 PR B: back to an event-admin grant link after signing in / joining */
            /^\.\.\/admin\/\?eventadmin=[A-Za-z0-9_-]{16,64}$/.test(next) ||
            /* T5.2: back to an event's tab after pinning the home */
-           /^\.\.\/events\/\?id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}&tab=(map|list|mine)$/.test(next)))
+           /^\.\.\/events\/\?id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}&tab=(map|list|mine)$/.test(next) ||
+           /* R5b-1: a shared pet link (WhatsApp) opened before signing in / joining lands on that pet */
+           /^\.\.\/pets\/\?pet=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(next)))
          ? next : "../";
 }
 

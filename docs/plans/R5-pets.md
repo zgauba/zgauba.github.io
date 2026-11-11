@@ -1,7 +1,10 @@
 # R5 — Pets of Jubail: plan (`/plan-change`, 2026-11-10)
 
 > Status: **approved 2026-11-10 (W1 = a). R5a applied 2026-11-10** (`20261110090000_r5a_pets`, 1159 checks live,
-> review `docs/qa/R5a-review-2026-11-10.md`). Next: **RM renamable modules** (Zee 2026-11-10), then R5b residents. Client carry-overs from review: sighting copy says
+> review `docs/qa/R5a-review-2026-11-10.md`). RM shipped (#88/#89). **R5b split (Zee 2026-11-11): R5b-1 = residents' List ·
+> pet page · My Pets · missing switch (+ hidden-home opt-in) · sightings with optional "Add where I am now" · WhatsApp
+> share, no map (review `docs/qa/R5b-1-review-2026-11-11.md`); R5b-2 = the Map tab (+ placing a sighting on the map).**
+> Then R5c photos, R5d Organizer Tools. Client carry-overs from review: sighting copy says
 > "within 48 h"; WhatsApp link set as an attribute with `rel="noopener noreferrer"`.
 
 ## Decisions (Zee, 2026-11-10)

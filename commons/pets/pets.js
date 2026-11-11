@@ -1,0 +1,585 @@
+/* Pets page (R5b-1) — residents' pet directory. Plan: docs/plans/R5-pets.md (Zee decisions 2026-11-10/11).
+   Views: list (tabs List · My Pets) · pet (?pet=<uuid>) · edit (add / edit one of my home's pets).
+   Server: jc_pets_list, jc_pet_get, jc_pet_save, jc_pet_archive, jc_pet_missing_set, jc_pet_missing_home_set,
+   jc_pet_sighting_add, jc_pets_group_get (S4 + R5a). The Map tab is R5b-2; photos are R5c; the admin side is R5d.
+   PRIVACY — this page renders what the server sends and nothing else:
+   - a pet's home arrives only when the home is in the directory, or while the pet is missing AND its household
+     opted in (Q6). My own pet arriving with no home therefore means my home is hidden from the directory, which
+     is when the missing switch offers the opt-in;
+   - sightings arrive only for strays / community animals, my own pets, and Pets admins; never who reported one
+     ("by_me" is the reporter's own flag, and disappears once the server erases the reporter within 48 h);
+   - the WhatsApp group link is members-only (jc_pets_group_get, never the public config); it is set as an
+     attribute after a strict format check, opened with rel="noopener noreferrer". */
+
+var params = new URLSearchParams(location.search);
+var PET = params.get("pet");
+if (PET && !/^[0-9a-f-]{36}$/i.test(PET)) PET = null;
+
+var state = null, cfg = null, current = null;
+var pets = null, listErr = null, listLoading = false, listSeq = 0;
+var pet = null, petId = null, petErr = null, petLoading = false, petSeq = 0;   /* the open pet (jc_pet_get) */
+var TABS = ["list", "mine"];
+var tab = TABS.indexOf(params.get("tab")) >= 0 ? params.get("tab") : "list";
+var FILTERS = ["all", "owned", "wanderers", "strays", "community"];
+var filter = "all";
+var SPECIES = ["cat", "dog", "bird", "rabbit", "other"];
+var CARE = ["sterilized", "dewormed", "vaccination", "treatment"];
+var ptBusy = false;
+var form = null;      /* edit: { id | null, species, name, description, wanderer, microchipped } — survives a language switch */
+var sheet = null;     /* on the pet page: null | "missing" | "found" | "sight" */
+var sight = null;     /* { note, lat, lng } while the sighting form is open */
+var missDraft = null; /* { note, show } while the missing sheet is open */
+var sent = null;      /* the note of the sighting just sent: the WhatsApp message tells the group about it */
+var group;            /* undefined = not read yet; null = none / unreadable; else the checked invite link */
+
+/* ---------- helpers ---------- */
+function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
+function say(cls, text){
+  var m = el("msg"); if (!m) return;
+  m.className = "msg " + cls; m.textContent = text;
+  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
+}
+function showOk(text){ say("ok", text); }
+function ptMsg(code){
+  var t = jcT("pt_err_" + code);
+  say("err", t === "pt_err_" + code ? jcErrText({ code: code }) : t);
+}
+function on(id, fn){ var n = el(id); if (n) n.addEventListener("click", fn); }
+function each(sel, fn, ev){
+  Array.prototype.forEach.call(document.querySelectorAll(sel), function(b){ b.addEventListener(ev || "click", function(){ fn(b); }); });
+}
+function ar(){ return jcLang() === "ar"; }
+function hObj(x){ return x && typeof x === "object" && !Array.isArray(x) ? x : null; }
+function hasHome(){ return !!(state && state.me && state.me.home); }
+function moduleOn(){ var m = cfg && cfg.modules && cfg.modules.pets; return !!(m && m.enabled === true); }
+function setUrl(q){ try { history.replaceState(null, "", q ? "?" + q : location.pathname); } catch(e){} }
+function listUrl(){ return tab === "list" ? null : "tab=" + tab; }
+function isPet(p){ return hObj(p) && typeof p.id === "string" && typeof p.name === "string" && (p.kind === "owned" || p.kind === "stray"); }
+function speciesText(p){ return jcT("pt_sp_" + (SPECIES.indexOf(p.species) >= 0 ? p.species : "other")); }
+function community(p){ return p.kind === "stray" && p.care_state === "known_fine"; }
+function kindText(p){ return jcT(p.kind === "owned" ? "pt_kind_owned" : community(p) ? "pt_kind_community" : "pt_kind_stray"); }
+/* the card's home has no type (villa / townhouse / apartment), so a neutral label — never a guessed "Villa" */
+function homeText(h){
+  if (!hObj(h) || h.number == null) return "";
+  var n = jcFmt(h.building ? "pt_home_b" : "pt_home", { n: h.number, b: h.building });
+  return [n, h.village ? jcVillageName(cfg, h.village) : ""].filter(Boolean).join(" · ");
+}
+function myHomeText(){
+  var h = state && state.me && state.me.home;
+  return h ? [jcHomeLabel(h), jcVillageName(cfg, h.village)].filter(Boolean).join(" · ") : "";
+}
+function when(iso){ return typeof iso === "string" && !isNaN(Date.parse(iso)) ? jcDayText(jcDateOf(iso, cfg)) + " · ⁦" + jcClock(iso, cfg) + "⁩" : ""; }
+/* sightings are open for a missing pet, or a stray / community animal that isn't rehomed (server: SIGHTINGS_CLOSED) */
+function sightOpen(p){ return p.missing === true || (p.kind === "stray" && p.care_state !== "rehomed"); }
+/* my own pet with no home on its card = my home is hidden from the directory (see the header) */
+function homeHidden(p){ return p.mine === true && (!hObj(p.home) || p.show_home === true); }
+function petUrl(p){ return location.origin + location.pathname + "?pet=" + encodeURIComponent(p.id); }
+function petById(id){ return (pets || []).filter(function(p){ return p.id === id; })[0]; }
+function matches(p){
+  if (filter === "owned") return p.kind === "owned";
+  if (filter === "wanderers") return p.wanderer === true;
+  if (filter === "strays") return p.kind === "stray" && !community(p);
+  if (filter === "community") return community(p);
+  return true;
+}
+
+/* every write: one at a time; ptBusy always comes back down */
+function ptWrite(b, call, done, fail){
+  if (ptBusy) return;
+  ptBusy = true; if (b) b.disabled = true;
+  var view = current;
+  Promise.resolve().then(call).then(function(d){
+    ptBusy = false;
+    if (current !== view) return;
+    return done(d);
+  }).catch(function(e){
+    ptBusy = false; if (b) b.disabled = false;
+    if (current !== view) return;
+    var code = (e && e.code) || "UNKNOWN";
+    if (code === "MODULE_OFF") return show("off");
+    if (fail && fail(code) === true) return;
+    ptMsg(code);
+  });
+}
+
+/* ---------- data ---------- */
+function loadList(then){
+  var seq = ++listSeq;
+  listLoading = true; listErr = null;
+  rpc("jc_pets_list", { p_filter: "all" }).then(function(d){
+    if (seq !== listSeq) return;
+    listLoading = false;
+    pets = Array.isArray(d) ? d.filter(isPet) : [];
+    if (current !== "list") return;                     /* left meanwhile: no redraw, no message on another screen (review M1) */
+    show("list");
+    if (then) then();
+  }, function(e){
+    if (seq !== listSeq) return;
+    listLoading = false;
+    if (e.code === "MODULE_OFF") return show("off");
+    listErr = e.code || "UNKNOWN";
+    if (current === "list") show("list");
+  });
+}
+function loadPet(id, then){
+  var seq = ++petSeq;
+  petId = id;
+  petLoading = true; petErr = null;
+  rpc("jc_pet_get", { p_pet: id }).then(function(d){
+    if (seq !== petSeq) return;
+    petLoading = false;
+    if (!isPet(d)) { petErr = "UNKNOWN"; if (current === "pet") draw(); return; }
+    pet = d;
+    if (current !== "pet") return;                      /* e.g. Edit opened meanwhile (review M1) */
+    sheet = null; sight = null; missDraft = null;       /* a fresh read closes any sheet opened on the old state (review M3) */
+    draw();
+    if (then) then();
+  }, function(e){
+    if (seq !== petSeq) return;
+    petLoading = false;
+    var code = e.code || "UNKNOWN";
+    if (code === "MODULE_OFF") return show("off");
+    if (current !== "pet") return;                      /* never yank an open edit form back to the list (review M1) */
+    if (code === "NOT_FOUND") return backToList("NOT_FOUND");
+    petErr = code;
+    if (current === "pet") draw();
+  });
+}
+/* the members-only WhatsApp group link, read once per page; anything that isn't an invite link is ignored */
+function loadGroup(){
+  if (group !== undefined) return;
+  group = null;
+  rpc("jc_pets_group_get").then(function(d){
+    var l = hObj(d) && d.link;
+    group = typeof l === "string" && /^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]{16,40}$/.test(l) ? l : null;
+    if (current === "pet" && pet && el("ptShare")) drawShare();
+  }, function(){ group = null; });
+}
+
+function openPet(id){
+  pet = null; petErr = null; sheet = null; sight = null; missDraft = null; sent = null;
+  setUrl("pet=" + encodeURIComponent(id) + (tab === "list" ? "" : "&tab=" + tab));
+  show("pet");
+  loadPet(id);
+}
+/* back to the list, re-read; a message waits for the list to land, or the redraw would wipe it */
+function backToList(code, okText){
+  pet = null; sheet = null; sight = null; missDraft = null; sent = null; petSeq++;
+  setUrl(listUrl());
+  pets = null;
+  loadList(code || okText ? function(){ if (code) ptMsg(code); else showOk(okText); } : null);
+  show("list");
+}
+function draw(){ var r = jcFocusKeep(); VIEWS[current](); r(); }
+
+/* ---------- views ---------- */
+function show(name){
+  current = name;
+  var back = null;
+  if (name === "pet") back = function(){ if (!ptBusy) backToList(); };
+  if (name === "edit") back = function(){ if (ptBusy) return; var id = form && form.id; form = null; if (id && pet) { show("pet"); } else show("list"); };
+  jcBack(back, "back");
+  jcHelp(name === "pet" ? "pet" : name === "list" ? "pets" : null);
+  var refocus = jcFocusKeep();
+  VIEWS[name]();
+  refocus();
+}
+
+/* noState: the pet page lists the status in its facts, so its chip row doesn't repeat it */
+function chips(p, noState){
+  var c = [];
+  if (p.missing === true) c.push('<span class="chip miss">' + esc(jcT("pt_missing_chip")) + '</span>');
+  if (!noState && p.kind === "stray" && p.care_state && !community(p)) c.push('<span class="chip">' + esc(jcT("pt_care_" + p.care_state)) + '</span>');
+  if (p.wanderer === true) c.push('<span class="chip">' + esc(jcT("pt_wanderer_chip")) + '</span>');
+  if (p.mine === true) c.push('<span class="chip">' + esc(jcT("pt_mine_chip")) + '</span>');
+  return c.join("");
+}
+function card(p){
+  var where = p.kind === "owned" ? homeText(p.home) : (p.territory || "");
+  return '<li class="' + (p.missing === true ? "missing" : "") + '" data-pet="' + esc(p.id) + '">' +
+    '<div class="evtop"><div class="pthead">' + jcIcon("pets", 22) + '<b dir="auto">' + esc(p.name) + '</b></div></div>' +
+    '<div class="meta">' + esc(speciesText(p) + " · " + kindText(p)) + '</div>' +
+    (where ? '<div class="meta" dir="auto">' + esc(where) + '</div>' : '') +
+    (chips(p) ? '<div class="head">' + chips(p) + '</div>' : '') +
+    (p.missing === true && p.last_seen_note ? '<div class="meta" dir="auto">' + esc(jcFmt("pt_last_seen", { t: p.last_seen_note })) + '</div>' : '') +
+    '<div class="acts"><button class="mini" type="button" data-open="' + esc(p.id) + '" aria-label="' +
+      esc(jcT("pt_details") + ": " + p.name) + '">' + esc(jcT("pt_details")) + '</button></div></li>';
+}
+function noHomeHtml(){
+  return '<p class="notice" id="ptNoHome">' + esc(jcT("pt_no_home")) + '</p>' +
+    '<div class="row"><a class="btn ghost" href="../home/">' + esc(jcT("bk_go_home")) + '</a></div>';
+}
+
+var VIEWS = {
+  off: function(){
+    el("view").innerHTML = '<h1 dir="auto">' + esc(jcModTitle("pets")) + '</h1><p class="notice" id="ptOff">' + esc(jcT("bk_off")) + '</p>';
+  },
+
+  list: function(){
+    var html = '<h1 dir="auto">' + esc(jcModTitle("pets")) + '</h1>' +
+      jcTabsHtml("pttab-", TABS, tab, function(t){ return jcT("pt_tab_" + t); }, jcModName("pets"), "ptBody") + msgBox();
+    function wireTabs(){
+      jcTabsWire("pttab-", TABS, function(t){ tab = t; setUrl(listUrl()); show("list"); });
+    }
+    if (listErr) {
+      el("view").innerHTML = html + '<div ' + jcTabPanel("pttab-", tab, "ptBody") + '><div class="row"><button class="btn ghost" type="button" id="ptRetry">' +
+        esc(jcT("adm_ad_retry")) + '</button></div></div>';
+      ptMsg(listErr); wireTabs();
+      return on("ptRetry", function(){ loadList(); show("list"); });
+    }
+    if (!pets) {
+      el("view").innerHTML = html + '<div ' + jcTabPanel("pttab-", tab, "ptBody") + '><p class="help" role="status">' + esc(jcT("working")) + '</p></div>';
+      wireTabs();
+      if (!listLoading) loadList();
+      return;
+    }
+    var body;
+    if (tab === "mine") {
+      var mine = pets.filter(function(p){ return p.mine === true; });
+      body = !hasHome() ? noHomeHtml() :
+        (mine.length ? '<ul class="bklist" id="ptMine">' + mine.map(card).join("") + '</ul>'
+                     : '<p class="help" id="ptMine">' + esc(jcT("pt_mine_none")) + '</p>') +
+        (mine.length < 10 ? '<div class="row"><button class="btn" type="button" id="ptAdd">' + esc(jcT("cta_pets")) + '</button></div>'
+                          : '<p class="help" id="ptCap">' + esc(jcT("pt_err_TOO_MANY_PETS")) + '</p>');
+    } else {
+      var missing = pets.filter(function(p){ return p.missing === true; });
+      var rest = pets.filter(function(p){ return p.missing !== true && matches(p); });
+      body = (missing.length ? '<h2 class="group" id="ptMissingHead">' + esc(jcT("pt_missing_now")) + '</h2>' +
+                               '<ul class="bklist" id="ptMissing">' + missing.map(card).join("") + '</ul>' : '') +
+        '<div class="filters" id="ptFilters" role="group" aria-label="' + esc(jcT("pt_filter")) + '">' + FILTERS.map(function(f){
+          return '<button type="button" id="ptF-' + f + '" data-filter="' + f + '" aria-pressed="' + (f === filter) + '">' + esc(jcT("pt_f_" + f)) + '</button>';
+        }).join("") + '</div>' +
+        (rest.length ? '<ul class="bklist" id="ptList">' + rest.map(card).join("") + '</ul>'
+                     : '<p class="help" id="ptList">' + esc(jcT(pets.length ? "pt_none_filter" : "pt_none")) + '</p>');
+    }
+    el("view").innerHTML = html + '<div ' + jcTabPanel("pttab-", tab, "ptBody") + '>' + body + '</div>';
+    wireTabs();
+    each("[data-open]", function(b){ openPet(b.dataset.open); });
+    each("[data-filter]", function(b){
+      if (FILTERS.indexOf(b.dataset.filter) < 0) return;
+      filter = b.dataset.filter; show("list");
+      var f = el("ptF-" + filter); if (f) f.focus();
+    });
+    on("ptAdd", function(){ form = { id: null, species: "cat", name: "", description: "", wanderer: false, microchipped: false }; show("edit"); });
+  },
+
+  pet: function(){
+    if (petErr) {
+      el("view").innerHTML = msgBox() + '<div class="row"><button class="btn ghost" type="button" id="ptPetRetry">' + esc(jcT("adm_ad_retry")) + '</button></div>';
+      ptMsg(petErr);
+      return on("ptPetRetry", function(){ if (petId) { loadPet(petId); draw(); } });
+    }
+    if (!pet) { el("view").innerHTML = msgBox() + '<p class="help" role="status">' + esc(jcT("working")) + '</p>'; return; }
+    var p = pet, h = '';
+    h += '<div class="pthero"><div class="pthead">' + jcIcon("pets", 30) + '<h1 dir="auto">' + esc(p.name) + '</h1></div>' +
+      '<p class="meta">' + esc(speciesText(p) + " · " + kindText(p)) + '</p>' +
+      (chips(p, true) ? '<div class="head">' + chips(p, true) + '</div>' : '') + '</div>';
+    if (p.missing === true) {
+      h += '<div class="alarm" id="ptAlarm"><b>' + esc(jcFmt("pt_missing_since", { n: p.name, d: when(p.missing_since) })) + '</b>' +
+        (p.last_seen_note ? '<p dir="auto">' + esc(jcFmt("pt_last_seen", { t: p.last_seen_note })) + '</p>' : '') + '</div>';
+    }
+    h += msgBox();
+    var facts = [];
+    if (p.kind === "owned") {
+      if (hObj(p.home)) facts.push(['pt_lives', homeText(p.home)]);
+      else if (p.mine === true) facts.push(['pt_lives', jcT("pt_home_hidden")]);
+      if (p.wanderer === true) facts.push(['pt_wanderer', jcT("pt_wanderer_help")]);
+      facts.push(['pt_chip', jcT(p.microchipped === true ? "pt_yes" : "pt_no_or_unknown")]);
+    } else {
+      facts.push(['pt_state', jcT("pt_care_" + p.care_state)]);
+      if (p.territory) facts.push(['pt_territory', p.territory]);
+    }
+    h += '<dl class="facts" id="ptFacts">' + facts.map(function(f){ return '<dt>' + esc(jcT(f[0])) + '</dt><dd dir="auto">' + esc(f[1]) + '</dd>'; }).join("") + '</dl>';
+    if (p.description) h += '<p class="desc" dir="auto" id="ptDesc">' + esc(p.description) + '</p>';
+    if (p.kind === "stray") h += careHtml(p);
+
+    /* my own pet: the household's controls */
+    if (p.mine === true && p.kind === "owned") h += ownerHtml(p);
+
+    if (sightOpen(p)) h += sightHtml(p) + '<section class="share" id="ptShare" aria-labelledby="ptShareHead"></section>';
+    if (Array.isArray(p.sightings)) h += sightingsHtml(p);
+    if (Array.isArray(p.care_log)) h += logHtml(p);
+    el("view").innerHTML = h;
+    wirePet();
+    if (sightOpen(p)) { drawShare(); loadGroup(); }
+  }
+};
+
+function careHtml(p){
+  var c = hObj(p.care) || {};
+  return '<h2 class="group">' + esc(jcT("pt_care_record")) + '</h2><ul class="care" id="ptCare">' + CARE.map(function(k){
+    var it = hObj(c[k]), s = it && ["done", "due", "ongoing"].indexOf(it.s) >= 0 ? it.s : null;
+    var d = it && jcIsDate(it.d) ? jcDayText(it.d, { weekday: undefined, year: "numeric" }) : "";
+    return '<li data-care="' + k + '"><span class="nm">' + esc(jcT("pt_ci_" + k)) + '</span>' +
+      '<span class="st st-' + (s || "unknown") + '">' + esc(jcT("pt_cs_" + (s || "unknown"))) + (d ? " · ⁦" + esc(d) + "⁩" : "") + '</span>' +
+      (it && typeof it.n === "string" && it.n ? '<span class="note" dir="auto">' + esc(it.n) + '</span>' : '') + '</li>';
+  }).join("") + '</ul>';
+}
+function ownerHtml(p){
+  var h = '<h2 class="group">' + esc(jcT("pt_yours")) + '</h2><div class="panel" id="ptOwner">';
+  if (sheet === "missing") {
+    var d = missDraft || { note: "", show: false };
+    h += '<p><b>' + esc(jcFmt("pt_miss_q", { n: p.name })) + '</b></p>' +
+      '<label>' + esc(jcT("pt_miss_note")) + '<textarea id="ptMissNote" maxlength="200" dir="auto">' + esc(d.note) + '</textarea></label>' +
+      '<p class="help">' + esc(jcT("pt_miss_help")) + '</p>' +
+      (homeHidden(p) ? '<label class="check"><input type="checkbox" id="ptMissShow"' + (d.show ? ' checked' : '') + '> <span>' +
+        esc(jcFmt("pt_show_home", { h: myHomeText(), n: p.name })) + '</span></label>' +
+        '<p class="help">' + esc(jcT("pt_show_home_help")) + '</p>' : '') +
+      '<div class="acts"><button class="btn danger-fill" type="button" id="ptMissGo"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcT("pt_miss_go")) + '</button>' +
+      '<button class="btn ghost" type="button" id="ptSheetKeep">' + esc(jcT("ct_cancel")) + '</button></div>';
+  } else if (p.missing === true) {
+    if (homeHidden(p)) {
+      h += '<label class="check"><input type="checkbox" id="ptShowHome"' + (p.show_home === true ? ' checked' : '') + (ptBusy ? ' disabled' : '') + '> <span>' +
+        esc(jcFmt("pt_show_home", { h: myHomeText(), n: p.name })) + '</span></label>' +
+        '<p class="help">' + esc(jcT("pt_show_home_help")) + '</p>';
+    }
+    h += '<div class="acts"><button class="btn" type="button" id="ptFound"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcFmt("pt_found", { n: p.name })) + '</button></div>';
+  } else {
+    h += '<div class="acts"><button class="btn danger-fill" type="button" id="ptMiss">' + esc(jcT("pt_miss")) + '</button></div>';
+  }
+  /* not beside the red button while the missing sheet is open */
+  if (sheet !== "missing") h += '<div class="acts"><button class="btn ghost" type="button" id="ptEdit">' + esc(jcT("pt_edit")) + '</button>' +
+    '<button class="btn ghost danger" type="button" id="ptArchive"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcT("pt_archive")) + '</button></div>';
+  return h + '</div>';
+}
+function sightHtml(p){
+  if (sheet !== "sight") {
+    return '<div class="acts"><button class="btn ghost" type="button" id="ptSight">' + esc(jcFmt("pt_sight", { n: p.name })) + '</button></div>';
+  }
+  var s = sight || { note: "", lat: null, lng: null };
+  return '<div class="panel" id="ptSightForm"><b>' + esc(jcFmt("pt_sight", { n: p.name })) + '</b>' +
+    '<label>' + esc(jcT("pt_sight_note")) + '<textarea id="ptSightNote" maxlength="280" dir="auto">' + esc(s.note) + '</textarea></label>' +
+    (s.lat != null
+      ? '<p class="status ok" id="ptPos">' + esc(jcT("pt_pos_added")) + ' <button class="mini" type="button" id="ptPosClear">' + esc(jcT("pt_pos_clear")) + '</button></p>'
+      : '<div class="acts"><button class="mini" type="button" id="ptPosAdd">' + esc(jcT("pt_pos_add")) + '</button></div>') +
+    '<p class="help" id="ptSightPrivacy">' + esc(jcT("pt_sight_privacy")) + '</p>' +
+    '<div class="acts"><button class="btn" type="button" id="ptSightGo"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcT("pt_sight_go")) + '</button>' +
+    '<button class="btn ghost" type="button" id="ptSheetKeep">' + esc(jcT("ct_cancel")) + '</button></div></div>';
+}
+function sightingsHtml(p){
+  var h = '<h2 class="group">' + esc(jcT("pt_sightings")) + '</h2>';
+  if (!p.sightings.length) return h + '<p class="help" id="ptSightings">' + esc(jcT("pt_sightings_none")) + '</p>';
+  return h + '<ul class="bklist" id="ptSightings">' + p.sightings.filter(hObj).map(function(s){
+    var pos = Number.isFinite(s.lat) && Number.isFinite(s.lng);
+    return '<li><div class="meta">' + esc(when(s.seen_at)) + (s.by_me === true ? ' · ' + esc(jcT("pt_by_me")) : '') + '</div>' +
+      (s.note ? '<div dir="auto">' + esc(s.note) + '</div>' : '') +
+      (pos ? '<div class="acts"><a target="_blank" rel="noopener noreferrer" href="' +
+        esc("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(s.lat + "," + s.lng)) + '">' + esc(jcT("pt_on_map")) + '</a></div>' : '') +
+      '</li>';
+  }).join("") + '</ul><p class="help">' + esc(jcT("pt_sightings_kept")) + '</p>';
+}
+function logHtml(p){
+  if (!p.care_log.length) return '';
+  return '<h2 class="group">' + esc(jcT("pt_log")) + '</h2><ul class="bklist" id="ptLog">' + p.care_log.filter(hObj).map(function(c){
+    var k = ["fed", "vet", "note", "state"].indexOf(c.kind) >= 0 ? c.kind : "note";
+    return '<li><div class="meta">' + esc(jcT("pt_log_" + k) + " · " + when(c.at)) + '</div>' + (c.note ? '<div dir="auto">' + esc(c.note) + '</div>' : '') + '</li>';
+  }).join("") + '</ul>';
+}
+
+/* ---------- WhatsApp (Zee W1 = a): copy the message + open the group; or WhatsApp's own chat picker ---------- */
+function waText(p){
+  if (sent !== null) return jcFmt(sent ? "pt_wa_seen_note" : "pt_wa_seen", { n: p.name, s: speciesText(p), t: sent, u: petUrl(p) });
+  if (p.missing === true) {
+    /* the home goes into a message only when the household shares its own pet: neighbors' shares carry the
+       Commons link, where the home is shown under the server's rules (security review M1, Zee 2026-11-11) */
+    var where = p.mine === true ? homeText(p.home) : "";
+    return jcFmt(where ? "pt_wa_missing_home" : "pt_wa_missing", { n: p.name, s: speciesText(p), h: where, u: petUrl(p) });
+  }
+  return jcFmt("pt_wa_stray", { n: p.name, s: speciesText(p), u: petUrl(p) });
+}
+function drawShare(){
+  var box = el("ptShare");
+  if (!box || !pet) return;
+  var text = waText(pet);
+  box.innerHTML = '<h2 class="group" id="ptShareHead">' + esc(jcT("pt_share")) + '</h2>' +
+    '<p class="wamsg" id="ptWaText" dir="auto">' + esc(text) + '</p>' +
+    '<div class="acts">' + (group ? '<a class="btn" id="ptWaGroup" target="_blank" rel="noopener noreferrer">' + esc(jcT("pt_wa_group")) + '</a>' : '') +
+    '<a class="btn ghost" id="ptWaAny" target="_blank" rel="noopener noreferrer">' + esc(jcT("pt_wa_any")) + '</a></div>' +
+    (group ? '<p class="help">' + esc(jcT("pt_wa_group_help")) + '</p>' : '');
+  /* attributes, not markup: the link never passes through an HTML string */
+  el("ptWaAny").setAttribute("href", "https://wa.me/?text=" + encodeURIComponent(text));
+  var g = el("ptWaGroup");
+  if (g) {
+    g.setAttribute("href", group);
+    g.addEventListener("click", function(){
+      /* WhatsApp group links can't carry a message: copy it, the group opens in the same tap */
+      var done = function(){ showOk(jcT("pt_wa_copied")); };
+      var fail = function(){ say("err", jcT("pt_wa_copy_failed")); };
+      try { navigator.clipboard.writeText(text).then(done, fail); } catch(e){ fail(); }
+    });
+  }
+}
+
+/* ---------- wiring ---------- */
+function wirePet(){
+  var p = pet;
+  on("ptSheetKeep", function(){ var was = sheet; sheet = null; sight = null; missDraft = null; draw();
+    var b = el(was === "sight" ? "ptSight" : "ptMiss"); if (b) b.focus(); });
+  on("ptEdit", function(){
+    sheet = null; sight = null; missDraft = null;       /* a half-typed sighting doesn't reopen after Edit (review L5) */
+    form = { id: p.id, species: p.species, name: p.name, description: p.description || "", wanderer: p.wanderer === true, microchipped: p.microchipped === true };
+    show("edit");
+  });
+  on("ptArchive", function(){
+    if (!window.confirm(jcFmt("pt_archive_q", { n: p.name }))) return;
+    ptWrite(el("ptArchive"), function(){ return rpc("jc_pet_archive", { p_pet: p.id }); }, function(){
+      tab = "mine"; backToList(null, jcFmt("pt_archived", { n: p.name }));
+    });
+  });
+  /* the missing switch */
+  on("ptMiss", function(){ sheet = "missing"; missDraft = { note: "", show: false }; draw(); var t = el("ptMissNote"); if (t) t.focus(); });
+  var mn = el("ptMissNote"); if (mn) mn.addEventListener("input", function(){ missDraft.note = mn.value; });
+  var ms = el("ptMissShow"); if (ms) ms.addEventListener("change", function(){ missDraft.show = ms.checked; });
+  on("ptMissGo", function(){
+    var note = el("ptMissNote").value.trim(), showHome = !!(el("ptMissShow") && el("ptMissShow").checked);
+    ptWrite(el("ptMissGo"), function(){
+      return rpc("jc_pet_missing_set", { p_pet: p.id, p_missing: true, p_note: note || null }).then(function(c){
+        if (!showHome) return { card: c };
+        /* the alarm is up even if this second step fails: say so, never a silent "home hidden" */
+        return rpc("jc_pet_missing_home_set", { p_pet: p.id, p_show: true }).then(function(c2){ return { card: c2 }; },
+          function(e){ return { card: c, homeErr: (e && e.code) || "UNKNOWN" }; });
+      });
+    }, function(r){
+      sheet = null; missDraft = null; pets = null;
+      loadPet(p.id, function(){
+        if (r.homeErr) say("err", jcT("pt_show_home_failed"));
+        else showOk(jcFmt("pt_missing_done", { n: p.name }));
+      });
+    }, function(code){ if (code === "NOT_FOUND") { backToList("NOT_FOUND"); return true; } return false; });
+  });
+  on("ptFound", function(){
+    if (!window.confirm(jcFmt("pt_found_q", { n: p.name }))) return;
+    ptWrite(el("ptFound"), function(){ return rpc("jc_pet_missing_set", { p_pet: p.id, p_missing: false, p_note: null }); }, function(){
+      pets = null; sent = null;
+      loadPet(p.id, function(){ showOk(jcFmt("pt_found_done", { n: p.name })); });
+    }, function(code){ if (code === "NOT_FOUND") { backToList("NOT_FOUND"); return true; } return false; });
+  });
+  var sh = el("ptShowHome");
+  if (sh) sh.addEventListener("change", function(){
+    var want = sh.checked;
+    if (ptBusy) { sh.checked = !want; return; }
+    ptWrite(sh, function(){ return rpc("jc_pet_missing_home_set", { p_pet: p.id, p_show: want }); }, function(){
+      pets = null;
+      loadPet(p.id, function(){ showOk(jcT(want ? "pt_home_shown" : "pt_home_unshown")); if (el("ptShowHome")) el("ptShowHome").focus(); });
+    }, function(code){
+      sh.checked = !want;
+      if (code === "NOT_MISSING" || code === "NOT_FOUND") { loadPet(p.id, function(){ ptMsg(code); }); return true; }
+      return false;
+    });
+  });
+  /* a sighting */
+  on("ptSight", function(){ sheet = "sight"; sight = { note: "", lat: null, lng: null }; draw(); var t = el("ptSightNote"); if (t) t.focus(); });
+  var sn = el("ptSightNote"); if (sn) sn.addEventListener("input", function(){ sight.note = sn.value; });
+  on("ptPosAdd", function(){
+    if (!navigator.geolocation) return ptMsg("LOCATE_FAILED");
+    var b = el("ptPosAdd"), s0 = sight;
+    if (b) b.disabled = true;
+    navigator.geolocation.getCurrentPosition(function(pos){
+      if (sight !== s0 || current !== "pet") return;
+      /* ~1 m is plenty for "where it was seen" */
+      sight.lat = Math.round(pos.coords.latitude * 1e5) / 1e5; sight.lng = Math.round(pos.coords.longitude * 1e5) / 1e5;
+      draw(); var c = el("ptPosClear"); if (c) c.focus();
+    }, function(err){
+      if (sight !== s0 || current !== "pet") return;
+      if (el("ptPosAdd")) el("ptPosAdd").disabled = false;
+      ptMsg(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED");
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });   /* "where I am now": never an old fix */
+  });
+  on("ptPosClear", function(){ sight.lat = null; sight.lng = null; draw(); var a = el("ptPosAdd"); if (a) a.focus(); });
+  on("ptSightGo", function(){
+    var note = el("ptSightNote").value.trim(), s = sight;
+    if (!note && s.lat == null) return ptMsg("SIGHT_EMPTY");
+    ptWrite(el("ptSightGo"), function(){
+      return rpc("jc_pet_sighting_add", { p_pet: p.id, p_note: note || null, p_lat: s.lat, p_lng: s.lng });
+    }, function(){
+      sheet = null; sight = null; sent = note;
+      loadPet(p.id, function(){ showOk(jcT("pt_sight_done")); var h = el("ptShareHead"); if (h) { h.setAttribute("tabindex", "-1"); h.focus(); } });
+    }, function(code){
+      if (code === "SIGHTINGS_CLOSED") { sheet = null; sight = null; loadPet(p.id, function(){ ptMsg(code); }); return true; }
+      if (code === "NOT_FOUND") { backToList("NOT_FOUND"); return true; }
+      return false;
+    });
+  });
+}
+
+VIEWS.edit = function(){
+  if (!form) return show("list");
+  var f = form;
+  el("view").innerHTML = '<h1 dir="auto">' + esc(f.id ? jcFmt("pt_edit_title", { n: f.name || "" }) : jcT("cta_pets")) + '</h1>' + msgBox() +
+    '<form class="panel" id="ptForm" novalidate>' +
+    '<label>' + esc(jcT("pt_name")) + '<input type="text" id="ptName" maxlength="40" dir="auto" autocomplete="off" required></label>' +
+    '<fieldset><legend>' + esc(jcT("pt_species")) + '</legend><div class="opts" id="ptSpecies">' + SPECIES.map(function(s){
+      return '<button type="button" data-sp="' + s + '" aria-pressed="' + (f.species === s) + '">' + esc(jcT("pt_sp_" + s)) + '</button>';
+    }).join("") + '</div></fieldset>' +
+    '<label>' + esc(jcT("pt_desc")) + '<textarea id="ptDescIn" maxlength="280" dir="auto"></textarea></label>' +
+    '<p class="help">' + esc(jcT("pt_desc_help")) + '</p>' +
+    '<label class="check"><input type="checkbox" id="ptWand"' + (f.wanderer ? ' checked' : '') + '> <span>' + esc(jcT("pt_wanderer_q")) + '</span></label>' +
+    '<p class="help">' + esc(jcT("pt_wanderer_help")) + '</p>' +
+    '<label class="check"><input type="checkbox" id="ptChipIn"' + (f.microchipped ? ' checked' : '') + '> <span>' + esc(jcT("pt_chip_q")) + '</span></label>' +
+    '<p class="help">' + esc(jcFmt("pt_shown_with", { h: myHomeText() })) + '</p>' +
+    '<button class="btn" type="submit" id="ptSave"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcT("mh_save")) + '</button></form>';
+  el("ptName").value = f.name; el("ptDescIn").value = f.description;   /* values, not markup */
+  el("ptName").addEventListener("input", function(){ f.name = el("ptName").value; });
+  el("ptDescIn").addEventListener("input", function(){ f.description = el("ptDescIn").value; });
+  el("ptWand").addEventListener("change", function(){ f.wanderer = el("ptWand").checked; });
+  el("ptChipIn").addEventListener("change", function(){ f.microchipped = el("ptChipIn").checked; });
+  each("[data-sp]", function(b){
+    if (SPECIES.indexOf(b.dataset.sp) < 0) return;
+    f.species = b.dataset.sp;
+    Array.prototype.forEach.call(document.querySelectorAll("[data-sp]"), function(x){ x.setAttribute("aria-pressed", String(x === b)); });
+  });
+  el("ptForm").addEventListener("submit", function(e){
+    e.preventDefault();
+    var name = f.name.trim();
+    if (!name) { ptMsg("NAME_EMPTY"); el("ptName").focus(); return; }
+    var fields = { species: f.species, name: name, description: f.description.trim() || null, wanderer: f.wanderer, microchipped: f.microchipped };
+    ptWrite(el("ptSave"), function(){ return rpc("jc_pet_save", { p_pet: f.id, p_fields: fields }); }, function(c){
+      var id = isPet(c) ? c.id : f.id, added = !f.id;
+      form = null; pets = null;
+      if (!id) { tab = "mine"; backToList(); return; }
+      pet = null; setUrl("pet=" + encodeURIComponent(id) + (tab === "list" ? "" : "&tab=" + tab));
+      show("pet");
+      loadPet(id, function(){ showOk(jcFmt(added ? "pt_added" : "pt_saved", { n: name })); });
+    }, function(code){
+      if (code === "NOT_FOUND") { form = null; backToList("NOT_FOUND"); return true; }
+      return false;
+    });
+  });
+};
+
+/* ---------- boot ---------- */
+function paint(){
+  var name = jcCommunityName(cfg, state && state.me && state.me.community);
+  el("homeLink").textContent = name;
+  el("langBtn").textContent = jcT("toggle_label");
+  document.title = jcModTitle("pets") + " — " + name;
+  if (state && state.status === "member") jcTabBar("../", "pets", cfg);
+}
+
+el("langBtn").addEventListener("click", function(){
+  jcSetLang(ar() ? "en" : "ar");
+  paint();
+  if (current) show(current);              /* drafts (form / sighting / missing note) live in state, so they survive */
+});
+
+jcSetLang(jcLang());
+paint();
+jcState().then(function(s){
+  state = s;
+  var back = "../pets/" + (PET ? "?pet=" + PET.toLowerCase() : "");   /* a shared pet link survives sign-in (jcSafeNext) */
+  if (s.status === "signed_out") { location.replace("../account/?next=" + encodeURIComponent(back)); return; }
+  if (s.status === "not_member") { location.replace("../account/?view=join&next=" + encodeURIComponent(back)); return; }
+  return jcAnon("jc_config_get", { p_community: s.me.community }).catch(function(){ return null; }).then(function(c){
+    cfg = c;
+    paint();
+    if (cfg && !moduleOn()) return show("off");   /* the kill switch: nothing asked of the server */
+    jcHit("pets");
+    if (PET) { current = "pet"; openPet(PET); return; }
+    current = "list";
+    loadList();
+    show("list");
+  });
+}, function(e){
+  el("view").innerHTML = msgBox();
+  ptMsg(e.code || "UNKNOWN");
+});
