@@ -155,11 +155,23 @@ Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas 
 - Carer-group access: "one shared link" in the ideas → in Commons terms a per-group admin grant (like
   per-event admins). Confirm.
 
+### Events: village-only events + sign-up limits  ·  DB + app  (idea, Zee 2026-11-11 — needs `/plan-change`)
+- An event open to selected villages only. Default: **only those villages see it**; optional "everyone sees it, only
+  these villages can sign up" (the page says why you can't join). Enforced on the server in `jc_event_signup` (body
+  only — frozen signature); new refusal code.
+- Sign-up limit for every event kind (today only one-place events have a capacity).
+
 ### R6 — The Community: map + directory  ·  app (+ DB if needed)
 - Find any villa on the island and get directions (`jc_directory_list` exists; hidden homes stay hidden).
 - Optional per-home extras stay opt-in (zero-PII default).
 - **Community information** (Zee 2026-11-10): bus routes / timetables, waste collection, other practical info as
   editor-maintained static content in this section (`docs/plans/neighbourhood-edit-brief.md` → follow-on).
+- **Meetups** (Zee 2026-11-11: "maybe they should live in The Community … a sub-section called Meet ups? I don't want
+  to create another module"): a tab inside The Community — regular gatherings (what · weekly day + time · place pin ·
+  how to join, e.g. a WhatsApp group link). No sign-ups, no capacity. Residents **suggest** a meetup (or an event) →
+  it lands in Organizer Tools → an admin approves with one tap → published. Direct resident posting later, once
+  moderation and the contact-person (PII) question are settled. Needs its own `/plan-change`.
+- **"Hidden homes stay hidden" above is void** — home hiding is being removed (`docs/plans/HH-remove-home-hiding.md`).
 
 ### R7 — Launch prep (not features)
 - **Retire the shared `events` organizer code** (Step C, parked until testing is done) → per-event admins only.
