@@ -390,14 +390,12 @@ begin
   if v_err is distinct from 'NOT_ADMIN' then raise exception 'FAIL E20: %', v_err; end if;
   k := k + 2;
 
-  -- ---------- E21 a directory-suppressed home is hidden on event maps too ----------
+  -- ---------- E21 every signed-up home is on the event map, for everyone (HH 2026-11-11: no hidden homes) ----------
   perform set_config('request.jwt.claims', json_build_object('sub', u3, 'role', 'authenticated')::text, true);
-  if jsonb_array_length(jc_event_get(v_quiet) -> 'entries') <> 1 then raise exception 'FAIL E21a precondition'; end if;
+  if jsonb_array_length(jc_event_get(v_quiet) -> 'entries') <> 1 then raise exception 'FAIL E21a neighbor map'; end if;
   perform set_config('request.jwt.claims', json_build_object('sub', u1, 'role', 'authenticated')::text, true);
-  perform jc_admin_home_suppress(v_home1, true);
   if jsonb_array_length(jc_event_get(v_quiet) -> 'entries') <> 1 then raise exception 'FAIL E21b owner lost own entry'; end if;
-  perform set_config('request.jwt.claims', json_build_object('sub', u3, 'role', 'authenticated')::text, true);
-  if jsonb_array_length(jc_event_get(v_quiet) -> 'entries') <> 0 then raise exception 'FAIL E21c suppressed home on the map'; end if;
+  if (jc_event_get(v_quiet) -> 'mine') ? 'home_hidden' then raise exception 'FAIL E21c home_hidden still sent'; end if;
   k := k + 3;
 
   -- ---------- E22 another community's events admin can't touch jubail events ----------

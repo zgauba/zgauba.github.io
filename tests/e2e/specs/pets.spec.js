@@ -1,7 +1,7 @@
 // R5b-1 — residents' Pets page (server S4 + R5a). Plan: docs/plans/R5-pets.md.
-// The stub mirrors the server's privacy rules (jc_pet_card / jc_pet_get, R5a): a home is sent only when it is in
-// the directory, or while the pet is missing AND its household opted in; show_home only to the own household;
-// sightings only for strays / community animals, the own household and Pets admins; never a reporter.
+// The stub mirrors the server's privacy rules (jc_pet_card / jc_pet_get): an owned pet's home is always sent (homes
+// can't be hidden — HH 2026-11-11; `noHome` fakes a server that sends none, to check the page renders only what
+// arrives); sightings only for strays / community animals, the own household and Pets admins; never a reporter.
 // The page must render exactly what arrives.
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
@@ -16,8 +16,8 @@ const NOW = Date.parse("2026-11-11T06:30:00Z");          // 10:30 in Dubai
 const GROUP = "https://chat.whatsapp.com/AbCdEfGhIjKlMnOpQr12";
 const ID = (n) => "22222222-bbbb-4bbb-8bbb-00000000000" + n;
 const MY_HOME = "h1";                                      // stub.js MEMBER: Villa 12 · Ain Al Maha
-const V40 = { id: "h40", village: "seef-al-jubail", building: null, number: "40", hidden: false };
-const MINE_HOME = { id: MY_HOME, village: "ain-al-maha", building: null, number: "12", hidden: false };
+const V40 = { id: "h40", village: "seef-al-jubail", building: null, number: "40" };
+const MINE_HOME = { id: MY_HOME, village: "ain-al-maha", building: null, number: "12" };
 
 function backend(opts = {}) {
   const st = {
@@ -25,11 +25,10 @@ function backend(opts = {}) {
     me: opts.me || MEMBER,
     admin: !!opts.admin,
     group: opts.group === undefined ? GROUP : opts.group,
-    myHomeHidden: !!opts.myHomeHidden,
     pets: (opts.pets || [
       { id: ID(1), kind: "owned", species: "dog", name: "Rex", home: V40, missing: false },
       { id: ID(2), kind: "owned", species: "cat", name: "Luna", home: V40, missing: true, missing_since: "2026-11-10T15:00:00Z",
-        last_seen_note: "Near the beach park", show_home: false, sightings: [] },
+        last_seen_note: "Near the beach park", sightings: [] },
       { id: ID(3), kind: "stray", species: "cat", name: "Ginger", care_state: "under_care", territory: "Behind the mosque",
         care: { sterilized: { s: "done", d: "2026-10-01", n: "Clinic A" }, vaccination: { s: "due", d: null, n: null } },
         care_log: [{ kind: "fed", note: "Morning round", at: "2026-11-10T05:00:00Z" }],
@@ -42,17 +41,16 @@ function backend(opts = {}) {
       { id: ID(6), kind: "owned", species: "cat", name: "Mochi", home: MINE_HOME, missing: false, wanderer: true },
     ].concat(opts.extra || [])).map((p) => Object.assign({ description: null, wanderer: false, microchipped: false, missing: false,
       missing_since: null, last_seen_note: null, care_state: null, photo_path: null, territory: null, territory_lat: null, territory_lng: null,
-      care: p.kind === "stray" ? {} : null, care_log: [], sightings: [], show_home: false, status: "active" }, p)),
+      care: p.kind === "stray" ? {} : null, care_log: [], sightings: [], status: "active" }, p)),
   };
   let n = 0;
-  const homeOf = (p) => (p.home && p.home.id === MY_HOME ? Object.assign({}, p.home, { hidden: st.myHomeHidden }) : p.home);
+  const homeOf = (p) => p.home;
   const card = (p) => {
     const h = homeOf(p), mine = !!(st.me.home && h && h.id === MY_HOME);
     return { id: p.id, kind: p.kind, species: p.species, name: p.name, description: p.description, wanderer: p.wanderer,
       microchipped: p.microchipped, missing: p.missing, missing_since: p.missing_since, last_seen_note: p.last_seen_note,
       care_state: p.care_state, photo_path: p.photo_path, mine,
-      home: h && (!h.hidden || (p.missing && p.show_home)) ? { village: h.village, type: h.type, building: h.building, number: h.number } : null,   // type: R5b-1b server (absent = older server)
-      show_home: mine ? p.show_home : null,
+      home: h && !h.noHome ? { village: h.village, type: h.type, building: h.building, number: h.number } : null,   // type: R5b-1b server (absent = older server)
       territory: p.territory, territory_lat: p.territory_lat, territory_lng: p.territory_lng, care: p.kind === "stray" ? p.care : null };
   };
   const find = (id) => st.pets.find((p) => p.id === id && p.status === "active");
@@ -83,7 +81,7 @@ function backend(opts = {}) {
       if (a.p_pet === null) {
         n += 1;
         const p = { id: "33333333-cccc-4ccc-8ccc-00000000000" + n, kind: "owned", home: MINE_HOME, missing: false, missing_since: null, last_seen_note: null, care_state: null,
-          photo_path: null, territory: null, territory_lat: null, territory_lng: null, care: null, care_log: [], sightings: [], show_home: false,
+          photo_path: null, territory: null, territory_lat: null, territory_lng: null, care: null, care_log: [], sightings: [],
           status: "active", description: null, wanderer: false, microchipped: false };
         Object.assign(p, f);
         st.pets.push(p);
@@ -101,15 +99,6 @@ function backend(opts = {}) {
       p.missing = a.p_missing;
       p.missing_since = a.p_missing ? (p.missing_since || "2026-11-11T06:00:00Z") : null;
       p.last_seen_note = a.p_missing ? a.p_note : null;
-      if (!a.p_missing) p.show_home = false;                     // found clears the opt-in (R5a)
-      return ok(card(p));
-    },
-    jc_pet_missing_home_set: (a) => {
-      if (opts.homeSetError) return raise(opts.homeSetError);
-      const p = manage(a.p_pet);
-      if (!p) return raise("NOT_FOUND");
-      if (!p.missing) return raise("NOT_MISSING");
-      p.show_home = a.p_show;
       return ok(card(p));
     },
     jc_pet_sighting_add: (a) => {
@@ -155,7 +144,7 @@ test("module off: the kill switch — a notice, no pets RPC, no Pets in the bar,
 });
 
 test("List: missing on top; filters split strays from community animals; homes only as sent (neutral label, never a guessed Villa)", async ({ page }) => {
-  const b = backend({ extra: [{ id: ID(7), kind: "owned", species: "bird", name: "Kiwi", home: { id: "h9", village: "ain-al-maha", building: "B2", number: "304", hidden: true } }] });
+  const b = backend({ extra: [{ id: ID(7), kind: "owned", species: "bird", name: "Kiwi", home: { id: "h9", village: "ain-al-maha", building: "B2", number: "304", noHome: true } }] });
   const { calls } = await open(page, b);
   await expect(page.locator('[role="tab"]')).toHaveText(["List", "My Pets"]);
   await expect(page.locator("#ptMissing li")).toHaveCount(1);
@@ -167,7 +156,7 @@ test("List: missing on top; filters split strays from community animals; homes o
   expect(lastCall(calls, "jc_pets_list").args).toEqual({ p_filter: "all" });
   // All: everyone except the missing one (it is already on top), A–Z as the server sorts
   await expect(page.locator("#ptList b")).toHaveText(["Biscuit", "Ginger", "Kiwi", "Mochi", "Rex", "Sandy"]);
-  // a hidden home: the server sends no home → the card shows none
+  // the server sends no home (defensive: render only what arrives) → the card shows none
   expect((await page.locator(`[data-pet="${ID(7)}"]`).innerText()).replace(/\s+/g, " ").trim()).toBe("Kiwi Bird · Pet Details");
   await page.locator("#ptF-strays").click();
   await expect(page.locator("#ptF-strays")).toHaveAttribute("aria-pressed", "true");
@@ -345,7 +334,7 @@ test("Remove is only in Edit (never on Add, never on the pet page); the home's t
   await expect(page.locator("#ptFacts")).toContainText("Apt 304, B2 · Ain Al Maha");
 });
 
-test("the Edit form says neighbors see my home only when it isn't hidden (residents can't hide it — no such option offered)", async ({ page }) => {
+test("the Edit form says neighbors see my home — no hiding option offered (HH)", async ({ page }) => {
   const b = backend();
   await open(page, b, { q: "?pet=" + ID(6) });
   await page.locator("#ptEdit").click();
@@ -353,14 +342,7 @@ test("the Edit form says neighbors see my home only when it isn't hidden (reside
   await expect(page.locator("#ptForm")).not.toContainText("hidden");
 });
 
-test("…and an admin-hidden home: the Edit form says nothing about neighbors seeing it", async ({ page }) => {
-  await open(page, backend({ myHomeHidden: true }), { q: "?pet=" + ID(6) });
-  await page.locator("#ptEdit").click();
-  await expect(page.locator("#ptName")).toHaveValue("Mochi");
-  await expect(page.locator("#ptForm")).not.toContainText("Neighbors see your pet");
-});
-
-test("missing switch, home in the directory: no show-home choice; one call; the alarm is up; Found takes it down", async ({ page }) => {
+test("missing switch: one call (no show-home step — HH); the alarm is up; Found takes it down", async ({ page }) => {
   const b = backend();
   const { calls } = await open(page, b, { q: "?pet=" + ID(6) });
   await expect(page.locator("#ptFacts")).toContainText("Home 12 · Ain Al Maha");
@@ -368,6 +350,7 @@ test("missing switch, home in the directory: no show-home choice; one call; the 
   await expect(page.locator("#ptMissShow")).toHaveCount(0);
   await expect(page.locator("#ptEdit")).toHaveCount(0);                    // nothing else beside the red button
   await expect(page.locator("#ptArchive")).toHaveCount(0);
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/pt-miss-sheet.png", fullPage: true });
   await page.locator("#ptMissNote").fill("Last seen at the playground, 8 am");
   await page.locator("#ptMissGo").click();
   await expect(page.locator("#msg")).toHaveText("Mochi is now listed as missing. Share the alert below.");
@@ -375,6 +358,7 @@ test("missing switch, home in the directory: no show-home choice; one call; the 
   expect(named(calls, "jc_pet_missing_home_set")).toEqual([]);
   await expect(page.locator("#ptAlarm")).toContainText("Last seen: Last seen at the playground, 8 am");
   await expect(page.locator("#ptShowHome")).toHaveCount(0);
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/pt-missing-mine.png", fullPage: true });
   await expect(page.locator("#ptWaText")).toContainText("Missing: Mochi (Cat) from Home 12 · Ain Al Maha.");   // my own share carries my home
   await expect(page.locator("#ptSightings")).toHaveText("No sightings yet.");   // my own pet: the server sends them
   page.once("dialog", (d) => d.accept());
@@ -383,51 +367,6 @@ test("missing switch, home in the directory: no show-home choice; one call; the 
   expect(lastCall(calls, "jc_pet_missing_set").args).toEqual({ p_pet: ID(6), p_missing: false, p_note: null });
   await expect(page.locator("#ptAlarm")).toHaveCount(0);
   await expect(page.locator("#ptMiss")).toBeVisible();
-});
-
-test("missing switch, home hidden (Q6): opt-in offered with my home; missing then show-home, in that order; switch off later", async ({ page }) => {
-  const b = backend({ myHomeHidden: true });
-  const { calls } = await open(page, b, { q: "?pet=" + ID(6) });
-  await expect(page.locator("#ptFacts")).toContainText("Not shown (your home is hidden from the directory)");
-  await page.locator("#ptMiss").click();
-  await expect(page.locator("#ptOwner")).toContainText("Show Villa 12 · Ain Al Maha while Mochi is missing");
-  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/pt-miss-sheet.png", fullPage: true });
-  await expect(page.locator("#ptMissShow")).not.toBeChecked();             // never pre-ticked: an opt-in
-  await page.locator("#ptMissShow").check();
-  await page.locator("#ptMissGo").click();
-  await expect(page.locator("#msg")).toHaveText("Mochi is now listed as missing. Share the alert below.");
-  const writes = calls.filter((c) => /^jc_pet_missing/.test(c.name)).map((c) => [c.name, c.args]);
-  expect(writes).toEqual([["jc_pet_missing_set", { p_pet: ID(6), p_missing: true, p_note: null }],
-                          ["jc_pet_missing_home_set", { p_pet: ID(6), p_show: true }]]);
-  await expect(page.locator("#ptFacts")).toContainText("Home 12 · Ain Al Maha");    // now sent by the server
-  await expect(page.locator("#ptShowHome")).toBeChecked();
-  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/pt-missing-mine.png", fullPage: true });
-  await page.locator("#ptShowHome").uncheck();
-  await expect(page.locator("#msg")).toHaveText("Your home is hidden again.");
-  expect(lastCall(calls, "jc_pet_missing_home_set").args).toEqual({ p_pet: ID(6), p_show: false });
-  await expect(page.locator("#ptFacts")).toContainText("Not shown");
-});
-
-test("hidden home, opt-in left unticked: only the missing call — the home stays hidden", async ({ page }) => {
-  const b = backend({ myHomeHidden: true });
-  const { calls } = await open(page, b, { q: "?pet=" + ID(6) });
-  await page.locator("#ptMiss").click();
-  await page.locator("#ptMissGo").click();
-  await expect(page.locator("#ptAlarm")).toBeVisible();
-  expect(named(calls, "jc_pet_missing_home_set")).toEqual([]);
-  await expect(page.locator("#ptShowHome")).not.toBeChecked();
-  await expect(page.locator("#ptFacts")).toContainText("Not shown");
-});
-
-test("the show-home step fails: the alarm is still up and the page says the home isn't shown (never silent)", async ({ page }) => {
-  const b = backend({ myHomeHidden: true, homeSetError: "NETWORK" });
-  await open(page, b, { q: "?pet=" + ID(6) });
-  await page.locator("#ptMiss").click();
-  await page.locator("#ptMissShow").check();
-  await page.locator("#ptMissGo").click();
-  await expect(page.locator("#msg")).toHaveText("Your pet is listed as missing, but your home couldn't be shown. Try the switch below.");
-  await expect(page.locator("#ptAlarm")).toBeVisible();
-  await expect(page.locator("#ptShowHome")).not.toBeChecked();
 });
 
 for (const [code, text] of [

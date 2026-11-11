@@ -224,13 +224,13 @@ begin
   if n <> 1 then raise exception 'FAIL T19c open pin notices=% (want 1)', n; end if;
   k := k + 3;
 
-  -- ---------- T20 directory + suppression ----------
+  -- ---------- T20 directory (HH 2026-11-11: no hidden homes — every home is listed) ----------
   perform set_config('request.jwt.claims', json_build_object('sub', A, 'role', 'authenticated')::text, true);
   execute 'set local role authenticated';
   if jsonb_array_length(jc_directory_list()) <> 2 then raise exception 'FAIL T20a'; end if;
-  perform jc_admin_home_suppress(v_home2, true);
-  if jsonb_array_length(jc_directory_list()) <> 1 then raise exception 'FAIL T20b'; end if;
-  perform jc_admin_home_suppress(v_home2, false);
+  if to_regprocedure('public.jc_admin_home_suppress(uuid, boolean)') is not null
+     or exists (select 1 from information_schema.columns where table_name = 'jc_homes' and column_name = 'directory_suppressed') then
+    raise exception 'FAIL T20b home hiding still exists (HH)'; end if;
   k := k + 2;
 
   -- ---------- T21 leave → vacant → reclaim in place ----------
@@ -333,8 +333,8 @@ begin
   if v_err is distinct from 'NOT_ADMIN' then raise exception 'FAIL T29b exit left admin on: %', v_err; end if;
   execute 'reset role';
   select count(distinct action) into n from jc_admin_log
-   where action in ('code_rotate', 'member_remove', 'invite_approve', 'invite_decline', 'home_suppress');
-  if n <> 5 then raise exception 'FAIL T29c logged action kinds=% (want 5)', n; end if;
+   where action in ('code_rotate', 'member_remove', 'invite_approve', 'invite_decline');   -- HH: no home_suppress
+  if n <> 4 then raise exception 'FAIL T29c logged action kinds=% (want 4)', n; end if;
   if exists (select 1 from jc_admin_log where target::text ilike '%' || v_code || '%') then
     raise exception 'FAIL T29d a code leaked into the log'; end if;
   k := k + 4;

@@ -8,15 +8,15 @@ const { adminBackend, signIn } = require("./backends");
 
 const homes = () => [
   { id: "h7", village: "ain-al-maha", type: "villa", building: null, number: "7", lat: 24.53, lng: 54.43,
-    pin_set_at: "2026-11-03T10:00:00Z", suppressed: false, flags: {}, created_at: "2026-11-03T09:00:00Z",
+    pin_set_at: "2026-11-03T10:00:00Z", flags: {}, created_at: "2026-11-03T09:00:00Z",
     members: [
       { user_id: "u-secret-alice", name: "Alice", joined_at: "2026-11-03T09:00:00Z", via: "claim" },
       { user_id: "u-secret-bob", name: "b•••@example.com", joined_at: "2026-11-04T09:00:00Z", via: "invite" },
     ] },
   { id: "h8", village: "ain-al-maha", type: "townhouse", building: null, number: "40", lat: null, lng: null,
-    pin_set_at: null, suppressed: true, flags: { pin_far: true }, created_at: "2026-11-03T09:00:00Z", members: [] },
+    pin_set_at: null, flags: { pin_far: true }, created_at: "2026-11-03T09:00:00Z", members: [] },
   { id: "h10", village: "seef-al-jubail", type: "apartment", building: "B2", number: "304", lat: 24.531, lng: 54.431,
-    pin_set_at: "2026-11-03T10:00:00Z", suppressed: false, flags: { pin_near: "h7" }, created_at: "2026-11-03T09:00:00Z",
+    pin_set_at: "2026-11-03T10:00:00Z", flags: { pin_near: "h7" }, created_at: "2026-11-03T09:00:00Z",
     members: [{ user_id: "u-secret-carol", name: "Carol", joined_at: "2026-11-05T09:00:00Z", via: "claim" }] },
 ];
 const PENDING = [{ invite_id: "inv-1", home_id: "h7", requester: "d•••@example.com", created_at: "2026-11-05T12:00:00Z" }];
@@ -46,7 +46,6 @@ function hhBackend(opts = {}) {
       Object.assign(h, { village: a.p_village, type: a.p_type, building: a.p_type === "apartment" ? a.p_building : null, number: a.p_number });
       return list();
     },
-    jc_admin_home_suppress: (a) => { home(a.p_home).suppressed = a.p_on === true; return list(); },
     jc_admin_member_remove: (a) => {
       st.homes.forEach((h) => { h.members = h.members.filter((m) => m.user_id !== a.p_user); });
       return list();
@@ -92,12 +91,15 @@ test("homes by village with counts and flags; names as the server sends them, ne
   await expect(page.locator(".help", { hasText: "2 homes · 1 pinned · 2 members" })).toBeVisible();
   await expect(card(page, "h7")).toContainText("Alice");
   await expect(card(page, "h7")).toContainText("b•••@example.com");
-  await expect(card(page, "h8").locator(".flags")).toHaveText(/No pin.*Pin far away.*Hidden from the directory.*Nobody lives here now/);
+  await expect(card(page, "h8").locator(".flags")).toHaveText(/No pin.*Pin far away.*Nobody lives here now/);
+  await expect(page.locator(".flags")).not.toContainText(["Hidden"]);
   await expect(card(page, "h10")).toContainText("Apt 304, B2");
   await expect(card(page, "h10").locator(".flags")).toHaveText("Pin on top of another home");
   // no account id anywhere in the page — not in the text, not in an attribute
   expect(await page.content()).not.toContain("u-secret");
-  await expect(card(page, "h8").locator('[data-hh="show"]')).toHaveText("Show In Directory");
+  // HH (Zee 2026-11-11): admins can't hide a household — no Hide / Show anywhere
+  await expect(page.locator('[data-hh="hide"], [data-hh="show"]')).toHaveCount(0);
+  await expect(card(page, "h8").locator("[data-hh]")).toHaveText(["Fix Address", "Set Pin"]);
 });
 
 test("approve and decline an over-limit request send the invite and the answer", async ({ page }) => {
@@ -124,11 +126,10 @@ test("one write at a time: a tap while a decision is in flight sends nothing", a
   }) }) });
   await page.locator('[data-inv="inv-1"][data-yes="1"]').click();
   await expect.poll(() => writes(calls, "jc_admin_invite_decide").length).toBe(1);
-  await card(page, "h7").locator('[data-hh="hide"]').click();
-  await card(page, "h8").locator('[data-hh="show"]').click();
+  await card(page, "h7").locator('[data-hh="edit"]').click();           // ignored while the decision is in flight
   release();
   await expect(page.locator("#msg")).toHaveText("Approved. They're now a member of that home.");
-  expect(writes(calls, "jc_admin_home_suppress")).toEqual([]);
+  await expect(page.locator('[data-form="edit"]')).toHaveCount(0);
   expect(writes(calls, "jc_admin_invite_decide")).toHaveLength(1);
 });
 
@@ -178,16 +179,6 @@ test("an address another household has: admin wording, form kept open", async ({
   await expect(page.locator("#msg")).toHaveText("Another household already has that address.");
   await expect(page.locator("#msg")).not.toContainText("Ask one of them");
   await expect(page.locator('[data-form="edit"] button[type="submit"]')).toBeEnabled();
-});
-
-test("hide from the directory, then show again", async ({ page }) => {
-  const { calls } = await openHouseholds(page);
-  await card(page, "h7").locator('[data-hh="hide"]').click();
-  await expect(page.locator("#msg")).toHaveText("Villa 7 is hidden from the directory and event maps.");
-  await expect(card(page, "h7").locator(".flags")).toContainText("Hidden from the directory");
-  await card(page, "h7").locator('[data-hh="show"]').click();
-  await expect(page.locator("#msg")).toHaveText("Villa 7 shows in the directory again.");
-  expect(writes(calls, "jc_admin_home_suppress")).toEqual([{ p_home: "h7", p_on: true }, { p_home: "h7", p_on: false }]);
 });
 
 test("remove a member: the right person, account kept unless ticked", async ({ page }) => {
@@ -268,7 +259,7 @@ test("Arabic: households in Arabic, right to left, an open edit keeps what was t
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   await expect(page.locator("h1")).toHaveText("الأسر");
   await expect(page.locator("#hhNumber")).toHaveValue("7A");
-  await expect(card(page, "h7").locator('[data-hh="hide"]')).toHaveText("إخفاء من الدليل");
+  await expect(card(page, "h7").locator('[data-hh="edit"]')).toHaveText("تصحيح العنوان");
 });
 
 // ---------- R1.1: fix a home's pin from Households ----------

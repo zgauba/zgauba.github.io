@@ -1,7 +1,7 @@
 -- R2a — Events audit fixes (docs/qa/events-qa-2026-11-06.md). Each check fails on the code live before R2a:
 -- D1 + L1 vacating a home clears the hide + spot · D2 events end (sign-up / withdraw stop, read paths say so),
 -- the hourly job notices + auto-closes 24 h later, one failure doesn't stop the rest · F2 NO_DATE ·
--- U1 mine.home_hidden · U3 banner owner, revoke, tie-to-event. Own communities (testville14 / testville14b).
+-- U1 mine.home_hidden (retired by HH) · U3 banner owner, revoke, tie-to-event. Own communities (testville14 / testville14b).
 -- Run via tests/sql/build_dryrun.sh (rolls back).
 
 do $t$
@@ -140,12 +140,10 @@ begin
   if not (v -> 'mine' ->> 'hidden')::boolean then raise exception 'FAIL A02 a re-join dropped the organizer''s hide'; end if;
   k := k + 1;
 
-  -- ---------- A03 U1: the household learns its home isn't shown ----------
-  if (v -> 'mine' ->> 'home_hidden')::boolean is distinct from false then raise exception 'FAIL A03a home_hidden: %', v -> 'mine'; end if;
-  perform pg_temp.s14_as(c1); perform jc_admin_home_suppress(h3, true);
+  -- ---------- A03 U1 retired (HH 2026-11-11): homes can't be hidden, so mine carries no home_hidden ----------
+  if (v -> 'mine') ? 'home_hidden' then raise exception 'FAIL A03a home_hidden still sent: %', v -> 'mine'; end if;
   perform pg_temp.s14_as(r3);
-  if (jc_event_get(ev_h) -> 'mine' ->> 'home_hidden')::boolean is not true then raise exception 'FAIL A03b directory-hidden home not told'; end if;
-  perform pg_temp.s14_as(c1); perform jc_admin_home_suppress(h3, false);
+  if (jc_event_get(ev_h) -> 'mine') ? 'home_hidden' then raise exception 'FAIL A03b home_hidden still sent'; end if;
   k := k + 2;
 
   -- ---------- A04 D2: an ended event takes no sign-ups and no withdrawals ----------
