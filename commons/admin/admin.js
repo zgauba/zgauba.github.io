@@ -254,7 +254,8 @@ function show(name){
   /* back, in the top bar: sign-ups → the events list; pin move → the sign-ups */
   jcBack(name === "signups" ? leaveSignups
        : name === "pinmove" ? function(){ pm = null; show("signups"); }
-       : name === "feedback" || name === "health" || name === "households" || name === "admins" || name === "names" ? function(){ show("home"); }
+       : name === "feedback" || name === "health" || name === "households" || name === "admins" ? function(){ show("home"); }
+       : name === "names" ? mnBack
        : name === "adminlog" ? function(){ show("households"); }
        : name === "court" ? function(){ ctEd = null; show("home"); }
        : name === "courtday" ? function(){ cd = null; admTab = "courts"; show("home"); }
@@ -515,7 +516,7 @@ var VIEWS = {
     on("fbOpen", function(){ show("feedback"); });
     on("healthOpen", function(){ health = null; show("health"); });
     on("hhOpen", function(){ hh = null; show("households"); });
-    on("mnOpen", function(){ mnDraft = null; show("names"); });
+    on("mnOpen", function(){ mnDraft = null; mnSec = null; show("names"); });
     on("adOpen", function(){ ad = null; show("admins"); });
     Array.prototype.forEach.call(document.querySelectorAll("[data-act]"), function(b){
       b.addEventListener("click", function(){ act(b.dataset.act, b.dataset.id, b); });
@@ -816,8 +817,25 @@ var VIEWS = {
   names: function(){
     var html = '<h1>' + esc(jcT("adm_mn_title")) + '</h1><p class="sub">' + esc(jcT("adm_mn_sub")) + '</p>' + msgBox();
     if (!cfg) { el("view").innerHTML = html; el("msg").className = "msg err"; el("msg").textContent = jcT("error_config"); return; }
+    /* first a short list of sections (Zee 2026-11-11: one long scroll was hard to use); tap one → only its boxes */
+    if (!mnSec) {
+      el("view").innerHTML = html + '<ul class="mnlist">' + MN_KEYS.map(function(k){
+        var st = mnStored(k), cur = jcModName(k), usual = jcT(JC_MOD_NAME[k]);   /* RM-ok: the built-in name, shown beside the current one */
+        return '<li><button type="button" data-mnpick="' + k + '">' + jcIcon(k, 22) +
+          '<span class="nm">' + esc(usual) + '</span>' +
+          '<span class="cur" dir="auto">' + esc(st.name_en ? cur : jcT("adm_mn_usual")) + '</span>' +
+          '<span class="chev" aria-hidden="true">›</span></button></li>';
+      }).join("") + '</ul>';
+      Array.prototype.forEach.call(document.querySelectorAll("[data-mnpick]"), function(b){
+        b.addEventListener("click", function(){
+          if (MN_KEYS.indexOf(b.dataset.mnpick) < 0) return;
+          mnSec = b.dataset.mnpick; mnDraft = null; show("names");
+        });
+      });
+      return;
+    }
     var d = mnDraft || {};
-    el("view").innerHTML = html + MN_KEYS.map(function(k){
+    el("view").innerHTML = html + [mnSec].map(function(k){
       var st = mnStored(k), v = Object.prototype.hasOwnProperty.call(d, k) && hObj(d[k]) ? d[k] : st, set = !!(st.name_en || st.title_en || st.title_ar);
       return '<form class="panel mnform" data-mn="' + k + '" novalidate>' +
         '<h2 class="group">' + jcIcon(k, 20) + ' ' + esc(jcT(JC_MOD_NAME[k])) + '</h2>' +
@@ -1086,6 +1104,13 @@ var MN_FIELDS = [{ k: "name_en", max: 14, dir: "ltr" }, { k: "name_ar", max: 18,
                  { k: "title_en", max: 40, dir: "ltr" }, { k: "title_ar", max: 40, dir: "rtl" }];
 var mnDraft = null;       /* { <module>: {name_en, …} } typed, not saved — survives a language switch */
 var mnBusy = false;
+var mnSec = null;         /* the section open in the editor; null = the list of sections */
+/* Back: from a section's boxes to the list (not while a save is in flight), from the list to Organizer Tools */
+function mnBack(){
+  if (!mnSec) return show("home");
+  if (mnBusy) return;
+  mnSec = null; mnDraft = null; show("names");
+}
 function mnStored(k){
   var l = cfg && hObj(cfg.labels), e = (l && Object.prototype.hasOwnProperty.call(l, k) && hObj(l[k])) || {}, n = hObj(e.name) || {}, t = hObj(e.title) || {};
   return { name_en: n.en || "", name_ar: n.ar || "", title_en: t.en || "", title_ar: t.ar || "" };

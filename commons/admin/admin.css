@@ -165,3 +165,12 @@ label.check span small{display:block; color:var(--jc-muted); font-size:12.5px; f
 #cdBlockForm select, #cdBlockForm input[type=date]{width:100%}
 .cdlist{margin-top:12px}
 #cdBlockForm h2.group{margin-top:0}
+/* Section Names: the list of sections (tap one to rename it) */
+.mnlist{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px}
+.mnlist button{width:100%; display:flex; align-items:center; gap:10px; min-height:56px; padding:10px 14px; font:inherit; font-size:15px;
+  color:var(--jc-ink); background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius); cursor:pointer; text-align:start}
+.mnlist .nm{font-weight:700; flex:0 1 auto; min-width:0; overflow-wrap:anywhere}
+.mnlist .cur{flex:1 1 auto; text-align:end; color:var(--jc-muted); font-size:14px; min-width:0; overflow-wrap:anywhere}
+.mnlist .chev{color:var(--jc-muted); font-size:20px; line-height:1}
+[dir="rtl"] .mnlist .chev{transform:scaleX(-1)}
+.mnform + .mnform{margin-top:12px}
