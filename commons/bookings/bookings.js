@@ -361,13 +361,13 @@ function drawMap(list){
 
 var VIEWS = {
   off: function(){
-    el("view").innerHTML = '<h1>' + esc(jcT("module_bookings")) + '</h1><p class="notice" id="bkOff">' + esc(jcT("bk_off")) + '</p>';
+    el("view").innerHTML = '<h1 dir="auto">' + esc(jcModTitle("bookings")) + '</h1><p class="notice" id="bkOff">' + esc(jcT("bk_off")) + '</p>';
   },
 
   list: function(){
-    var html = '<h1>' + esc(jcT("module_bookings")) + '</h1>' +
+    var html = '<h1 dir="auto">' + esc(jcModTitle("bookings")) + '</h1>' +
       '<p class="notice" id="bkPrecedence">' + esc(jcT("bk_precedence")) + '</p>' +
-      jcTabsHtml("bktab-", TABS, tab, function(t){ return jcT("bk_tab_" + t); }, jcT("module_bookings"), "bkBody") + msgBox();
+      jcTabsHtml("bktab-", TABS, tab, function(t){ return jcT("bk_tab_" + t); }, jcModName("bookings"), "bkBody") + msgBox();
     function wireTabs(){
       jcTabsWire("bktab-", TABS, function(t){
         if (t === "mine" && tab !== "mine") { past = null; pastErr = null; pastSeq++; pastLoading = false; }   /* fresh each visit */
@@ -558,7 +558,7 @@ function paint(){
   var name = jcCommunityName(cfg, state && state.me && state.me.community);
   el("homeLink").textContent = name;
   el("langBtn").textContent = jcT("toggle_label");
-  document.title = jcT("module_bookings") + " — " + name;
+  document.title = jcModTitle("bookings") + " — " + name;
   if (state && state.status === "member") jcTabBar("../", "bookings", cfg);
 }
 

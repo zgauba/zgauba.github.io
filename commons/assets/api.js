@@ -27,6 +27,7 @@ function jcCommunity(){
    browser saw (pages used to flash "Jubail Commons" before e.g. "E2E Test Commons" — Zee 2026-11-05),
    else the neutral platform name. `id`, when known, keeps another community's saved name out. */
 function jcCommunityName(cfg, id){
+  jcLabelsSet(cfg, id);                     /* RM: the section names come from the same config, same moment */
   var n = cfg && cfg.name_en ? { id: id || null, en: cfg.name_en, ar: cfg.name_ar || "" } : null;
   try {
     if (n) localStorage.setItem("jc_name", JSON.stringify(n));
@@ -38,6 +39,38 @@ function jcCommunityName(cfg, id){
   if (!n || !n.en) return jcT("platform_brand");
   return jcLang() === "ar" && n.ar ? n.ar : n.en;
 }
+
+/* RM — section names (renamable modules; docs/plans/RM-renamable-modules.md). A community admin may set a
+   NAME (bar, tabs, Settings) and a TITLE (page heading, hub card) per module, EN + AR (jc_config_get 'labels',
+   written by jc_admin_module_label_set). Nothing set = the built-in strings below. Like jcCommunityName: a
+   loaded config replaces the cache; until one loads (or if it fails), the last names this browser saw for
+   this community. Display text only — callers esc() it, and give its element dir="auto". */
+var JC_MOD_NAME  = { events: "module_events", bookings: "module_bookings", pets: "feat_pets",   community: "module_community" };
+var JC_MOD_TITLE = { events: "ev_title",      bookings: "module_bookings", pets: "module_pets", community: "module_community" };
+var JC_LABELS;                              /* undefined = not read yet; null = none */
+function jcLabelsSet(cfg, id){
+  if (cfg && typeof cfg === "object" && Object.prototype.hasOwnProperty.call(cfg, "labels")) {
+    var l = cfg.labels && typeof cfg.labels === "object" && !Array.isArray(cfg.labels) ? cfg.labels : {};
+    JC_LABELS = { id: id || cfg.id || null, labels: l };
+    try { localStorage.setItem("jc_labels", JSON.stringify(JC_LABELS)); } catch(e){}
+    return;
+  }
+  if (JC_LABELS !== undefined && !(JC_LABELS && id && JC_LABELS.id && JC_LABELS.id !== id)) return;
+  var c = null;
+  try { c = JSON.parse(localStorage.getItem("jc_labels") || "null"); } catch(e){}
+  if (!c || typeof c !== "object" || !c.labels || typeof c.labels !== "object" || (id && c.id && c.id !== id)) c = null;
+  JC_LABELS = c;
+}
+/* one stored string, or null: the server caps names at 14/18 and titles at 40; anything odd is ignored */
+function jcLabel(key, part){
+  if (JC_LABELS === undefined) jcLabelsSet(null, null);
+  var e = JC_LABELS && Object.prototype.hasOwnProperty.call(JC_LABELS.labels, key) ? JC_LABELS.labels[key] : null;
+  var p = e && typeof e === "object" ? e[part] : null;
+  var v = p && typeof p === "object" ? p[jcLang() === "ar" ? "ar" : "en"] : null;
+  return typeof v === "string" && v.trim() && v.length <= 40 ? v : null;
+}
+function jcModName(key){ return jcLabel(key, "name") || jcT(JC_MOD_NAME[key] || key); }
+function jcModTitle(key){ return jcLabel(key, "title") || jcLabel(key, "name") || jcT(JC_MOD_TITLE[key] || key); }
 
 /* Captured BEFORE createClient: the client consumes and clears auth parameters
    (?code=…, #error_code=…) as soon as it is created, so a page reading the URL

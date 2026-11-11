@@ -8,6 +8,14 @@ body.has-tabbar{padding-bottom:calc(60px + env(safe-area-inset-bottom))}
 .tabbar a{flex:1; max-width:120px; display:flex; flex-direction:column; align-items:center; gap:2px;
   min-height:44px; padding:5px 4px 4px; border-radius:10px; text-decoration:none; color:var(--jc-muted);
   font-size:11px; font-weight:700; line-height:1.2}
+/* RM: a community can rename sections (≤ 14 EN / 18 AR). Buttons never grow past their share (min-width:0);
+   a long word breaks inside its button; at most two lines. */
+.tabbar a{min-width:0}
+.tabbar a span{max-width:100%; text-align:center; overflow-wrap:anywhere;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden}
+/* set by nav.js only when the label would be cut off at 11px: smaller text, and a 3rd line if the phone's font
+   still needs it (one word per line) — the bar grows a little rather than hiding part of the name */
+.tabbar a span.tight{font-size:9.5px; -webkit-line-clamp:3}
 .tabbar a .ico{color:var(--jc-muted)}
 .tabbar a[aria-current="page"]{color:var(--jc-ink); background:var(--jc-surface-2)}
 .tabbar a[aria-current="page"] .ico{color:var(--jc-accent)}

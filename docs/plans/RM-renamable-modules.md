@@ -1,6 +1,6 @@
 # RM — Renamable modules (plan, 2026-11-10)
 
-> Status: **plan — awaiting Zee's decisions (Q1–Q5)**. Next before R5b (ROADMAP RM).
+> Status: **Q1–Q5 approved (Zee 2026-11-10)**. RM-a applied (PR #88); RM-b client (this branch). AR name cap 18 (RM-a review).
 > Scope tier: **cross-layer** (DB column + RPC + `jc_config_get` contract + 7 client files).
 
 ## Goal

@@ -485,7 +485,7 @@ test("no home: told to claim it first, no Book buttons, nothing asked of the day
 test("Courts switched off: a plain page, nothing asked of the server", async ({ page }) => {
   const b = backend({ enabled: false });
   const { calls } = await open(page, b);
-  await expect(page.locator("#bkOff")).toHaveText("Courts aren't open yet in your community.");
+  await expect(page.locator("#bkOff")).toHaveText("This section isn't open yet in your community.");   // RM Q1: name-free
   await expect(page.locator('#tabbar a[data-tab="bookings"]')).toHaveCount(0);           // flag off (Jubail today): no Courts tab
   expect(calls.some((c) => /^jc_(facilit|my_book|booking)/.test(c.name))).toBe(false);
 });

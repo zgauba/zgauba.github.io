@@ -22,6 +22,10 @@ function jcDest(key){
   for (var i = 0; i < JC_DEST.length; i++) if (JC_DEST[i].key === key) return JC_DEST[i];
   return null;
 }
+/* A destination's label: a module (and The Community) shows the community's own section name (RM). */
+function jcDestLabel(d){
+  return Object.prototype.hasOwnProperty.call(JC_MOD_NAME, d.key) ? jcModName(d.key) : jcT(d.label);   /* RM-ok */
+}
 function jcIsAdmin(me){
   me = me || {};
   return (Array.isArray(me.admin_scopes) && me.admin_scopes.length > 0) ||
@@ -98,8 +102,22 @@ function jcTabBar(root, active, cfg){
   nav.innerHTML = items.map(function(it){
     return '<a href="' + esc((root + it.path) || "./") + '" data-tab="' + esc(it.key) + '"' +
       (it.key === active ? ' aria-current="page"' : '') + '>' +
-      jcIcon(it.icon, 20) + '<span>' + esc(jcT(it.label)) + '</span></a>';
+      jcIcon(it.icon, 20) + '<span dir="auto">' + esc(jcDestLabel(it)) + '</span></a>';
   }).join("");
+  /* RM: a renamed section may take two lines — the page keeps clear of the bar's real height, re-measured
+     whenever the bar changes size (fonts loading, rotation, text zoom) (review M3) */
+  /* A label that still needs a third line (a wide font, e.g. some Arabic fonts) gets smaller text instead of
+     being cut off (CI WebKit, 2026-11-11). Measured, so it adapts to whatever font the phone has. */
+  var fit = function(){
+    Array.prototype.forEach.call(nav.querySelectorAll("a span"), function(s){
+      s.classList.remove("tight");
+      if (s.scrollHeight > s.clientHeight + 1) s.classList.add("tight");
+    });
+    document.body.style.paddingBottom = Math.max(nav.offsetHeight, 60) + "px";
+  };
+  fit();
+  if (!nav.jcFit && window.ResizeObserver) { nav.jcFit = new ResizeObserver(fit); nav.jcFit.observe(nav); }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);   /* a late font can need a 3rd line without resizing the bar */
   jcBanner(cfg);
   var back = el("jcBackBtn");                 /* language switch: the back label follows (review) */
   if (back) back.setAttribute("aria-label", jcT(back.dataset.key));
@@ -255,8 +273,10 @@ function jcHelpOpen(key){
     if (t === k) break;
     items.push("<li>" + esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>") + "</li>");
   }
-  d.setAttribute("aria-label", jcT("help_" + key + "_title"));
-  d.innerHTML = '<div class="sheethead"><h2>' + esc(jcT("help_" + key + "_title")) + '</h2>' +
+  /* RM: the Events / Courts sheets are titled with the section's own name */
+  var head = key === "events" ? jcModName("events") : key === "courts" ? jcModName("bookings") : jcT("help_" + key + "_title");   /* RM-ok */
+  d.setAttribute("aria-label", head);
+  d.innerHTML = '<div class="sheethead"><h2 dir="auto">' + esc(head) + '</h2>' +
     '<button type="button" class="lang" id="jcHelpClose">' + esc(jcT("close")) + '</button></div>' +
     '<ul class="helplist">' + items.join("") + '</ul>';
   el("jcHelpClose").addEventListener("click", function(){ jcHelpClose(d); });

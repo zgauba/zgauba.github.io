@@ -77,7 +77,7 @@ test("module off → explained, no blank page", async ({ page }) => {
   await stubBackend(page, { rpc: { jc_events_list: () => raise("MODULE_OFF") } });
   await signIn(page);
   await page.goto("events/");
-  await expect(page.locator("#msg")).toHaveText("Events aren't open yet in your community.");
+  await expect(page.locator("#msg")).toHaveText("This section isn't open yet in your community.");   // RM Q1: name-free
 });
 
 test("detail: map pins only pinned homes; list groups by village, search, unpinned flagged", async ({ page }) => {
