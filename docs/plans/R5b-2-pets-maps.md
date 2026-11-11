@@ -1,6 +1,6 @@
 # R5b-2 — Pets: maps, location pin, pet page tabs, badges — plan (`/plan-change`, 2026-11-11)
 
-> Status: **DRAFT, for Zee's approval.** Source: Zee's phone review of R5b-1 on `e2e` (2026-11-11):
+> Status: **approved 2026-11-11 (#93); runs after home-hiding removal and R5c photos (Zee 2026-11-11).** Source: Zee's phone review of R5b-1 on `e2e` (2026-11-11):
 > "fun badges … pet vs Pet & Wanderer and Strays"; "'Add where I am now' → 'Add Location Pin' — a map in the modal with
 > the person's current location, adjustable before saving"; "sightings should show a mini map with pin"; "the pet
 > details page should have a sub-menu … learn the design language from previous module pages"; missing pets on the
