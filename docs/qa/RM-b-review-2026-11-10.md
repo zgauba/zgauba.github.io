@@ -38,14 +38,16 @@ Reviewer: `code-reviewer` (static). Carries RM-a security SEC-I3 (escape everywh
 | 8 | Low | Cache guard needs an id on both sides | **Accepted** — same as `jc_name`; test added: another community's cached names never show |
 | 9 | Low | Save buttons look enabled while a save is in flight after a language switch | **Fixed** — rendered disabled while `mnBusy` |
 | 10 | Info | No tests for NOT_ADMIN on save / cross-community cache | **Fixed** — both added |
-| 11 | Medium | CI `e2e-webkit` (Linux, non-blocking lane; missed in the first PR report — 2026-11-11): the 18-char AR Courts name "ملاعب الجبيل الأول" needed 3 lines in that machine's wider Arabic font and was clamped to "ملاعب الجبيل…". Passed on Chromium CI and macOS WebKit | **Fixed** — `nav.js` `fit()` gives a label the `tight` class (9.5 px instead of 11 px) only when it would be cut off; measured, so it follows whatever font the phone has; also re-runs on `document.fonts.ready`. Test "a label that would be cut off gets smaller text instead (wide font)" simulates a wider font (word-spacing); mutation-checked: fails in both browsers without the fix |
+| 11 | Medium | CI `e2e-webkit` (Linux, non-blocking lane; missed in the first PR report — 2026-11-11): the 18-char AR Courts name "ملاعب الجبيل الأول" needed 3 lines in that machine's wider Arabic font and was clamped to "ملاعب الجبيل…". Passed on Chromium CI and macOS WebKit | **Fixed** — `nav.js` `fit()` gives a label the `tight` class only when it would be cut off: 9.5 px instead of 11 px, and up to 3 lines (CI showed 9.5 px alone wasn't enough: that font puts each word on its own line). Measured, so it follows whatever font the phone has; re-runs on `document.fonts.ready`. The bar grows ~8 px only then; the page padding follows. Test "a label that would be cut off gets smaller text instead (wide font)" forces one word per line (word-spacing); mutation-checked both halves (no smaller text / no 3rd line → fails in both browsers). The bar-fit test allows 3 lines only for a shrunk label |
 
 ### Re-run after finding 11 (2026-11-11)
 
 | Run | Result |
 |---|---|
-| Full e2e, Chromium + WebKit (macOS) | 1061 passed, 1 failed — `courts.spec.js:271` "a failed Private switch…" on WebKit |
-| That courts test on the branch **without** this fix, WebKit ×5 | 2 failed / 3 passed → pre-existing WebKit flake, not caused by RM-b's fix; tracked in the backlog |
+| Full e2e, Chromium + WebKit (macOS), 9.5 px only | 1061 passed, 1 failed — `courts.spec.js:271` "a failed Private switch…" on WebKit |
+| CI `e2e-webkit` (Linux), 9.5 px only | AR Courts name still cut off → 3rd line added; also 3 `courts.spec.js` flakes (271, 475, 589: "navigation interrupted") |
+| Full e2e, Chromium + WebKit (macOS), final | **1062 passed** |
+| That courts test on the branch **without** this fix, WebKit ×5 | 2 failed / 3 passed → pre-existing WebKit flake, not caused by RM-b's fix; the WebKit lane also fails intermittently on other branches (`fix/slot-mine-blue`); tracked in the backlog |
 
 ## Open before launch
 

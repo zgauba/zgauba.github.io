@@ -143,7 +143,7 @@ for (const [lang, names] of [
     const m = await page.locator("#tabbar a").evaluateAll((as) => as.map((a) => {
       const s = a.querySelector("span"), r = s.getBoundingClientRect(), ar = a.getBoundingClientRect();
       const lh = parseFloat(getComputedStyle(s).lineHeight) || 13.2;
-      return { t: s.textContent, lines: Math.round(r.height / lh),
+      return { t: s.textContent, lines: Math.round(r.height / lh), tight: s.classList.contains("tight"),
                spill: r.left < ar.left - 0.5 || r.right > ar.right + 0.5 || s.scrollWidth > s.clientWidth + 1 || s.scrollHeight > s.clientHeight + 1,
                off: ar.left < -0.5 || ar.right > 360.5 };   // pushed off a 360 px screen (innerWidth grows with the overflow)
     }));
@@ -153,13 +153,14 @@ for (const [lang, names] of [
     for (const x of m) {
       expect(x.spill, `"${x.t}" spills out of its button`).toBe(false);
       expect(x.off, `"${x.t}" is pushed off the screen`).toBe(false);
-      expect(x.lines, `"${x.t}" takes ${x.lines} lines`).toBeLessThanOrEqual(2);
+      expect(x.lines, `"${x.t}" takes ${x.lines} lines`).toBeLessThanOrEqual(x.tight ? 3 : 2);   // a shrunk label may take a 3rd
     }
   });
 }
 
 // A wider font than ours (CI's Linux WebKit Arabic font cut "ملاعب الجبيل الأول" to "ملاعب الجبيل…"):
-// simulated with letter-spacing. The label that would need a 3rd line gets smaller text; the others don't.
+// simulated with wide word gaps (one word per line). That label gets smaller text and a 3rd line instead of being
+// cut off; the others keep their size; the page still keeps clear of the (taller) bar.
 test("a label that would be cut off gets smaller text instead (wide font)", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   const labels = { events: { name: { en: "Events2", ar: "فعاليات جبيل كلها" } }, bookings: { name: { en: "Courts2", ar: "ملاعب الجبيل الأول" } } };
@@ -170,7 +171,7 @@ test("a label that would be cut off gets smaller text instead (wide font)", asyn
   await stubBackend(page, { rpc: b.rpc });
   await page.route("**/assets/tabbar.css", async (route) => {
     const r = await route.fetch();
-    await route.fulfill({ response: r, body: (await r.text()) + "\n.tabbar a span{word-spacing:6px}" });
+    await route.fulfill({ response: r, body: (await r.text()) + "\n.tabbar a span{word-spacing:40px}" });
   });
   await page.addInitScript(() => localStorage.setItem("jc_lang", "ar"));
   await signIn(page);
@@ -182,6 +183,8 @@ test("a label that would be cut off gets smaller text instead (wide font)", asyn
   expect(courts.tight, "the long Courts name is shrunk").toBe(true);
   expect(courts.cut, "the long Courts name is not cut off").toBe(false);
   expect(m.find((x) => x.t === "التنظيم" || x.t === "منزلي").tight, "short labels keep their size").toBe(false);
+  const pad = await page.evaluate(() => [parseFloat(getComputedStyle(document.body).paddingBottom), document.getElementById("tabbar").offsetHeight]);
+  expect(pad[0], "the page keeps clear of the taller bar").toBeGreaterThanOrEqual(pad[1]);
 });
 
 // ---------- Organizer Tools → Community → Section Names ----------

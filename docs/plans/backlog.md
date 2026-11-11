@@ -97,8 +97,10 @@ Last groomed: 2026-11-02
 - [ ] 2026-11-10 (RM-a security L1) **`jc_assert_admin` cross-community filter**: the code-grant lookup doesn't check
       `g.community_id = v_comm`. Latent while an account belongs to one community; fix in its own migration + test before
       any multi-community account (super-admin track).
-- [ ] 2026-11-11 **Flaky WebKit test**: `courts.spec.js:271` "a failed Private switch puts the tick back and says why" fails
-      ~2 in 5 on WebKit (macOS), independent of RM-b. Find the race (likely the tick restored before/after a re-render).
+- [ ] 2026-11-11 **Flaky WebKit lane**: `courts.spec.js:271` "a failed Private switch puts the tick back and says why" fails
+      ~2 in 5 on WebKit (macOS), independent of RM-b; on CI Linux WebKit also `courts.spec.js:475` / `:589` ("navigation
+      interrupted by another navigation to /commons/home/"). The lane is non-blocking, so flakes hide real findings (RM-b
+      finding 11 was nearly missed). Fix the races, then make the lane blocking.
 - [ ] 2026-11-10 "**What's On in Abu Dhabi**" off-island events calendar — blocked on who keeps it updated.
 - [ ] 2026-11-10 **Resident submissions for events** (separate from Neighbourhood Edit recommendations).
 - [ ] 2026-11-09 (R4c security L5) **"No third parties" vs map tiles**: map pages fetch tiles from OpenStreetMap / Esri (IP + tile coordinates). Soften `join_privacy` ("map tiles load from OpenStreetMap / Esri") or self-host tiles. Pre-launch.
