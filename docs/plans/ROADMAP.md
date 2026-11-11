@@ -173,6 +173,12 @@ Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas 
   moderation and the contact-person (PII) question are settled. Needs its own `/plan-change`.
 - **"Hidden homes stay hidden" above is void** — home hiding is being removed (`docs/plans/HH-remove-home-hiding.md`).
 
+### Light mode  ·  fast follower (Zee 2026-11-11)
+- The light palette already exists in `tokens.css` (`[data-theme="light"]`, contrast-checked); every page pins
+  `color-scheme: dark` today. Follow the phone's setting (`prefers-color-scheme`), every screen checked in both, map
+  tiles and event looks included. After R5b-2.
+- Kept on purpose: the blue "you are here" dot (Zee 2026-11-11 — the convention people recognise), tokenised in R5b-2a.
+
 ### R7 — Launch prep (not features)
 - **Retire the shared `events` organizer code** (Step C, parked until testing is done) → per-event admins only.
 - **Retire the Halloween site** into Commons (`jubail-halloween/` stays at its URL forever — a pointer page).
