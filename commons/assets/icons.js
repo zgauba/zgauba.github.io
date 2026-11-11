@@ -20,9 +20,12 @@ var JC_ICONS = {
     '<circle cx="36" cy="60" r="9.14"/><circle cx="60" cy="60" r="9.14"/><circle cx="84" cy="60" r="9.14"/>' +
     '<circle cx="108" cy="60" r="9.14"/><circle cx="12" cy="84" r="9.14"/><circle cx="108" cy="84" r="9.14"/>' +
     '<circle cx="12" cy="108" r="9.14"/><circle cx="60" cy="108" r="9.14"/><circle cx="108" cy="108" r="9.14"/>' },
-  pets: { vb: "24.29 14.86 71.43 71.43", body:
-    '<circle cx="30" cy="40" r="5.71"/><circle cx="48" cy="22" r="5.71"/><circle cx="72" cy="22" r="5.71"/>' +
-    '<circle cx="90" cy="40" r="5.71"/><circle cx="60" cy="74" r="10.86"/>' },
+  /* The paw is the one exception to the 8% dot rule (Zee 2026-11-11: "the current icon does not look like a paw
+     because of the spacing" — brand direction §03: toes close, pad tucked under). Drawn tight to its box at 8%, four
+     toes can only fill the width by spreading apart; here the toes are 10.5% of the side so they sit together. */
+  pets: { vb: "2 -5 76 76", body:
+    '<circle cx="10" cy="30" r="8"/><circle cx="28" cy="12" r="8"/><circle cx="52" cy="12" r="8"/>' +
+    '<circle cx="70" cy="30" r="8"/><circle cx="40" cy="46" r="16"/>' },
   /* the reduced cut of the Commons mark (brand.md: <24px / small UI) — stands for
      "a community" on the platform picker */
   mark: { vb: "3.95 3.95 88.1 88.1", body:

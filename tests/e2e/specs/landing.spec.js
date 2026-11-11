@@ -201,7 +201,8 @@ test("icons: every glyph's small dot is the same share of the icon", async ({ pa
     host.remove();
     return [k, d / w];
   }));
-  for (const [k, share] of dots) expect(share, k).toBeCloseTo(0.16, 2);       // diameter = 2 × 8%
+  // the paw is the stated exception (icons.js; Zee 2026-11-11): toes 10.5% so they sit together like a paw
+  for (const [k, share] of dots) expect(share, k).toBeCloseTo(k === "pets" ? 0.21 : 0.16, 2);   // diameter = 2 × 8%
 });
 
 test("the footer credit opens in its own tab", async ({ page }) => {
