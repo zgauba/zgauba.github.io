@@ -61,9 +61,11 @@ function kindText(p){ return jcT(p.kind === "owned" ? "pt_kind_owned" : communit
 /* the card's home has no type (villa / townhouse / apartment), so a neutral label — never a guessed "Villa" */
 function homeText(h){
   if (!hObj(h) || h.number == null) return "";
-  var n = jcFmt(h.building ? "pt_home_b" : "pt_home", { n: h.number, b: h.building });
+  /* the home's type (villa / townhouse / apartment) once the server sends it; a neutral "Home" before that */
+  var n = HOME_TYPES.indexOf(h.type) >= 0 ? jcHomeLabel(h) : jcFmt(h.building ? "pt_home_b" : "pt_home", { n: h.number, b: h.building });
   return [n, h.village ? jcVillageName(cfg, h.village) : ""].filter(Boolean).join(" · ");
 }
+var HOME_TYPES = ["villa", "townhouse", "apartment"];
 function myHomeText(){
   var h = state && state.me && state.me.home;
   return h ? [jcHomeLabel(h), jcVillageName(cfg, h.village)].filter(Boolean).join(" · ") : "";
@@ -73,6 +75,8 @@ function when(iso){ return typeof iso === "string" && !isNaN(Date.parse(iso)) ? 
 function sightOpen(p){ return p.missing === true || (p.kind === "stray" && p.care_state !== "rehomed"); }
 /* my own pet with no home on its card = my home is hidden from the directory (see the header) */
 function homeHidden(p){ return p.mine === true && (!hObj(p.home) || p.show_home === true); }
+/* an admin hid my home (residents can't): then "neighbors see your pet with your home" would be untrue — say nothing */
+function myHomeKnownHidden(){ return (pet && homeHidden(pet)) || (pets || []).some(function(p){ return isPet(p) && homeHidden(p); }); }
 function petUrl(p){ return location.origin + location.pathname + "?pet=" + encodeURIComponent(p.id); }
 function petById(id){ return (pets || []).filter(function(p){ return p.id === id; })[0]; }
 function matches(p){
@@ -335,11 +339,10 @@ function ownerHtml(p){
     }
     h += '<div class="acts"><button class="btn" type="button" id="ptFound"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcFmt("pt_found", { n: p.name })) + '</button></div>';
   } else {
-    h += '<div class="acts"><button class="btn danger-fill" type="button" id="ptMiss">' + esc(jcT("pt_miss")) + '</button></div>';
+    h += '<button class="btn danger-fill wide" type="button" id="ptMiss">' + esc(jcT("pt_miss")) + '</button>';
   }
-  /* not beside the red button while the missing sheet is open */
-  if (sheet !== "missing") h += '<div class="acts"><button class="btn ghost" type="button" id="ptEdit">' + esc(jcT("pt_edit")) + '</button>' +
-    '<button class="btn ghost danger" type="button" id="ptArchive"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcT("pt_archive")) + '</button></div>';
+  /* not beside the red button while the missing sheet is open; Remove is in the Edit form, away from the alarm */
+  if (sheet !== "missing") h += '<button class="btn ghost wide" type="button" id="ptEdit">' + esc(jcT("pt_edit")) + '</button>';
   return h + '</div>';
 }
 function sightHtml(p){
@@ -417,14 +420,8 @@ function wirePet(){
     var b = el(was === "sight" ? "ptSight" : "ptMiss"); if (b) b.focus(); });
   on("ptEdit", function(){
     sheet = null; sight = null; missDraft = null;       /* a half-typed sighting doesn't reopen after Edit (review L5) */
-    form = { id: p.id, species: p.species, name: p.name, description: p.description || "", wanderer: p.wanderer === true, microchipped: p.microchipped === true };
+    form = { id: p.id, was: p.name, species: p.species, name: p.name, description: p.description || "", wanderer: p.wanderer === true, microchipped: p.microchipped === true };
     show("edit");
-  });
-  on("ptArchive", function(){
-    if (!window.confirm(jcFmt("pt_archive_q", { n: p.name }))) return;
-    ptWrite(el("ptArchive"), function(){ return rpc("jc_pet_archive", { p_pet: p.id }); }, function(){
-      tab = "mine"; backToList(null, jcFmt("pt_archived", { n: p.name }));
-    });
   });
   /* the missing switch */
   on("ptMiss", function(){ sheet = "missing"; missDraft = { note: "", show: false }; draw(); var t = el("ptMissNote"); if (t) t.focus(); });
@@ -516,8 +513,11 @@ VIEWS.edit = function(){
     '<label class="check"><input type="checkbox" id="ptWand"' + (f.wanderer ? ' checked' : '') + '> <span>' + esc(jcT("pt_wanderer_q")) + '</span></label>' +
     '<p class="help">' + esc(jcT("pt_wanderer_help")) + '</p>' +
     '<label class="check"><input type="checkbox" id="ptChipIn"' + (f.microchipped ? ' checked' : '') + '> <span>' + esc(jcT("pt_chip_q")) + '</span></label>' +
-    '<p class="help">' + esc(jcFmt("pt_shown_with", { h: myHomeText() })) + '</p>' +
-    '<button class="btn" type="submit" id="ptSave"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcT("mh_save")) + '</button></form>';
+    (myHomeKnownHidden() ? '' : '<p class="help">' + esc(jcFmt("pt_shown_with", { h: myHomeText() })) + '</p>') +
+    '<button class="btn" type="submit" id="ptSave"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcT("mh_save")) + '</button></form>' +
+    (f.id ? '<div class="panel danger-zone"><p class="help">' + esc(jcFmt("pt_archive_help", { n: f.was })) + '</p>' +
+      '<button class="btn ghost danger" type="button" id="ptArchive"' + (ptBusy ? ' disabled' : '') + '>' +
+      esc(jcFmt("pt_archive_n", { n: f.was })) + '</button></div>' : '');
   el("ptName").value = f.name; el("ptDescIn").value = f.description;   /* values, not markup */
   el("ptName").addEventListener("input", function(){ f.name = el("ptName").value; });
   el("ptDescIn").addEventListener("input", function(){ f.description = el("ptDescIn").value; });
@@ -527,6 +527,15 @@ VIEWS.edit = function(){
     if (SPECIES.indexOf(b.dataset.sp) < 0) return;
     f.species = b.dataset.sp;
     Array.prototype.forEach.call(document.querySelectorAll("[data-sp]"), function(x){ x.setAttribute("aria-pressed", String(x === b)); });
+  });
+  if (el("ptArchive")) el("ptArchive").addEventListener("click", function(){
+    if (!window.confirm(jcFmt("pt_archive_q", { n: f.was }))) return;
+    ptWrite(el("ptArchive"), function(){ return rpc("jc_pet_archive", { p_pet: f.id }); }, function(){
+      form = null; tab = "mine"; backToList(null, jcFmt("pt_archived", { n: f.was }));
+    }, function(code){
+      if (code === "NOT_FOUND") { form = null; backToList("NOT_FOUND"); return true; }
+      return false;
+    });
   });
   el("ptForm").addEventListener("submit", function(e){
     e.preventDefault();

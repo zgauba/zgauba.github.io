@@ -282,6 +282,20 @@ begin
   if (select pets_group_link from jc_communities where id = 'testville21') is not null then raise exception 'FAIL R08m clear stored'; end if;
   k := k + 14;
 
+  -- ---------- R10 (R5b-1b) the home's type is on the card, and nothing else new ----------
+  execute 'set local role authenticated';
+  perform pg_temp.s21_as(ad);
+  v := jc_pet_save(null, '{"species": "cat", "name": "Tabby"}');
+  perform pg_temp.s21_as(o1);                                        -- a neighbor reads ad's (listed) home
+  v := jc_pet_get((v ->> 'id')::uuid);
+  if v -> 'home' ->> 'type' is distinct from 'villa' then raise exception 'FAIL R10a home type missing: %', v -> 'home'; end if;
+  if (select array_agg(k2 order by k2) from jsonb_object_keys(v -> 'home') k2) <> array['building', 'number', 'type', 'village'] then
+    raise exception 'FAIL R10b unexpected home keys: %', v -> 'home'; end if;
+  if (select count(*) from jsonb_array_elements(jc_pets_list('all')) e where e -> 'home' ->> 'type' = 'villa') < 1 then
+    raise exception 'FAIL R10c list cards lack the home type'; end if;
+  execute 'reset role';
+  k := k + 3;
+
   -- ---------- R09 the new RPCs: authenticated only ----------
   if has_function_privilege('anon', 'public.jc_pets_group_get()', 'execute')
      or has_function_privilege('anon', 'public.jc_admin_pets_group_set(text)', 'execute')

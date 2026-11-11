@@ -206,10 +206,11 @@ function namesBackend(opts = {}) {
   });
   return { st, rpc };
 }
-async function openNames(page) {
+async function openNames(page, sec) {
   await page.goto("admin/?tab=community");
   await page.locator("#mnOpen").click();
   await expect(page.locator("h1")).toHaveText("Section Names");
+  if (sec) await page.locator('[data-mnpick="' + sec + '"]').click();
 }
 
 test("community admin renames Courts: exact RPC, bar + tab follow at once, counter, Reset", async ({ page }) => {
@@ -217,7 +218,12 @@ test("community admin renames Courts: exact RPC, bar + tab follow at once, count
   const { calls } = await stubBackend(page, { rpc: b.rpc });
   await signIn(page);
   await openNames(page);
-  await expect(page.locator("form[data-mn]")).toHaveCount(4);
+  // first the list of sections (one long scroll was hard to use — Zee 2026-11-11); no boxes until one is picked
+  await expect(page.locator("[data-mnpick] .nm")).toHaveText(["Events", "Courts", "Pets", "The Community"]);
+  await expect(page.locator("[data-mnpick] .cur")).toHaveText(["Usual name", "Usual name", "Usual name", "Usual name"]);
+  await expect(page.locator("form[data-mn]")).toHaveCount(0);
+  await page.locator('[data-mnpick="bookings"]').click();
+  await expect(page.locator("form[data-mn]")).toHaveCount(1);
   const f = page.locator('form[data-mn="bookings"]');
   await expect(f.locator("[data-mnreset]")).toHaveCount(0);
   await expect(f.locator('[data-f="name_en"]')).toHaveAttribute("maxlength", "14");
@@ -231,6 +237,9 @@ test("community admin renames Courts: exact RPC, bar + tab follow at once, count
     { p_module: "bookings", p_name_en: "Sports", p_name_ar: "الرياضة", p_title_en: "", p_title_ar: "" });
   await expect(page.locator("#tabbar a[data-tab=bookings] span")).toHaveText("Sports");
   await expect(page.locator('form[data-mn="bookings"] [data-f="name_en"]')).toHaveValue("Sports");
+  await page.locator("#jcBackBtn").click();                                // back to the list, which shows the new name
+  await expect(page.locator('[data-mnpick="bookings"] .cur')).toHaveText("Sports");
+  await page.locator('[data-mnpick="bookings"]').click();
 
   await page.locator('form[data-mn="bookings"] [data-mnreset]').click();
   await expect(page.locator("#tabbar a[data-tab=bookings] span")).toHaveText("Courts");
@@ -243,7 +252,7 @@ test("a refused name says why and keeps what was typed; a language switch keeps 
   const b = namesBackend();
   await stubBackend(page, { rpc: b.rpc });
   await signIn(page);
-  await openNames(page);
+  await openNames(page, "pets");
   b.st.fail = "RESERVED_NAME";
   const f = () => page.locator('form[data-mn="pets"]');
   await f().locator('[data-f="name_en"]').fill("Account");
@@ -304,7 +313,7 @@ test("losing community admin mid-save: no stale editor, back to what this person
   const b = namesBackend();
   const { calls } = await stubBackend(page, { rpc: b.rpc });
   await signIn(page);
-  await openNames(page);
+  await openNames(page, "bookings");
   b.st.scopes = ["events"];
   const f = page.locator('form[data-mn="bookings"]');
   await f.locator('[data-f="name_en"]').fill("Sports");
@@ -315,24 +324,28 @@ test("losing community admin mid-save: no stale editor, back to what this person
   expect(calls.filter((c) => c.name === "jc_me_get").length).toBeGreaterThan(1);
 });
 
-test("Back while a save is in flight: the editor is not drawn over Organizer Tools", async ({ page }) => {
+test("Back while a save is in flight is ignored; then Back goes to the list, then Organizer Tools", async ({ page }) => {
   const b = namesBackend();
   let release;
   const inner = b.rpc.jc_admin_module_label_set;
   b.rpc.jc_admin_module_label_set = (a) => new Promise((r) => { release = () => r(inner(a)); });
   await stubBackend(page, { rpc: b.rpc });
   await signIn(page);
-  await openNames(page);
+  await openNames(page, "bookings");
   const f = page.locator('form[data-mn="bookings"]');
   await f.locator('[data-f="name_en"]').fill("Sports");
   await f.locator('[data-f="name_ar"]').fill("الرياضة");
   await f.getByRole("button", { name: "Save" }).click();
   await expect(f.getByRole("button", { name: "Save" })).toBeDisabled();
-  await page.locator("#jcBackBtn").click();
-  await expect(page.locator("h1")).toHaveText("Organizer Tools");
+  await page.locator("#jcBackBtn").click();                                // ignored while the save is in flight
+  await expect(f).toBeVisible();
   await expect.poll(() => typeof release).toBe("function");
   release();
-  await expect(page.locator("#tabbar a[data-tab=bookings] span")).toHaveText("Sports");   // the bar still follows
+  await expect(page.locator("#tabbar a[data-tab=bookings] span")).toHaveText("Sports");   // the bar follows
+  await expect(page.locator("#msg")).toHaveText("Saved. Everyone sees “Sports” the next time they open Commons.");
+  await page.locator("#jcBackBtn").click();                                // then: the list…
+  await expect(page.locator("[data-mnpick]")).toHaveCount(4);
+  await page.locator("#jcBackBtn").click();                                // …then Organizer Tools
   await expect(page.locator("h1")).toHaveText("Organizer Tools");
   await expect(page.locator("form[data-mn]")).toHaveCount(0);
 });

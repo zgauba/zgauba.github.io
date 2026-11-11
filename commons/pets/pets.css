@@ -62,3 +62,7 @@ h2.group{font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color
 .share .btn{flex:1 1 auto}
 fieldset{border:0; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
 legend{font-size:13px; font-weight:700; color:var(--jc-muted); margin-bottom:6px; padding:0}
+.btn.wide{width:100%}
+/* Remove sits apart from Save, at the bottom of the Edit form */
+.danger-zone{margin-top:12px; border-color:var(--jc-danger); display:flex; flex-direction:column; gap:10px}
+.danger-zone .btn{align-self:flex-start}

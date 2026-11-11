@@ -51,7 +51,7 @@ function backend(opts = {}) {
     return { id: p.id, kind: p.kind, species: p.species, name: p.name, description: p.description, wanderer: p.wanderer,
       microchipped: p.microchipped, missing: p.missing, missing_since: p.missing_since, last_seen_note: p.last_seen_note,
       care_state: p.care_state, photo_path: p.photo_path, mine,
-      home: h && (!h.hidden || (p.missing && p.show_home)) ? { village: h.village, building: h.building, number: h.number } : null,
+      home: h && (!h.hidden || (p.missing && p.show_home)) ? { village: h.village, type: h.type, building: h.building, number: h.number } : null,   // type: R5b-1b server (absent = older server)
       show_home: mine ? p.show_home : null,
       territory: p.territory, territory_lat: p.territory_lat, territory_lng: p.territory_lng, care: p.kind === "stray" ? p.care : null };
   };
@@ -316,12 +316,48 @@ test("My Pets: add (exact fields), then edit, then remove; the pet opens after a
   await expect(page.locator("#msg")).toHaveText("Saved.");
   expect(lastCall(calls, "jc_pet_save").args).toEqual({ p_pet: id,
     p_fields: { species: "dog", name: "Pepper", description: "Black lab, red collar", wanderer: true, microchipped: true } });
+  await expect(page.locator("#ptArchive")).toHaveCount(0);               // not on the pet page — it's in Edit, away from the alarm
+  await page.locator("#ptEdit").click();
+  await expect(page.locator("#ptArchive")).toHaveText("Remove Pepper from the directory");
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/pt-edit.png", fullPage: true });
   page.once("dialog", (d) => { expect(d.message()).toBe("Remove Pepper from the directory? This can't be undone."); d.accept(); });
   await page.locator("#ptArchive").click();
   await expect(page.locator("#msg")).toHaveText("Pepper was removed from the directory.");
   expect(lastCall(calls, "jc_pet_archive").args).toEqual({ p_pet: id });
   await expect(page.locator("#pttab-mine")).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#ptMine b")).toHaveText(["Mochi"]);
+});
+
+test("Remove is only in Edit (never on Add, never on the pet page); the home's type shows once the server sends it", async ({ page }) => {
+  const b = backend({ extra: [{ id: ID(8), kind: "owned", species: "dog", name: "Bolt", home: { id: "h8", village: "ain-al-maha", type: "townhouse", building: null, number: "7" } },
+                              { id: ID(9), kind: "owned", species: "cat", name: "Zuzu", home: { id: "h9", village: "ain-al-maha", type: "apartment", building: "B2", number: "304" } }] });
+  await open(page, b, { q: "?tab=mine" });
+  await page.locator("#ptAdd").click();
+  await expect(page.locator("#ptSave")).toBeVisible();
+  await expect(page.locator("#ptArchive")).toHaveCount(0);
+  await page.goto("pets/?pet=" + ID(6));
+  await expect(page.locator("#ptEdit")).toHaveText("Edit details");
+  await expect(page.locator("#ptOwner .btn")).toHaveText(["Report as missing", "Edit details"]);
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/pt-owner-buttons.png", fullPage: true });
+  await page.goto("pets/?pet=" + ID(8));
+  await expect(page.locator("#ptFacts")).toContainText("Townhouse 7 · Ain Al Maha");
+  await page.goto("pets/?pet=" + ID(9));
+  await expect(page.locator("#ptFacts")).toContainText("Apt 304, B2 · Ain Al Maha");
+});
+
+test("the Edit form says neighbors see my home only when it isn't hidden (residents can't hide it — no such option offered)", async ({ page }) => {
+  const b = backend();
+  await open(page, b, { q: "?pet=" + ID(6) });
+  await page.locator("#ptEdit").click();
+  await expect(page.locator("#ptForm")).toContainText("Neighbors see your pet with your home (Villa 12 · Ain Al Maha).");
+  await expect(page.locator("#ptForm")).not.toContainText("hidden");
+});
+
+test("…and an admin-hidden home: the Edit form says nothing about neighbors seeing it", async ({ page }) => {
+  await open(page, backend({ myHomeHidden: true }), { q: "?pet=" + ID(6) });
+  await page.locator("#ptEdit").click();
+  await expect(page.locator("#ptName")).toHaveValue("Mochi");
+  await expect(page.locator("#ptForm")).not.toContainText("Neighbors see your pet");
 });
 
 test("missing switch, home in the directory: no show-home choice; one call; the alarm is up; Found takes it down", async ({ page }) => {
@@ -438,6 +474,7 @@ test("a late list answer after Remove never puts its message on the pet opened m
   const b = backend();
   await open(page, b, { q: "?pet=" + ID(6) });
   await expect(page.locator("h1")).toHaveText("Mochi");
+  await page.locator("#ptEdit").click();
   const g = gate(); b.st.hold.jc_pets_list = g.p;
   page.once("dialog", (d) => d.accept());
   await page.locator("#ptArchive").click();
@@ -455,6 +492,7 @@ test("in-page: list still loading, a pet opened → the late list answer stays o
   await open(page, b);
   await expect(page.locator("#ptList")).toBeVisible();
   await page.locator('[data-open="' + ID(6) + '"]').click();
+  await page.locator("#ptEdit").click();
   await expect(page.locator("#ptArchive")).toBeVisible();
   const g = gate(); b.st.hold.jc_pets_list = g.p;
   page.once("dialog", (d) => d.accept());
