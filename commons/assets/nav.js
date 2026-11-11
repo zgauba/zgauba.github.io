@@ -2,7 +2,7 @@
    A REGISTRY of destinations; each is offered only while available, re-checked on EVERY render
    against the live config the page just loaded (a module flag is the compliance kill switch):
    - a module destination needs its flag on AND its page to exist (page: false = not built yet;
-     bookings/ shipped in R4c);
+     bookings/ shipped in R4c, pets/ in R5b-1);
    - Organizer Tools needs some admin role (any admin scope, an event, or owner). Display only:
      every admin RPC is still gated by the server.
    My Home is never stored and never filtered: it is always the last button. */
@@ -10,7 +10,7 @@ var JC_DEST = [
   { key: "commons",   path: "",           icon: "mark",      label: "tab_home",         auto: true },
   { key: "events",    path: "events/",    icon: "events",    label: "module_events",    auto: true, module: "events",   page: true },
   { key: "bookings",  path: "bookings/",  icon: "bookings",  label: "module_bookings",  auto: true, module: "bookings", page: true },
-  { key: "pets",      path: "pets/",      icon: "pets",      label: "feat_pets",        auto: true, module: "pets",     page: false },
+  { key: "pets",      path: "pets/",      icon: "pets",      label: "feat_pets",        auto: true, module: "pets",     page: true },
   { key: "community", path: "community/", icon: "community", label: "module_community", auto: true,                     page: false },
   { key: "admin",     path: "admin/",     icon: "tools",     label: "tab_admin",        admin: true }
 ];
@@ -273,8 +273,8 @@ function jcHelpOpen(key){
     if (t === k) break;
     items.push("<li>" + esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>") + "</li>");
   }
-  /* RM: the Events / Courts sheets are titled with the section's own name */
-  var head = key === "events" ? jcModName("events") : key === "courts" ? jcModName("bookings") : jcT("help_" + key + "_title");   /* RM-ok */
+  /* RM: the Events / Courts / Pets sheets are titled with the section's own name */
+  var head = key === "events" ? jcModName("events") : key === "courts" ? jcModName("bookings") : key === "pets" ? jcModName("pets") : jcT("help_" + key + "_title");   /* RM-ok */
   d.setAttribute("aria-label", head);
   d.innerHTML = '<div class="sheethead"><h2 dir="auto">' + esc(head) + '</h2>' +
     '<button type="button" class="lang" id="jcHelpClose">' + esc(jcT("close")) + '</button></div>' +

@@ -186,6 +186,9 @@ var VIEWS = {
             '<button class="btn ghost" type="button" id="toPin">' + esc(jcT(h.pin_set_at ? "mh_pin_btn" : "mh_pin_add")) + '</button>' +
             (members.length <= 1 ? '<button class="btn ghost" type="button" id="toEdit">' + esc(jcT("mh_fix")) + '</button>' : '') +
           '</div>' +
+          /* R5b-1 (Zee Q7): the home's pets, one tap from My Home — only while Pets is open here */
+          (jcDestOk("pets", m, cfg) ? '<div class="row"><a class="btn ghost" id="toPets" href="../pets/?tab=mine">' +
+            jcIcon("pets", 18) + '<span dir="auto">' + esc(jcT("mh_my_pets")) + '</span>'  + '</a></div>' : '') +
         '</div>' +
         '<div class="section" id="historySec" hidden><h2>' + esc(jcT("mh_history")) + '</h2><div class="panel" id="history"></div></div>';
     }

@@ -1,0 +1,64 @@
+/* R5b-1 — Pets (residents). Same shell and list look as bookings/ (copied: pages carry their own CSS). */
+main{display:flex; flex-direction:column; gap:12px}
+#view{display:flex; flex-direction:column; gap:12px}
+#view > h1, #view > p, #view > .subtabs{margin:0}
+#view > .subtabs + .msg{margin-top:-4px}
+[role="tabpanel"]{display:flex; flex-direction:column; gap:12px}
+h2.group{font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--jc-muted); margin:10px 0 0}
+.notice{margin:0; padding:10px 12px; border-radius:10px; border:1px solid var(--jc-accent); background:var(--jc-surface); font-size:13.5px; line-height:1.4}
+.row{display:flex; gap:8px; flex-wrap:wrap}
+.row .btn{flex:1}
+.mini{font:inherit; font-size:13px; font-weight:700; cursor:pointer; color:var(--jc-ink); background:var(--jc-surface);
+  border:1px solid var(--jc-line); border-radius:8px; padding:7px 12px; min-height:36px}
+.mini:disabled{opacity:.5; cursor:default}
+.chip{display:inline-block; font-size:11.5px; line-height:1.5; border:1px solid var(--jc-line); border-radius:999px; padding:0 8px; color:var(--jc-muted)}
+.chip.miss{border-color:var(--jc-danger); color:var(--jc-danger); font-weight:700}
+.bklist{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px}
+.bklist li{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius); padding:12px 14px;
+  display:flex; flex-direction:column; gap:6px; font-size:14px; overflow-wrap:anywhere}
+.bklist li.missing{border-color:var(--jc-danger)}
+.bklist b{font-size:15px}
+.bklist .meta{color:var(--jc-muted); font-size:13px}
+.bklist .acts, .acts{display:flex; flex-wrap:wrap; gap:8px; align-items:center}
+.head{display:flex; flex-wrap:wrap; align-items:center; gap:6px}
+.pthead{display:flex; align-items:center; gap:8px; min-width:0}
+.pthead .ico{color:var(--jc-accent); flex:0 0 auto}
+.pthead h1{margin:0; overflow-wrap:anywhere}
+.pthero{display:flex; flex-direction:column; gap:6px}
+.pthero .meta{margin:0; color:var(--jc-muted); font-size:14px}
+/* the filter row: one choice at a time, wraps on a phone */
+.filters, .opts{display:flex; flex-wrap:wrap; gap:6px}
+.filters button, .opts button{font:inherit; font-size:14px; cursor:pointer; color:var(--jc-ink); background:var(--jc-surface);
+  border:1px solid var(--jc-line); border-radius:var(--jc-radius-pill); padding:7px 14px; min-height:40px}
+.filters button[aria-pressed="true"], .opts button[aria-pressed="true"]{border-color:var(--jc-accent); box-shadow:inset 0 0 0 1px var(--jc-accent)}
+/* the missing alarm on a pet's page */
+.alarm{border:2px solid var(--jc-danger); border-radius:var(--jc-radius); padding:12px 14px; background:var(--jc-surface)}
+.alarm b{color:var(--jc-danger)}
+.alarm p{margin:6px 0 0; font-size:14px}
+.btn.danger-fill{background:var(--jc-danger); color:#2d0808}
+.btn.ghost.danger{color:var(--jc-danger); border-color:var(--jc-danger)}
+.facts{display:grid; grid-template-columns:auto 1fr; gap:6px 14px; margin:0; font-size:14px}
+.facts dt{color:var(--jc-muted); font-weight:700}
+.facts dd{margin:0; overflow-wrap:anywhere}
+.desc{margin:0; font-size:14.5px; line-height:1.45; overflow-wrap:anywhere}
+.care{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
+.care li{display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline; background:var(--jc-surface); border:1px solid var(--jc-line);
+  border-radius:10px; padding:8px 12px; font-size:14px}
+.care .nm{font-weight:700; flex:1 1 auto}
+.care .st{font-size:13px; color:var(--jc-muted)}
+.care .st-done{color:var(--jc-good)}
+.care .st-due{color:var(--jc-warn)}
+.care .note{flex-basis:100%; color:var(--jc-muted); font-size:13px}
+.panel textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-surface-2); border:1px solid var(--jc-line);
+  border-radius:10px; padding:10px 12px; width:100%; min-height:80px; resize:vertical}
+.panel p{margin:0}
+.check{flex-direction:row; align-items:center; gap:8px; font-weight:600; color:var(--jc-ink); font-size:14px}
+.check input{width:20px; height:20px; flex:0 0 auto}
+.status{font-size:13.5px; margin:0; display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.status.ok{color:var(--jc-good)}
+.share{display:flex; flex-direction:column; gap:8px}
+.wamsg{margin:0; padding:10px 12px; border:1px dashed var(--jc-line); border-radius:10px; background:var(--jc-surface-2);
+  font-size:13.5px; overflow-wrap:anywhere; user-select:all}
+.share .btn{flex:1 1 auto}
+fieldset{border:0; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
+legend{font-size:13px; font-weight:700; color:var(--jc-muted); margin-bottom:6px; padding:0}

@@ -51,3 +51,7 @@ legend{font-size:13px; font-weight:700; color:var(--jc-muted); margin-bottom:6px
 .starts input[type=radio]{width:20px; height:20px; accent-color:var(--jc-accent); margin:0}
 .install summary{cursor:pointer; font-weight:700; color:var(--jc-accent); min-height:44px; display:flex; align-items:center}
 .install .helplist{font-size:14px}
+
+/* R5b-1: My Pets link (icon + label) */
+#toPets{display:flex; align-items:center; justify-content:center; gap:8px}
+#toPets .ico{color:var(--jc-accent)}

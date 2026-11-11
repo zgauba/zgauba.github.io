@@ -72,7 +72,12 @@ Last groomed: 2026-11-02
 - [ ] Per-event safety info block (static: security number + agreed meeting
       point; stores nothing).
 - [ ] Pet directory (concept canvas exists): owned / community / stray-under-care
-      boards, care record, missing toggle; passcode-gated; no donations. → ROADMAP R5 (R5a done 2026-11-10).
+      boards, care record, missing toggle; passcode-gated; no donations. → ROADMAP R5 (R5a done 2026-11-10; R5b-1 residents 2026-11-11; next R5b-2 Map, R5c photos, R5d Organizer Tools).
+- [ ] 2026-11-11 (R5b-1) **Pet card's home has no type**: `jc_pet_card` sends `{village, building, number}` only, so the
+      Pets page shows a neutral "Home 12" instead of "Villa 12" / "Townhouse 7" / "Apt 304, B2" (a guessed "Villa" would
+      be wrong for apartments). Fix: add `type` to the card in a small follow-up migration, then use `jcHomeLabel`.
+- [ ] 2026-11-11 (R5b-1) **Native-speaker review: ~130 new AR Pets strings** (`pt_*`, `help_pets_*`, `help_pet_*`,
+      `mh_my_pets`, marked DRAFT in `strings.js`). Pre-launch, together with RM-b's 19 section-name strings.
 - [ ] Haq Al Laila event theme (~Sat Jan 23, 2027 ±1 day): indigo/gold lantern
       palette; native-speaker review before launch.
 - [ ] December holiday-lights map re-skin (idea).

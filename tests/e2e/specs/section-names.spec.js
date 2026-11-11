@@ -24,7 +24,7 @@ test("no screen reads a built-in section name except through jcModName / jcModTi
     if (fs.statSync(p).isDirectory()) { if (f !== "vendor") walk(p); }
     else if (p.endsWith(".js") && !/assets\/(api|strings)\.js$/.test(p)) files.push(p);
   } })(root);
-  const bad = /jcT\("(module_(events|bookings|pets|community)|ev_title|feat_pets|adm_tab_(events|courts)|scope_(events|bookings|pets)|adm_ad_scope_(bookings|pets)|help_(events|courts)_title)"\)/;
+  const bad = /jcT\("(module_(events|bookings|pets|community)|ev_title|feat_pets|adm_tab_(events|courts)|scope_(events|bookings|pets)|adm_ad_scope_(bookings|pets)|help_(events|courts|pets)_title)"\)/;
   // the concatenated / registry forms too — allowed only on lines marked RM-ok (the deliberate fallbacks)
   const bad2 = /jcT\("(scope_|adm_tab_|adm_ad_scope_)" \+|jcT\("help_" \+ \w+ \+ "_title"\)|jcT\(\w+\.label\)|jcT\(jcDest\(/;
   const hits = files.flatMap((p) => fs.readFileSync(p, "utf8").split("\n")
@@ -50,7 +50,7 @@ test("nothing renamed: today's labels everywhere; Pets is generic", async ({ pag
   const b = residentBackend({ modules: Object.assign({}, ON, { pets: { enabled: true } }) });
   await stubBackend(page, { rpc: b.rpc });
   await signIn(page);
-  await expect.poll(() => barLabels(page)).toEqual(["Commons", "Events", "Courts", "My Home"]);
+  await expect.poll(() => barLabels(page)).toEqual(["Commons", "Events", "Courts", "Pets", "My Home"]);   // Pets has a page since R5b-1
   await expect(page.locator("#cards h2")).toHaveText(["Events", "Courts", "Pets", "The Community"]);
 });
 

@@ -141,8 +141,10 @@ test("tab bar shows a module only when its flag is on", async ({ page }) => {
   await stubBackend(page, { rpc: Object.assign(hb.rpc, { jc_config_get: () => ok(Object.assign({}, CONFIG, {
     modules: { events: { enabled: true }, bookings: { enabled: false }, pets: { enabled: true } } })) }) });
   await signIn(page);
-  await expect(page.locator("#tabbar a")).toHaveCount(3);
+  await expect(page.locator("#tabbar a")).toHaveCount(4);                       // Commons · Events · Pets (R5b-1) · My Home
   await expect(page.locator('#tabbar a[data-tab="events"]')).toHaveAttribute("href", "events/");
+  await expect(page.locator('#tabbar a[data-tab="pets"]')).toHaveAttribute("href", "pets/");
+  await expect(page.locator('#tabbar a[data-tab="bookings"]')).toHaveCount(0);
   await expect(page.locator(".tagline")).toHaveText("Welcome, Villa 12");
 });
 
