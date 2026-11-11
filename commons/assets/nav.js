@@ -106,9 +106,18 @@ function jcTabBar(root, active, cfg){
   }).join("");
   /* RM: a renamed section may take two lines — the page keeps clear of the bar's real height, re-measured
      whenever the bar changes size (fonts loading, rotation, text zoom) (review M3) */
-  var fit = function(){ document.body.style.paddingBottom = Math.max(nav.offsetHeight, 60) + "px"; };
+  /* A label that still needs a third line (a wide font, e.g. some Arabic fonts) gets smaller text instead of
+     being cut off (CI WebKit, 2026-11-11). Measured, so it adapts to whatever font the phone has. */
+  var fit = function(){
+    Array.prototype.forEach.call(nav.querySelectorAll("a span"), function(s){
+      s.classList.remove("tight");
+      if (s.scrollHeight > s.clientHeight + 1) s.classList.add("tight");
+    });
+    document.body.style.paddingBottom = Math.max(nav.offsetHeight, 60) + "px";
+  };
   fit();
   if (!nav.jcFit && window.ResizeObserver) { nav.jcFit = new ResizeObserver(fit); nav.jcFit.observe(nav); }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);   /* a late font can need a 3rd line without resizing the bar */
   jcBanner(cfg);
   var back = el("jcBackBtn");                 /* language switch: the back label follows (review) */
   if (back) back.setAttribute("aria-label", jcT(back.dataset.key));

@@ -13,6 +13,7 @@ body.has-tabbar{padding-bottom:calc(60px + env(safe-area-inset-bottom))}
 .tabbar a{min-width:0}
 .tabbar a span{max-width:100%; text-align:center; overflow-wrap:anywhere;
   display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden}
+.tabbar a span.tight{font-size:9.5px}   /* set by nav.js only when the label would be cut off at 11px */
 .tabbar a .ico{color:var(--jc-muted)}
 .tabbar a[aria-current="page"]{color:var(--jc-ink); background:var(--jc-surface-2)}
 .tabbar a[aria-current="page"] .ico{color:var(--jc-accent)}

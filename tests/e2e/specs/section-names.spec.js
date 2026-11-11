@@ -158,6 +158,32 @@ for (const [lang, names] of [
   });
 }
 
+// A wider font than ours (CI's Linux WebKit Arabic font cut "ملاعب الجبيل الأول" to "ملاعب الجبيل…"):
+// simulated with letter-spacing. The label that would need a 3rd line gets smaller text; the others don't.
+test("a label that would be cut off gets smaller text instead (wide font)", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  const labels = { events: { name: { en: "Events2", ar: "فعاليات جبيل كلها" } }, bookings: { name: { en: "Courts2", ar: "ملاعب الجبيل الأول" } } };
+  const me = Object.assign({}, MEMBER, { admin_scopes: ["community"],
+    account: Object.assign({}, MEMBER.account, { prefs: { shell: { v: 1, tabs: ["commons", "events", "bookings", "admin"], start: "commons", known: ["commons", "events", "bookings", "admin", "pets", "community"] } } }) });
+  const b = residentBackend({ labels });
+  b.rpc.jc_me_get = (a, c) => (c.signedIn ? ok(me) : raise("NOT_SIGNED_IN"));
+  await stubBackend(page, { rpc: b.rpc });
+  await page.route("**/assets/tabbar.css", async (route) => {
+    const r = await route.fetch();
+    await route.fulfill({ response: r, body: (await r.text()) + "\n.tabbar a span{word-spacing:6px}" });
+  });
+  await page.addInitScript(() => localStorage.setItem("jc_lang", "ar"));
+  await signIn(page);
+  await expect(page.locator("#tabbar a")).toHaveCount(5);
+  await page.evaluate(() => document.fonts.ready);
+  const m = await page.locator("#tabbar a span").evaluateAll((ss) => ss.map((s) => ({
+    t: s.textContent, tight: s.classList.contains("tight"), cut: s.scrollHeight > s.clientHeight + 1 })));
+  const courts = m.find((x) => x.t === "ملاعب الجبيل الأول");
+  expect(courts.tight, "the long Courts name is shrunk").toBe(true);
+  expect(courts.cut, "the long Courts name is not cut off").toBe(false);
+  expect(m.find((x) => x.t === "التنظيم" || x.t === "منزلي").tight, "short labels keep their size").toBe(false);
+});
+
 // ---------- Organizer Tools → Community → Section Names ----------
 function namesBackend(opts = {}) {
   const ab = adminBackend({ scopes: opts.scopes || ["community"] });

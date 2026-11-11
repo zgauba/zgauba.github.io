@@ -38,6 +38,14 @@ Reviewer: `code-reviewer` (static). Carries RM-a security SEC-I3 (escape everywh
 | 8 | Low | Cache guard needs an id on both sides | **Accepted** — same as `jc_name`; test added: another community's cached names never show |
 | 9 | Low | Save buttons look enabled while a save is in flight after a language switch | **Fixed** — rendered disabled while `mnBusy` |
 | 10 | Info | No tests for NOT_ADMIN on save / cross-community cache | **Fixed** — both added |
+| 11 | Medium | CI `e2e-webkit` (Linux, non-blocking lane; missed in the first PR report — 2026-11-11): the 18-char AR Courts name "ملاعب الجبيل الأول" needed 3 lines in that machine's wider Arabic font and was clamped to "ملاعب الجبيل…". Passed on Chromium CI and macOS WebKit | **Fixed** — `nav.js` `fit()` gives a label the `tight` class (9.5 px instead of 11 px) only when it would be cut off; measured, so it follows whatever font the phone has; also re-runs on `document.fonts.ready`. Test "a label that would be cut off gets smaller text instead (wide font)" simulates a wider font (word-spacing); mutation-checked: fails in both browsers without the fix |
+
+### Re-run after finding 11 (2026-11-11)
+
+| Run | Result |
+|---|---|
+| Full e2e, Chromium + WebKit (macOS) | 1061 passed, 1 failed — `courts.spec.js:271` "a failed Private switch…" on WebKit |
+| That courts test on the branch **without** this fix, WebKit ×5 | 2 failed / 3 passed → pre-existing WebKit flake, not caused by RM-b's fix; tracked in the backlog |
 
 ## Open before launch
 
