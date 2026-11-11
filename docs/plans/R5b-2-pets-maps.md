@@ -36,12 +36,16 @@ would break the consistency rule; (2) three pin pickers exist and none is shared
   (≈ 560 tests) + screenshots of every map before / after. Nothing should look different.
 
 ### R5b-2b — Pets on the kit
-1. **Badges** (sketch A): a coloured pill per kind, with the species glyph on the card —
-   **Pet** (accent) · **Pet · Wanderer** (info blue) · **Stray** (warn amber) · **Community animal** (good green) ·
-   **Missing** (danger red, always first). Same pill shape as `.soon` / `.badge`; tokens only (community themes keep
-   the signal colours locked). Shown on list cards and the pet page header.
+1. **Badges** (sketch A) — *corrected against the brand direction (2026-11-11)*: the four signal colours are
+   semantics, not decoration (teal = allergy-friendly, reserved; amber = warning; green = available), so **kind is
+   told by form, not hue**: a neutral pill with a dot-family glyph per kind — **Pet** (paw) · **Pet · Wanderer** (paw +
+   roaming dots) · **Stray** (open-ring pin) · **Community animal** (ring of dots, the mark's motif) — plus the species
+   emoji on the card for the fun. **Colour only for real states**: **Missing** = danger red (always first),
+   **Needs help** = warn amber. Shown on list cards and the pet page header.
 2. **Pet page tabs** (sketch B), like the event page: header (name, badges, species · kind, alarm if missing) then
-   - **About** — facts, description, care record (strays), *Your pet* box (owners), Share on WhatsApp
+   - **About** — who they are and what to do: description, facts (species, kind, home for owned pets / territory for
+     strays, microchipped, the wanderer line), the stray's care status + care record + care log; for the owner the
+     *Your pet* box (Report as missing / Edit details); while missing, Share on WhatsApp
    - **Sightings** — "Report a sighting" + the list; each sighting with a location gets a **mini map** with its pin
      (tap → Map tab centred on it). Shown only where sightings are open today (missing pets, strays not rehomed).
    - **Map** — full height: sightings (newest highlighted), the stray's territory spot, and for a missing pet the home
@@ -51,9 +55,10 @@ would break the consistency rule; (2) three pin pickers exist and none is shared
    phone's current location (asked on tap; if refused or unavailable → centred on the community, with a line saying
    so). The resident pans to adjust, **Use this spot** returns to the form showing a mini map + Change / Remove.
    Rounded to 5 decimals as today.
-4. **Pets Map tab (module level)**: List · **Map** · My Pets. Pins for **strays / community animals at their
-   territory** and **missing pets at their latest sighting**. **Owned pets that are not missing are NOT on the map**
-   (see premortem #1).
+4. **Pets Map tab (module level)**: List · **Map** · My Pets. Two layer toggles (Zee 2026-11-11), both on by default:
+   **Missing + sightings** (missing pets at their latest sighting, earlier sightings smaller) and **Strays + sightings**
+   (strays / community animals at their territory, their sightings). **Owned pets that are not missing are NOT on the
+   map** (Q1, Zee: correct).
 5. **Bridge until News**: the Pets card on the Commons hub shows "1 missing pet" in red when any is missing (one
    `jc_pets_list` read on the hub, only when the module is on). News (its own plan) later carries the full alert.
 
@@ -91,14 +96,15 @@ on the hub while the flag is off), RTL + Arabic, CSP (no new hosts), 360 px.
    most 10 on the page; older sightings show "Open in map" only.
 4. **Location refused → the sheet opens on the middle of the sea.** → fall back to the community centre with a
    visible line; picker still works by panning.
-5. **Badge colours fight community themes** → tokens only; the signal colours are already locked against override.
+5. **Badges misuse the signal colours** (first draft did: teal / amber / green as kind colours) → kind by glyph,
+   colour only for Missing / Needs help; the Find Me dot (`#3a86ff`, hard-coded in two files) becomes a token in 2a.
 6. **The hub's missing-pet line costs a read for every visit** → only when the pets flag is on; cached for the visit.
 
 ## Step 5 — Questions for Zee
 
-- **Q1** Owned pets on the map only while missing? *(Recommended: yes.)*
-- **Q2** Pet page tabs: **About · Sightings · Map** (+ Care folded into About for strays)? Missing pets open on Sightings?
-- **Q3** Hub bridge ("1 missing pet" on the Pets card) now, full alert in News later?
+- **Q1** Owned pets on the map only while missing — **yes (Zee 2026-11-11)**, plus the two layer toggles above.
+- **Q2** Tabs About · Sightings · Map — About's contents spelled out above; awaiting Zee's OK.
+- **Q3** **Both (Zee 2026-11-11)**: the missing line on the hub Pets card now; the full alert in News later.
 
 ## Step 6 — Executive summary
 
