@@ -67,9 +67,7 @@ var VIEWS = {
       '<h1>' + esc(jcT("pin_title")) + '</h1>' +
       (h.pin_set_at ? '' : '<p class="sub">' + esc(jcT("pin_step")) + '</p>') +
       '<p class="sub">' + esc(jcT("pin_help")) + '</p>' +
-      '<div class="pinmap" data-no-autoreload><div class="map" id="map"></div><div class="ring" aria-hidden="true"></div>' +
-        '<div class="layers"><button type="button" class="lang" id="layerBtn">' + esc(jcT("pin_street")) + '</button></div>' +
-        '<button type="button" class="lang locate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
+      jcPinPickerHtml("map", "", " data-no-autoreload") +
       '<p class="help" style="margin-top:8px">' + esc(jcT("pin_privacy")) + '</p>' +
       msgBox() +
       '<div class="row section"><button class="btn" id="savePin" type="button">' + esc(jcT("pin_save")) + '</button>' +
@@ -80,28 +78,9 @@ var VIEWS = {
     var center = h.lat != null ? [h.lat, h.lng] : [c.lat || 24.53, c.lng || 54.43];
     var zoom = h.lat != null ? 19 : Math.max(c.zoom || 15, 16);
     if (keepCenter) { center = [keepCenter.lat, keepCenter.lng]; zoom = 19; }
-    map = L.map("map", { zoomControl: true }).setView(center, zoom);
-    var layer = "sat";
-    var tiles = L.tileLayer(jcTiles.sat.url, jcTiles.sat.opts).addTo(map);
-    on("layerBtn", function(){
-      layer = layer === "sat" ? "street" : "sat";
-      map.removeLayer(tiles);
-      tiles = L.tileLayer(jcTiles[layer].url, jcTiles[layer].opts).addTo(map);
-      el("layerBtn").textContent = jcT(layer === "sat" ? "pin_street" : "pin_sat");
-    });
-    /* "Find me": the phone's location only moves the map — it is never sent or
-       stored; the resident still confirms the spot under the ring. */
-    on("locateBtn", function(){
-      if (!navigator.geolocation) return showErr("LOCATE_FAILED");
-      busy("locateBtn", true);
-      navigator.geolocation.getCurrentPosition(function(pos){
-        busy("locateBtn", false);
-        if (map) map.setView([pos.coords.latitude, pos.coords.longitude], 19);
-      }, function(err){
-        busy("locateBtn", false);
-        showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED");
-      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
-    });
+    /* "Find me" only moves the map — never sent or stored; the resident confirms the spot under the ring */
+    var pm = map = jcPinPicker("map", { center: center, zoom: zoom, locateZoom: 19, onError: showErr,
+      onBusy: function(b){ busy("locateBtn", b); }, alive: function(){ return map === pm; } });
     on("cancelPin", function(){ if (NEXT) location.href = NEXT; else show("myhome"); });
     on("savePin", function(){
       var p = map.getCenter();

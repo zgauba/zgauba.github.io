@@ -2269,32 +2269,16 @@ function initVenueMap(){
 
 /* The markup initPinMap wires up: map + ring, Streets / Satellite, Find me (pins are set on the map only — Zee 2026-11-12) */
 function pinMapHtml(){
-  return '<div class="pinmap vpin"><div class="map" id="vmap"></div><div class="ring" aria-hidden="true"></div>' +
-      '<div class="layers"><button type="button" class="lang" id="layerBtn">' + esc(jcT("pin_street")) + '</button></div>' +
-      '<button type="button" class="lang locate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>';
+  return jcPinPickerHtml("vmap", "vpin");
 }
 /* The pin-drop map in #vmap (venue pin, court pin, pin move): Streets / Satellite, Find me.
    center = [lat, lng] or null for the community's own view. */
 function initPinMap(center){
   if (typeof L === "undefined") return null;
   var c = (cfg && cfg.map) || {};
-  var m = L.map("vmap", { zoomControl: true })
-    .setView(center || [c.lat || 24.53, c.lng || 54.43], center ? 18 : Math.max(c.zoom || 15, 16));
-  var layer = "sat";
-  var tiles = L.tileLayer(jcTiles.sat.url, jcTiles.sat.opts).addTo(m);
-  on("layerBtn", function(){
-    layer = layer === "sat" ? "street" : "sat";
-    m.removeLayer(tiles);
-    tiles = L.tileLayer(jcTiles[layer].url, jcTiles[layer].opts).addTo(m);
-    el("layerBtn").textContent = jcT(layer === "sat" ? "pin_street" : "pin_sat");
-  });
-  on("locateBtn", function(){
-    if (!navigator.geolocation) return showErr("LOCATE_FAILED");
-    navigator.geolocation.getCurrentPosition(function(pos){
-      if (vmap === m) m.setView([pos.coords.latitude, pos.coords.longitude], 18);
-    }, function(err){ showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED"); },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
-  });
+  var m = jcPinPicker("vmap", { center: center || [c.lat || 24.53, c.lng || 54.43],
+    zoom: center ? 18 : Math.max(c.zoom || 15, 16), locateZoom: 18, onError: showErr,
+    alive: function(){ return vmap === m; } });
   return m;
 }
 function centerOf(m){

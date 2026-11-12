@@ -12,6 +12,7 @@ var COURT = params.get("court");
 if (COURT && !/^[0-9a-f-]{36}$/i.test(COURT)) COURT = null;
 
 var state = null, cfg = null, current = null, map = null;
+var full = jcMapFull(function(){ return map; }, fitMap);   /* the map, bigger (assets/map.js); fitMap is hoisted */
 var courts = null, mine = null, listErr = null, listLoading = false;
 var day = null;          /* { f, date, slots [] | null, err, loading, pick: slot index | null, priv: bool } */
 var bkBusy = false, daySeq = 0, listSeq = 0, mineSeq = 0;
@@ -21,7 +22,7 @@ var deepLink = null;
 /* Zee 2026-11-09: sub-tabs List · Map · My bookings (?tab=), the map like the event map (full screen, Find Me) */
 var TABS = ["list", "map", "mine"];
 var tab = TABS.indexOf(params.get("tab")) >= 0 ? params.get("tab") : "list";
-var layer = "sat", mapFull = false, userPos = null;      /* ?court= waiting for the list (kept for Try Again, review L2) */
+var layer = "sat", userPos = null;      /* ?court= waiting for the list (kept for Try Again, review L2) */
 
 /* ---------- helpers ---------- */
 function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
@@ -176,7 +177,7 @@ function show(name){
   current = name;
   if (map) { jcMapRemove(map); map = null; }
   jcBack(name === "court" ? function(){ if (bkBusy) return; day = null; setUrl(tab === "list" ? null : "tab=" + tab); show("list"); } : null, "back");
-  if (name !== "list") { mapFull = false; document.body.classList.remove("mapfull"); }
+  if (name !== "list") full.reset();
   jcHelp(name === "court" ? "court" : name === "list" ? "courts" : null);   /* the ? button, as on Events / My Home / Organizer */
   var refocus = jcFocusKeep();
   VIEWS[name]();
@@ -263,7 +264,7 @@ function courtCard(f){
       : '<div class="acts"><button class="btn small" type="button" data-open="' + esc(f.id) + '">' + esc(jcT("bk_see_times")) + '</button></div>') +
     '</li>';
 }
-/* ---------- the Map tab: like the event map (keep in step with events.js renderMap / setMapFull) ---------- */
+/* ---------- the Map tab: the event map's kit (assets/map.js) ---------- */
 function popHtml(f){
   return '<div class="pop"><b dir="auto">' + esc(courtName(f)) + '</b>' +
     '<div class="meta">' + esc(kindText(f) + " · ⁦" + hm(f.open_time) + "–" + hm(f.close_time) + "⁩") + '</div>' +
@@ -271,13 +272,13 @@ function popHtml(f){
     (f.walk_on ? '<div class="meta">' + esc(jcT("bk_walk_on")) + '</div>' : '') +
     '<div class="popacts">' + (f.walk_on ? '' : '<button class="mini" type="button" data-popopen="' + esc(f.id) + '">' + esc(jcT("bk_see_times")) + '</button>') +
     /* as on the event map */
-    '<a target="_blank" rel="noopener" href="' + esc("https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(f.lat + "," + f.lng) + "&travelmode=walking") + '">' +
+    '<a target="_blank" rel="noopener" href="' + esc(jcDirectionsUrl(f.lat, f.lng)) + '">' +
     esc(jcT("ev_directions")) + '</a></div></div>';
 }
 function fitMap(){
   var m = el("bkmap");
   if (!m) return;
-  if (mapFull) { if (map) map.invalidateSize(); return; }
+  if (full.on) { if (map) map.invalidateSize(); return; }
   var bar = el("tabbar") ? el("tabbar").getBoundingClientRect().height : 0;
   var top = m.getBoundingClientRect().top + window.scrollY;
   var h = Math.max(260, Math.floor(window.innerHeight - top - bar - 12));
@@ -289,70 +290,46 @@ var fitTimer = null;
 function fitSoon(){ clearTimeout(fitTimer); fitTimer = setTimeout(fitMap, 120); }
 window.addEventListener("resize", fitSoon);
 window.addEventListener("orientationchange", fitSoon);
-function setMapFull(on){
-  var w = document.querySelector(".evmapwrap"), b = el("fullBtn");
-  mapFull = !!on && !!w;
-  if (w) w.classList.toggle("full", mapFull);
-  document.body.classList.toggle("mapfull", mapFull);
-  if (b) { b.textContent = jcT(mapFull ? "ev_map_close" : "ev_map_full"); b.setAttribute("aria-pressed", String(mapFull)); }
-  if (!mapFull) fitMap();
-  requestAnimationFrame(function(){ if (map) map.invalidateSize(); });
-}
-document.addEventListener("keydown", function(e){ if (e.key === "Escape" && mapFull) setMapFull(false); });
 function locate(done){
-  if (!navigator.geolocation) return showErr("LOCATE_FAILED");
-  navigator.geolocation.getCurrentPosition(function(p){ userPos = [p.coords.latitude, p.coords.longitude]; done(); },
-    function(err){ setMapFull(false); showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED"); },   /* visible, not behind the full map */
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+  jcLocate(function(lat, lng){ userPos = [lat, lng]; done(); },
+    function(code){ full.set(false); showErr(code); });   /* visible, not behind the full map */
 }
 function mapHtml(pinned){
   if (typeof L === "undefined") return '<p class="help" id="bkNoPins">' + esc(jcT("err_NETWORK")) + '</p>';   /* no dead buttons (review L) */
   if (!pinned.length) return '<p class="help" id="bkNoPins">' + esc(jcT("bk_no_pins")) + '</p>';
-  return '<div class="evmapwrap"><div class="evmap" id="bkmap" role="region" aria-label="' + esc(jcT("bk_map_label")) + '"></div>' +
-    '<div class="mapbtns"><button type="button" class="lang" id="layerBtn">' + esc(jcT(layer === "sat" ? "pin_street" : "pin_sat")) + '</button></div>' +
-    '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button>' +
-    '<button type="button" class="lang mapfull" id="fullBtn" aria-pressed="false">' + esc(jcT("ev_map_full")) + '</button></div>';
+  return jcMapHtml("bkmap", layer, { attrs: ' role="region" aria-label="' + esc(jcT("bk_map_label")) + '"' });
 }
 function drawMap(list){
-  mapFull = false; document.body.classList.remove("mapfull");
+  full.reset();
   if (typeof L === "undefined" || !el("bkmap")) return;
   fitMap();
   requestAnimationFrame(fitSoon);
   var c = (cfg && cfg.map) || {};
   map = L.map("bkmap", { zoomControl: true }).setView([c.lat || 24.53, c.lng || 54.43], c.zoom || 14);
-  var tiles = L.tileLayer(jcTiles[layer].url, jcTiles[layer].opts).addTo(map);
-  on("layerBtn", function(){
-    layer = layer === "sat" ? "street" : "sat";
-    map.removeLayer(tiles);
-    tiles = L.tileLayer(jcTiles[layer].url, jcTiles[layer].opts).addTo(map);
-    el("layerBtn").textContent = jcT(layer === "sat" ? "pin_street" : "pin_sat");
-  });
-  on("fullBtn", function(){ setMapFull(!mapFull); });
+  jcMapLayers(map, "layerBtn", layer, function(l){ layer = l; });
+  on("fullBtn", function(){ full.set(!full.on); });
   var me = null;
   on("locateBtn", function(){
     locate(function(){
       if (!map) return;
-      if (me) me.setLatLng(userPos);
-      else me = L.circleMarker(userPos, { radius: 6, weight: 3, color: "#fff", fillColor: "#3a86ff", fillOpacity: 1 }).addTo(map);
+      me = jcMeDot(map, userPos, me);
       map.setView(userPos, Math.max(map.getZoom(), 17));
     });
   });
-  var styles = getComputedStyle(document.documentElement);
-  var accent = styles.getPropertyValue("--jc-accent").trim() || "#3e9b76";
-  var ink = styles.getPropertyValue("--jc-ink").trim() || "#f6f2e9";
+  var col = jcMapColors(), accent = col.accent, ink = col.ink;
   var pts = [];
   list.forEach(function(f){
     pts.push([f.lat, f.lng]);
     /* the court's name sits on its pin (Zee); Leaflet sets string content as HTML, so admin text is escaped */
     L.circleMarker([f.lat, f.lng], { radius: 11, weight: 3, color: ink, fillColor: accent, fillOpacity: .95 }).addTo(map)
       .bindTooltip('<span dir="auto">' + esc(courtName(f)) + '</span>', { permanent: true, direction: "top", offset: [0, -12], className: "bklabel" })
-      .bindPopup(popHtml(f), { maxWidth: 250, minWidth: 180, autoPanPaddingTopLeft: [12, 24], autoPanPaddingBottomRight: [12, 24] });
+      .bindPopup(popHtml(f), JC_POPUP);
   });
   var wrap = document.querySelector(".evmapwrap");
   map.on("popupopen", function(pe){
     if (wrap) wrap.classList.add("popopen");
     var b = pe.popup.getElement() && pe.popup.getElement().querySelector("[data-popopen]");
-    if (b) b.addEventListener("click", function(){ var f = courtById(b.dataset.popopen); if (f) { setMapFull(false); openCourt(f); } });
+    if (b) b.addEventListener("click", function(){ var f = courtById(b.dataset.popopen); if (f) { full.set(false); openCourt(f); } });
   });
   map.on("popupclose", function(){ if (wrap) wrap.classList.remove("popopen"); });
   if (pts.length > 1) map.fitBounds(pts, { padding: [40, 40], maxZoom: 18 });
