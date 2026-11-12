@@ -26,7 +26,7 @@ declare
     'jc_admin_block_create', 'jc_admin_block_remove',
     -- S4
     'jc_pets_list', 'jc_pet_get', 'jc_pet_save', 'jc_pet_missing_set', 'jc_pet_archive',
-    'jc_pet_sighting_add', 'jc_pet_photo_begin', 'jc_pet_photo_commit',
+    'jc_pet_sighting_add', 'jc_pet_photo_begin', 'jc_pet_photo_commit', 'jc_pet_photo_remove',
     'jc_admin_pets_list', 'jc_admin_stray_save', 'jc_admin_pet_care_add', 'jc_admin_pet_archive',
     'jc_admin_sighting_hide',
     -- T4
