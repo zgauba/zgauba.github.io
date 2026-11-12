@@ -252,6 +252,17 @@ test("the Edit form says neighbors see my home — no hiding option offered (HH)
   await expect(page.locator("#ptForm")).not.toContainText("hidden");
 });
 
+test("review: a shared ?show= belongs to the shared pet only — after Back, the same pet opens on its own default (About)", async ({ page }) => {
+  const b = backend();
+  await open(page, b, { q: "?pet=" + ID(3) + "&show=sightings" });
+  await expect(page.locator("#ptpg-sightings")).toHaveAttribute("aria-selected", "true");
+  await page.locator("#jcBackBtn").click();
+  await page.locator(`[data-open="${ID(3)}"]`).click();
+  await expect(page.locator("#ptpg-about")).toHaveAttribute("aria-selected", "true");
+  await page.locator("#ptpg-about").click();
+  expect(new URL(page.url()).search).toBe("?pet=" + ID(3) + "&show=about");     // a chosen tab is kept for a reload
+});
+
 test("missing switch: one call (no show-home step — HH); the alarm is up; Found takes it down", async ({ page }) => {
   const b = backend();
   const { calls } = await open(page, b, { q: "?pet=" + ID(6) });

@@ -78,7 +78,7 @@ function sightOpen(p){ return p.missing === true || (p.kind === "stray" && p.car
 function petUrl(p){ return location.origin + location.pathname + "?pet=" + encodeURIComponent(p.id); }
 /* Sightings only where they exist or can be added; a missing pet opens on Sightings (that's where help comes in) */
 function petTabs(p){ return sightOpen(p) || (Array.isArray(p.sightings) && p.sightings.length) ? PET_TABS : ["about"]; }
-function petQuery(id){ return "pet=" + encodeURIComponent(id) + (tab === "list" ? "" : "&tab=" + tab) + (petTab && petTab !== "about" ? "&show=" + petTab : ""); }
+function petQuery(id){ return "pet=" + encodeURIComponent(id) + (tab === "list" ? "" : "&tab=" + tab) + (petTab ? "&show=" + petTab : ""); }
 function petById(id){ return (pets || []).filter(function(p){ return p.id === id; })[0]; }
 function matches(p){
   if (filter === "owned") return p.kind === "owned";
@@ -585,7 +585,7 @@ function wirePet(){
       return rpc("jc_pet_sighting_add", { p_pet: p.id, p_note: note || null, p_lat: s.lat, p_lng: s.lng });
     }, function(){
       sheet = null; sight = null; sent = note;
-      loadPet(p.id, function(){ showOk(jcT("pt_sight_done")); var h = el("ptShareHead"); if (h) { h.setAttribute("tabindex", "-1"); h.focus(); } });
+      loadPet(p.id, function(){ if (petTab !== "sightings") return; showOk(jcT("pt_sight_done")); var h = el("ptShareHead"); if (h) { h.setAttribute("tabindex", "-1"); h.focus(); } });
     }, function(code){
       if (code === "SIGHTINGS_CLOSED") { sheet = null; sight = null; loadPet(p.id, function(){ ptMsg(code); }); return true; }
       if (code === "NOT_FOUND") { backToList("NOT_FOUND"); return true; }

@@ -23,6 +23,13 @@
 - **Proposed split (needs Zee's OK):** neither needs the map kit, so pull them forward as **R5b-2b-1 Pets layout**
   (two-column grid, badges, pet page header + About / Sightings tabs) → then **R5b-2a** map kit → **R5b-2b-2** (Map
   tab, Add Location Pin, mini maps, Pets Map tab, hub missing line).
+- **Zee 2026-11-12: "yes fix the pets layout first"** → R5b-2b-1 built (branch `feat/r5b2b1-pets-layout`). As built,
+  vs the sketch: the pet page header is **compact** (photo tile beside the name — a full-width photo pushed the tabs
+  below the fold); **Share on WhatsApp lives on the Sightings tab** (with "Report a sighting" — reporting missing jumps
+  there, matching "Share the alert below"); the owner's **"is back home" sits inside the alarm** (visible on every tab);
+  no tab row when only About applies (owned, not missing, no sightings); `?show=about|sightings` (`?tab=` stays the list
+  tab to return to). Species emoji skipped (the paw tile carries it). Kind glyph badges deferred to R5b-2b-2 — today
+  "Cat · Stray" says the kind; colour only on Missing (red) / Needs help (amber).
 
 ## Step 1 — What the other modules already do (the design language to match)
 
