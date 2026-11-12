@@ -46,7 +46,7 @@ function jcMapLayers(m, btnId, start, onChange){
 }
 
 /* The phone's position, for "Find Me". It only moves the map / sorts on the phone — never sent or stored.
-   ok(lat, lng); fail("LOCATE_DENIED" | "LOCATE_FAILED"). fresh: no cached fix (a sighting "where I am now"). */
+   ok(lat, lng); fail("LOCATE_DENIED" | "LOCATE_FAILED"). fresh: no cached fix — for the Pets sighting pin (R5b-2b-2, next); unused until then. */
 function jcLocate(ok, fail, fresh){
   if (!navigator.geolocation) { fail("LOCATE_FAILED"); return; }
   navigator.geolocation.getCurrentPosition(function(p){ ok(p.coords.latitude, p.coords.longitude); },
@@ -61,7 +61,8 @@ function jcMeDot(m, latlng, dot){
 }
 
 /* The full map's buttons (Events, Courts): Street (+ any extra buttons before it) top right, Find Me bottom
-   right, Full Screen bottom left. mapId: the Leaflet box; attrs: extra attributes on it (role, label). */
+   right, Full Screen bottom left. mapId: the Leaflet box; attrs: extra attributes on it (role, label).
+   attrs and opts.before are raw HTML — the caller escapes anything that isn't a literal. */
 function jcMapHtml(mapId, layer, opts){
   opts = opts || {};
   return '<div class="evmapwrap"><div class="evmap" id="' + mapId + '"' + (opts.attrs || '') + '></div>' +
@@ -99,7 +100,8 @@ function jcMapFull(getMap, onExit){
 }
 
 /* ---------- pin picker: the map pans under a fixed centre ring; the page reads map.getCenter() on Save ---------- */
-/* markup for jcPinPicker; cls: an extra class on the box (the organizer's shorter "vpin"); attrs: e.g. data-no-autoreload */
+/* markup for jcPinPicker; cls: an extra class on the box (the organizer's shorter "vpin"); attrs: e.g. data-no-autoreload.
+   cls and attrs are raw HTML — literals only, or escaped by the caller. */
 function jcPinPickerHtml(mapId, cls, attrs){
   return '<div class="pinmap' + (cls ? ' ' + cls : '') + '"' + (attrs || '') + '><div class="map" id="' + mapId + '"></div><div class="ring" aria-hidden="true"></div>' +
     '<div class="layers"><button type="button" class="lang" id="layerBtn">' + esc(jcT("pin_street")) + '</button></div>' +

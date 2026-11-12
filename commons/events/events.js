@@ -939,7 +939,6 @@ function renderMap(entries){
   else if (pts.length === 1) map.setView(pts[0], 18);
 }
 
-
 /* the homes' pins, in their own layer so a refresh redraws them without moving the map */
 function drawHomes(entries){
   if (!map) return;
