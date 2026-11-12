@@ -182,6 +182,18 @@ Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas 
   tiles and event looks included. After R5b-2.
 - Kept on purpose: the blue "you are here" dot (Zee 2026-11-11 — the convention people recognise), tokenised in R5b-2a.
 
+### Nearest first — lists sorted by where you are  ·  app only  (idea, Zee 2026-11-12 — needs `/plan-change`)
+- Zee: "since we know the household location … show items sorted based on their location … if they select Find Me on
+  the map, then it would be based on their actual phone location … courts should show the closest one … same with pets."
+- Default origin = **your home pin** (already on the phone in `jc_me_get`); after **Find Me** = the phone's position,
+  for that visit only. Sorting happens on the phone — **nothing new is sent or stored** (same rule as Find Me today).
+- **Events** (event page List tab): your village first, then homes nearest your home. **Courts**: nearest court first
+  (courts carry their pin). **Pets**: strays / community animals by their territory spot; owned pets **your village
+  first** only — the server sends their village + number, not coordinates, and sending every pet home's coordinates
+  would rebuild the "map of homes with pets" R5b-2 ruled out (owned pets on the map only while missing).
+- One shared helper (`jcNear(origin, items)` + "Sorted by: your home / where you are now" line) — belongs with the
+  R5b-2a shared map kit (Find Me is shared there). Sequence: after R5b-2a.
+
 ### R7 — Launch prep (not features)
 - **Retire the shared `events` organizer code** (Step C, parked until testing is done) → per-event admins only.
 - **Retire the Halloween site** into Commons (`jubail-halloween/` stays at its URL forever — a pointer page).
