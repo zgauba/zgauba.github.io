@@ -36,6 +36,8 @@ function session(email) {
            user: user(email) };
 }
 
+// a real 1×1 PNG: what a signed photo URL answers with
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
 const ok = (body) => ({ status: 200, body });
 const raise = (code) => ({ status: 400, body: { code: "P0001", message: code, details: null, hint: null } });
 
@@ -84,6 +86,7 @@ async function stubBackend(page, opts = {}) {
     logout: () => ({ status: 204, body: null }),
   }, opts.auth || {});
 
+  let signs = 0;                                    // each signing hands out a new token (like the real thing)
   await page.route(/^https?:\/\/(?!localhost|127\.0\.0\.1)/, async (route) => {
     const req = route.request();
     // map tiles (Esri / OSM): answered empty, never fetched, not counted as escapes
@@ -125,6 +128,31 @@ async function stubBackend(page, opts = {}) {
     } else if (url.pathname === "/auth/v1/logout") {
       calls.push({ kind: "auth", name: "logout", args, signedIn });
       res = authHandlers.logout();
+    } else if (url.pathname.startsWith("/storage/v1/")) {
+      // Storage (R5c pet photos): sign → signed URLs; GET a signed URL → an image; POST an object → an upload.
+      // opts.storage.{sign, image, upload} override the defaults (a backend mirrors the bucket rules there).
+      const rest = url.pathname.slice("/storage/v1".length), sh = opts.storage || {};
+      let m;
+      if (req.method() === "POST" && (m = rest.match(/^\/object\/sign\/([^/]+)$/))) {
+        calls.push({ kind: "storage", name: "sign", args, signedIn });
+        res = sh.sign ? await sh.sign(m[1], args, { signedIn })
+          : ok((args.paths || []).map((p) => ({ path: p, signedURL: "/object/sign/" + m[1] + "/" + p + "?token=t" + (++signs), error: null })));
+      } else if (req.method() === "GET" && (m = rest.match(/^\/object\/sign\/([^/]+)\/(.+)$/))) {
+        const path = decodeURIComponent(m[2]);
+        calls.push({ kind: "storage", name: "image", args: { bucket: m[1], path }, signedIn });
+        const img = sh.image ? sh.image(path) : PNG;
+        return route.fulfill(img ? { status: 200, headers: Object.assign({ "content-type": "image/png" }, CORS), body: img }
+                                 : { status: 400, headers: CORS, body: "" });
+      } else if (req.method() === "POST" && (m = rest.match(/^\/object\/([^/]+)\/(.+)$/))) {
+        const buf = req.postDataBuffer() || Buffer.alloc(0);
+        const a = { bucket: m[1], path: decodeURIComponent(m[2]), size: buf.length, type: req.headers()["content-type"],
+                    upsert: req.headers()["x-upsert"], jpeg: buf[0] === 0xff && buf[1] === 0xd8, buf };
+        calls.push({ kind: "storage", name: "upload", args: a, signedIn });
+        res = sh.upload ? await sh.upload(a, { signedIn }) : ok({ Key: m[1] + "/" + a.path, Id: "obj-1" });
+      } else {
+        calls.push({ kind: "unknown", name: url.pathname, args, signedIn });
+        res = { status: 404, body: { message: "NO_STUB " + url.pathname } };
+      }
     } else {
       calls.push({ kind: "unknown", name: url.pathname, args, signedIn });
       res = { status: 404, body: { message: "NO_STUB " + url.pathname } };

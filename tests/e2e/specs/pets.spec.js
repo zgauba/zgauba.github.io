@@ -6,6 +6,7 @@
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const { stubBackend, ok, raise, CONFIG, MEMBER, MEMBER_NO_HOME } = require("./stub");
+const PNG_1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
 const { signIn } = require("./backends");
 
 test.use({ timezoneId: "Europe/London" });
@@ -111,9 +112,41 @@ function backend(opts = {}) {
       return ok({ pet_id: p.id, logged: true });
     },
     jc_pets_group_get: () => off() || ok({ link: st.group }),
+    // R5c: the server picks the path; commit only once that exact object arrived (jc_pet_photo_begin / _commit)
+    jc_pet_photo_begin: (a) => {
+      if (off()) return off();
+      if (opts.beginError) return raise(opts.beginError);
+      if (!["jpg", "png", "webp"].includes(a.p_ext)) return raise("BAD_FIELDS");
+      const p = manage(a.p_pet);
+      if (!p) return raise("NOT_FOUND");
+      n += 1;
+      p.pending = "jubail/" + p.id + "/r" + n + "." + a.p_ext;
+      return ok({ bucket: "pet-photos", path: p.pending, expires_in_seconds: 900 });
+    },
+    jc_pet_photo_commit: (a) => {
+      const p = manage(a.p_pet);
+      if (!p) return raise("NOT_FOUND");
+      if (!p.pending) return raise("NO_PENDING_PHOTO");
+      if (!st.objects[p.pending]) return raise("PHOTO_MISSING");
+      p.photo_path = p.pending; p.pending = null;
+      return ok(card(p));
+    },
   };
   for (const k of ["jc_pets_list", "jc_pet_save", "jc_pet_get", "jc_pet_missing_set"]) rpc[k] = held(k, rpc[k]);
-  return { st, rpc };
+  st.objects = {};
+  const storage = {
+    // write-once at the pending path only (storage policy pet_photo_can_write)
+    upload: (a) => {
+      if (opts.uploadFail) return { status: 500, body: { statusCode: "500", error: "internal", message: "boom" } };
+      if (a.bucket !== "pet-photos" || !st.pets.some((p) => p.pending === a.path) || st.objects[a.path])
+        return { status: 403, body: { statusCode: "403", error: "Unauthorized", message: "new row violates row-level security policy" } };
+      st.objects[a.path] = a;
+      return ok({ Key: "pet-photos/" + a.path, Id: "obj" });
+    },
+    // readable only while it is a pet's current photo (pet_photo_can_read); opts.broken = paths that fail to load
+    image: (path) => (st.pets.some((p) => p.photo_path === path) && !(opts.broken || []).includes(path) ? PNG_1 : null),
+  };
+  return { st, rpc, storage };
 }
 const gate = () => { let open; const p = new Promise((res) => { open = res; }); return { p, open }; };
 
@@ -126,7 +159,7 @@ async function open(page, b, opts = {}) {
     try { Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: (t) => { window.__copied.push(t); return Promise.resolve(); } } }); } catch (e) {}
     window.addEventListener("click", (e) => { const a = e.target.closest && e.target.closest('a[target="_blank"]'); if (a) e.preventDefault(); }, true);
   });
-  const stub = await stubBackend(page, { rpc: b.rpc });
+  const stub = await stubBackend(page, { rpc: b.rpc, storage: b.storage });
   await signIn(page);
   await page.goto("pets/" + (opts.q || ""));
   return stub;
@@ -558,4 +591,198 @@ test("axe: list, a stray's page and the edit form have no violations", async ({ 
   await page.locator("#ptAdd").click();
   await expect(page.locator("#ptForm")).toBeVisible();
   expect(await scan()).toEqual([]);
+});
+
+// ---- R5c: photos ----
+// a camera-sized JPEG made in the page (2000×1500): what a phone hands the file picker
+async function bigJpeg(page) {
+  const b64 = await page.evaluate(() => {
+    const c = document.createElement("canvas"); c.width = 2000; c.height = 1500;
+    const g = c.getContext("2d"), gr = g.createLinearGradient(0, 0, 2000, 1500);
+    gr.addColorStop(0, "#c58b4b"); gr.addColorStop(1, "#2d5a3d");
+    g.fillStyle = gr; g.fillRect(0, 0, 2000, 1500);
+    g.fillStyle = "#fff"; g.font = "200px sans-serif"; g.fillText("Rex", 600, 800);
+    return c.toDataURL("image/jpeg", 0.9).split(",")[1];
+  });
+  return { name: "IMG_0001.jpg", mimeType: "image/jpeg", buffer: Buffer.from(b64, "base64") };
+}
+// width × height from a JPEG's SOF marker
+function jpegSize(buf) {
+  for (let i = 2; i < buf.length - 9;) {
+    if (buf[i] !== 0xff) { i++; continue; }
+    const m = buf[i + 1], len = buf.readUInt16BE(i + 2);
+    if (m >= 0xc0 && m <= 0xc3) return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };
+    i += 2 + len;
+  }
+  return null;
+}
+const loaded = (loc) => loc.evaluate((s) => !!(s.classList.contains("has") && s.querySelector("img") && s.querySelector("img").naturalWidth > 0));
+
+test("R5c: add a pet with a photo — shrunk to 1280 px JPEG, begin → upload at the server's path → commit, shown on the page", async ({ page }) => {
+  const b = backend();
+  const { calls } = await open(page, b, { q: "?tab=mine" });
+  await page.locator("#ptAdd").click();
+  await expect(page.locator("#ptPhotoPick")).toHaveText("Add Photo");
+  await page.locator("#ptName").fill("Pepper");
+  await page.locator("#ptPhotoIn").setInputFiles(await bigJpeg(page));
+  await expect(page.locator("#ptPhotoNew")).toBeVisible();
+  await expect(page.locator("#ptPhotoHelp")).toHaveText("Photo ready — it's added when you save.");
+  if (process.env.SHOT_DIR) await page.locator("#ptPhotoBox").screenshot({ path: process.env.SHOT_DIR + "/pet-edit-photo.png" });
+  await expect(page.locator("#ptPhotoPick")).toHaveText("Change Photo");
+  expect(calls.filter((c) => c.kind === "storage" || /photo/.test(c.name))).toEqual([]);     // nothing leaves before Save
+  await page.locator("#ptSave").click();
+  await expect(page.locator("#msg")).toHaveText("Pepper was added.");
+  const order = calls.filter((c) => /^jc_pet_(save|photo_)/.test(c.name) || c.name === "upload").map((c) => c.name);
+  expect(order).toEqual(["jc_pet_save", "jc_pet_photo_begin", "upload", "jc_pet_photo_commit"]);
+  expect(lastCall(calls, "jc_pet_photo_begin").args).toEqual({ p_pet: "33333333-cccc-4ccc-8ccc-000000000001", p_ext: "jpg" });
+  const up = lastCall(calls, "upload").args;
+  expect(up.bucket).toBe("pet-photos");
+  expect(up.path).toBe("jubail/33333333-cccc-4ccc-8ccc-000000000001/r2.jpg");          // exactly the server's path
+  expect(up.type).toBe("image/jpeg");
+  expect(up.upsert).toBe("false");
+  expect(up.jpeg).toBe(true);
+  expect(up.size).toBeGreaterThan(1024);
+  expect(up.size).toBeLessThan(2000000);
+  expect(jpegSize(up.buf)).toEqual({ w: 1280, h: 960 });
+  const hero = page.locator(".pthero .ptph.big");
+  await expect.poll(() => loaded(hero)).toBe(true);                                     // CSP lets the signed URL load
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/pet-page-photo.png" });
+});
+
+test("R5c: the list signs every photo in one call; a photo that won't load leaves the paw; no photo = the paw", async ({ page }) => {
+  const b = backend({ broken: ["jubail/x/luna.jpg"] });
+  b.st.pets.find((p) => p.name === "Rex").photo_path = "jubail/x/rex.jpg";
+  b.st.pets.find((p) => p.name === "Luna").photo_path = "jubail/x/luna.jpg";
+  const { calls } = await open(page, b);
+  const rex = page.locator(`li[data-pet="${ID(1)}"] .ptph.thumb`);
+  await expect.poll(() => loaded(rex)).toBe(true);
+  const signs = calls.filter((c) => c.name === "sign");                        // one batch for the whole list
+  expect(signs[0].args.paths.sort()).toEqual(["jubail/x/luna.jpg", "jubail/x/rex.jpg"]);
+  expect(signs[0].args.expiresIn).toBe(3600);
+  const luna = page.locator(`li[data-pet="${ID(2)}"] .ptph.thumb`);
+  // Luna's photo fails → signed once more (review: a dead URL gets one fresh signing), then the paw stays — no loop
+  await expect.poll(() => calls.filter((c) => c.name === "sign").length).toBe(2);
+  expect(calls.filter((c) => c.name === "sign")[1].args.paths).toEqual(["jubail/x/luna.jpg"]);
+  await expect.poll(() => calls.filter((c) => c.name === "image" && c.args.path === "jubail/x/luna.jpg").length).toBe(2);
+  await page.waitForTimeout(300);
+  expect(calls.filter((c) => c.name === "sign")).toHaveLength(2);
+  await expect(luna.locator("img")).toHaveCount(0);
+  await expect(luna.locator("svg")).toBeVisible();
+  await expect(page.locator(`li[data-pet="${ID(4)}"] .ptph`)).toHaveCount(0);           // no photo: the plain paw
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/pets-list-photos.png" });
+  await page.locator(`[data-open="${ID(1)}"]`).click();                                  // the pet page reuses the signed URL
+  await expect.poll(() => loaded(page.locator(".pthero .ptph.big"))).toBe(true);
+  expect(calls.filter((c) => c.name === "sign")).toHaveLength(2);
+});
+
+test("R5c: the upload fails → the details are still saved and it says the photo didn't go up", async ({ page }) => {
+  const b = backend({ uploadFail: true });
+  const { calls } = await open(page, b, { q: "?pet=" + ID(6) });
+  await page.locator("#ptEdit").click();
+  await page.locator("#ptPhotoIn").setInputFiles(await bigJpeg(page));
+  await expect(page.locator("#ptPhotoNew")).toBeVisible();
+  await page.locator("#ptSave").click();
+  await expect(page.locator("#msg")).toHaveText("Mochi is saved, but the photo didn't upload: The upload didn't go through. Check your connection. Try again from Edit details.");
+  await expect(page.locator("#msg")).toHaveClass(/err/);
+  expect(named(calls, "jc_pet_photo_commit")).toHaveLength(0);
+  expect(named(calls, "jc_pet_save")).toHaveLength(1);
+});
+
+test("R5c: a household member mid-upload (PHOTO_PENDING) is said in words", async ({ page }) => {
+  const b = backend({ beginError: "PHOTO_PENDING" });
+  await open(page, b, { q: "?pet=" + ID(6) });
+  await page.locator("#ptEdit").click();
+  await page.locator("#ptPhotoIn").setInputFiles(await bigJpeg(page));
+  await expect(page.locator("#ptPhotoNew")).toBeVisible();
+  await page.locator("#ptSave").click();
+  await expect(page.locator("#msg")).toContainText("Someone else in your home is adding a photo right now.");
+});
+
+test("R5c: a file that isn't a readable image is refused on the phone — nothing sent", async ({ page }) => {
+  const b = backend();
+  const { calls } = await open(page, b, { q: "?pet=" + ID(6) });
+  await page.locator("#ptEdit").click();
+  await page.locator("#ptPhotoIn").setInputFiles({ name: "x.jpg", mimeType: "image/jpeg", buffer: Buffer.from("not a picture") });
+  await expect(page.locator("#msg")).toHaveText("That photo couldn't be read. Try another one.");
+  await expect(page.locator("#ptPhotoNew")).toHaveCount(0);
+  await page.locator("#ptSave").click();
+  await expect(page.locator("#msg")).toHaveText("Saved.");
+  expect(calls.filter((c) => c.kind === "storage" || /photo/.test(c.name))).toEqual([]);
+});
+
+test("R5c: the picked photo survives a language switch; Arabic labels", async ({ page }) => {
+  const b = backend();
+  b.st.pets.find((p) => p.name === "Mochi").photo_path = "jubail/x/mochi.jpg";
+  await open(page, b, { q: "?pet=" + ID(6) });
+  await page.locator("#ptEdit").click();
+  await expect(page.locator("#ptPhotoPick")).toHaveText("Change Photo");                // already has one
+  await expect.poll(() => loaded(page.locator("#ptPhotoBox .ptph.big"))).toBe(true);
+  await page.locator("#ptPhotoIn").setInputFiles(await bigJpeg(page));
+  await expect(page.locator("#ptPhotoNew")).toBeVisible();
+  await page.locator("#langBtn").click();
+  await expect(page.locator("#ptPhotoNew")).toBeVisible();
+  await expect(page.locator("#ptPhotoPick")).toHaveText("تغيير الصورة");
+  await expect(page.locator("#ptPhotoHelp")).toHaveText("الصورة جاهزة — تُضاف عند الحفظ.");
+});
+
+test("R5c: an image that comes out (near) blank after shrinking is refused — never uploaded", async ({ page }) => {
+  const b = backend();
+  const { calls } = await open(page, b, { q: "?pet=" + ID(6) });
+  await page.locator("#ptEdit").click();
+  await page.locator("#ptPhotoIn").setInputFiles({ name: "dot.png", mimeType: "image/png", buffer: PNG_1 });   // decodes, 1×1
+  await expect(page.locator("#msg")).toHaveText("That photo couldn't be read. Try another one.");
+  await expect(page.locator("#ptPhotoNew")).toHaveCount(0);
+  expect(calls.filter((c) => c.kind === "storage" || /photo/.test(c.name))).toEqual([]);
+});
+
+test("R5c review: a page left open past the hour re-signs its photos instead of keeping dead links", async ({ page }) => {
+  const b = backend();
+  b.st.pets.find((p) => p.name === "Rex").photo_path = "jubail/x/rex.jpg";
+  const { calls } = await open(page, b);
+  await expect.poll(() => loaded(page.locator(`li[data-pet="${ID(1)}"] .ptph.thumb`))).toBe(true);
+  expect(calls.filter((c) => c.name === "sign")).toHaveLength(1);
+  await page.locator("#ptF-owned").click();                                   // a redraw inside the hour: reuses it
+  expect(calls.filter((c) => c.name === "sign")).toHaveLength(1);
+  await page.clock.fastForward("56:00");                                      // past the hour, less the 5-minute margin
+  await page.locator("#ptF-all").click();
+  await expect.poll(() => calls.filter((c) => c.name === "sign").length).toBe(2);
+});
+
+test("R5c review: Save waits while a photo is still being prepared — never saves without it; the last pick wins", async ({ page }) => {
+  const b = backend();
+  const { calls } = await open(page, b, { q: "?pet=" + ID(6) });
+  // hold the phone-side shrink until the test lets it go
+  await page.evaluate(() => {
+    const real = FileReader.prototype.readAsDataURL;
+    window.__shrinkGate = []; FileReader.prototype.readAsDataURL = function(f){ window.__shrinkGate.push(() => real.call(this, f)); };
+  });
+  await page.locator("#ptEdit").click();
+  await page.locator("#ptPhotoIn").setInputFiles(await bigJpeg(page));
+  await expect(page.locator("#ptPhotoHelp")).toHaveText("One moment…");
+  await expect(page.locator("#ptSave")).toBeDisabled();
+  await page.locator("#ptPhotoIn").setInputFiles({ name: "dot.png", mimeType: "image/png", buffer: PNG_1 });   // a second pick
+  await page.evaluate(() => window.__shrinkGate[1]());                        // the second (refused) one finishes first…
+  await expect(page.locator("#msg")).toHaveText("That photo couldn't be read. Try another one.");
+  await page.evaluate(() => window.__shrinkGate[0]());                        // …the first, now stale, is ignored
+  await page.waitForTimeout(300);
+  await expect(page.locator("#ptPhotoNew")).toHaveCount(0);
+  await expect(page.locator("#ptSave")).toBeEnabled();
+  await page.locator("#ptSave").click();
+  await expect(page.locator("#msg")).toHaveText("Saved.");
+  expect(calls.filter((c) => c.kind === "storage" || /photo/.test(c.name))).toEqual([]);
+});
+
+test("R5c review: says who sees the photo; a file over 25 MB is refused before it's read", async ({ page }) => {
+  const b = backend();
+  const { calls } = await open(page, b, { q: "?pet=" + ID(6) });
+  await page.locator("#ptEdit").click();
+  await expect(page.locator("#ptPhotoWho")).toHaveText(/^Neighbors in your community can see this photo\. Keep people, faces, house numbers and car plates out of it\./);
+  await page.evaluate(() => {                                                   // count reads: a refused file is never read
+    const real = FileReader.prototype.readAsDataURL; window.__reads = 0;
+    FileReader.prototype.readAsDataURL = function(f){ window.__reads++; return real.call(this, f); };
+  });
+  await page.locator("#ptPhotoIn").setInputFiles({ name: "huge.jpg", mimeType: "image/jpeg", buffer: Buffer.alloc(26e6, 0xff) });
+  await expect(page.locator("#msg")).toHaveText("That photo couldn't be read. Try another one.");
+  expect(await page.evaluate(() => window.__reads)).toBe(0);
+  expect(calls.filter((c) => c.kind === "storage" || /photo/.test(c.name))).toEqual([]);
 });
