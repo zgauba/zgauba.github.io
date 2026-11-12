@@ -12,6 +12,18 @@
   strays carry `territory_lat/lng`, the pet card carries the home (now with its type, live since 2026-11-11).
 - Manifest LAST VERIFIED 2026-11-10 (1 day). Inventory below re-read from the repo today.
 
+## Update 2026-11-12 — Zee after R5c photos
+
+> "I think the pet list can be in two columns rather than 1… also, the pet details page itself just looks messy…"
+
+- **List → two-column photo cards** (photo-led now that R5c is live): photo (or the paw on a soft tile) on top, name,
+  species · kind, the badges; Missing cards keep the red edge and stay full-width at the top. Whole card is the tap
+  target (no separate Details button). 360 px: still two columns (~160 px each); very long names wrap to 2 lines.
+- **Pet page** gets the tabs + header of sketch B below — that is the "messy" fix (one long scroll today).
+- **Proposed split (needs Zee's OK):** neither needs the map kit, so pull them forward as **R5b-2b-1 Pets layout**
+  (two-column grid, badges, pet page header + About / Sightings tabs) → then **R5b-2a** map kit → **R5b-2b-2** (Map
+  tab, Add Location Pin, mini maps, Pets Map tab, hub missing line).
+
 ## Step 1 — What the other modules already do (the design language to match)
 
 | Pattern | Where it lives today | Pets today |
