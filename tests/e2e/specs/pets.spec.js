@@ -123,6 +123,14 @@ function backend(opts = {}) {
       p.pending = "jubail/" + p.id + "/r" + n + "." + a.p_ext;
       return ok({ bucket: "pet-photos", path: p.pending, expires_in_seconds: 900 });
     },
+    jc_pet_photo_remove: (a) => {                                       // R5c-2
+      if (off()) return off();
+      const p = manage(a.p_pet);
+      if (!p) return raise("NOT_FOUND");
+      if (!p.photo_path) return raise("NO_PHOTO");
+      p.photo_path = null;
+      return ok(card(p));
+    },
     jc_pet_photo_commit: (a) => {
       const p = manage(a.p_pet);
       if (!p) return raise("NOT_FOUND");
@@ -784,5 +792,44 @@ test("R5c review: says who sees the photo; a file over 25 MB is refused before i
   await page.locator("#ptPhotoIn").setInputFiles({ name: "huge.jpg", mimeType: "image/jpeg", buffer: Buffer.alloc(26e6, 0xff) });
   await expect(page.locator("#msg")).toHaveText("That photo couldn't be read. Try another one.");
   expect(await page.evaluate(() => window.__reads)).toBe(0);
+  expect(calls.filter((c) => c.kind === "storage" || /photo/.test(c.name))).toEqual([]);
+});
+
+// ---- R5c-2: remove a photo ----
+test("R5c-2: Remove Photo asks first, then takes it down at once; the list and pet page drop it too", async ({ page }) => {
+  const b = backend();
+  b.st.pets.find((p) => p.name === "Mochi").photo_path = "jubail/x/mochi.jpg";
+  const { calls } = await open(page, b, { q: "?pet=" + ID(6) });
+  await expect.poll(() => loaded(page.locator(".pthero .ptph.big"))).toBe(true);
+  await page.locator("#ptEdit").click();
+  await expect(page.locator("#ptPhotoRemove")).toHaveText("Remove Photo");
+  page.once("dialog", (d) => { expect(d.message()).toBe("Remove Mochi's photo? Neighbors stop seeing it right away."); d.dismiss(); });
+  await page.locator("#ptPhotoRemove").click();
+  expect(named(calls, "jc_pet_photo_remove")).toHaveLength(0);                       // said no: nothing sent
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#ptPhotoRemove").click();
+  await expect(page.locator("#msg")).toHaveText("Mochi's photo is removed.");
+  expect(lastCall(calls, "jc_pet_photo_remove").args).toEqual({ p_pet: ID(6) });
+  await expect(page.locator("#ptPhotoBox .ptph")).toHaveCount(0);
+  await expect(page.locator("#ptPhotoPick")).toHaveText("Add Photo");
+  await expect(page.locator("#ptPhotoRemove")).toHaveCount(0);
+  await page.locator("#ptSave").click();                                              // nothing else changed: details save, no photo calls
+  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator(".pthero .ptph")).toHaveCount(0);
+  expect(calls.filter((c) => /photo_(begin|commit)/.test(c.name) || c.name === "upload")).toEqual([]);
+});
+
+test("R5c-2: a just-picked photo can be dropped before Save; no Remove on a pet without a photo", async ({ page }) => {
+  const b = backend();
+  const { calls } = await open(page, b, { q: "?pet=" + ID(6) });
+  await page.locator("#ptEdit").click();
+  await expect(page.locator("#ptPhotoRemove")).toHaveCount(0);
+  await page.locator("#ptPhotoIn").setInputFiles(await bigJpeg(page));
+  await expect(page.locator("#ptPhotoNew")).toBeVisible();
+  await page.locator("#ptPhotoDrop").click();
+  await expect(page.locator("#ptPhotoNew")).toHaveCount(0);
+  await expect(page.locator("#ptPhotoPick")).toHaveText("Add Photo");
+  await page.locator("#ptSave").click();
+  await expect(page.locator("#msg")).toHaveText("Saved.");
   expect(calls.filter((c) => c.kind === "storage" || /photo/.test(c.name))).toEqual([]);
 });

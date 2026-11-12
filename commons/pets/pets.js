@@ -577,7 +577,11 @@ VIEWS.edit = function(){
        : f.photo_path ? photoHtml({ photo_path: f.photo_path }, 44, "big") : '') +
       /* the input sits before its label so the label can show the keyboard focus (review a11y) */
       '<input type="file" id="ptPhotoIn" class="sr-only" accept="image/*"' + (ptBusy ? ' disabled' : '') + '>' +
-      '<label class="btn ghost" id="ptPhotoPick" for="ptPhotoIn">' + esc(jcT(f.photo || f.photo_path ? "pt_photo_change" : "pt_photo_add")) + '</label></div>' +
+      '<div class="row"><label class="btn ghost" id="ptPhotoPick" for="ptPhotoIn">' + esc(jcT(f.photo || f.photo_path ? "pt_photo_change" : "pt_photo_add")) + '</label>' +
+      /* R5c-2: a picked photo can be dropped before Save; a saved one removed now (with a confirm) */
+      (f.photo ? '<button class="btn ghost" type="button" id="ptPhotoDrop">' + esc(jcT("pt_photo_drop")) + '</button>'
+       : f.id && f.photo_path ? '<button class="btn ghost danger" type="button" id="ptPhotoRemove"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcT("pt_photo_remove")) + '</button>' : '') +
+      '</div></div>' +
       '<p class="help" id="ptPhotoHelp" role="status">' + esc(jcT(f.shrinking ? "working" : f.photo ? "pt_photo_ready" : "pt_photo_help")) + '</p>' +
       '<p class="help" id="ptPhotoWho">' + esc(jcT("pt_photo_who")) + '</p></fieldset>' +
     '<fieldset><legend>' + esc(jcT("pt_species")) + '</legend><div class="opts" id="ptSpecies">' + SPECIES.map(function(s){
@@ -624,6 +628,19 @@ VIEWS.edit = function(){
     if (SPECIES.indexOf(b.dataset.sp) < 0) return;
     f.species = b.dataset.sp;
     Array.prototype.forEach.call(document.querySelectorAll("[data-sp]"), function(x){ x.setAttribute("aria-pressed", String(x === b)); });
+  });
+  on("ptPhotoDrop", function(){ if (ptBusy) return; f.photo = null; shrinkSeq++; f.shrinking = null; draw(); if (el("ptPhotoIn")) el("ptPhotoIn").focus(); });
+  on("ptPhotoRemove", function(){
+    if (!window.confirm(jcFmt("pt_photo_remove_q", { n: f.was }))) return;
+    ptWrite(el("ptPhotoRemove"), function(){ return rpc("jc_pet_photo_remove", { p_pet: f.id }); }, function(){
+      f.photo_path = null; pet = null; pets = null;               /* the pet page / list re-read it */
+      draw();
+      showOk(jcFmt("pt_photo_removed", { n: f.was }));
+    }, function(code){
+      if (code === "NO_PHOTO") { f.photo_path = null; pet = null; pets = null; draw(); showOk(jcFmt("pt_photo_removed", { n: f.was })); return true; }
+      if (code === "NOT_FOUND") { form = null; backToList("NOT_FOUND"); return true; }
+      return false;
+    });
   });
   if (el("ptArchive")) el("ptArchive").addEventListener("click", function(){
     if (!window.confirm(jcFmt("pt_archive_q", { n: f.was }))) return;
