@@ -50,8 +50,8 @@ household's member limit currently have nowhere to go.
 - Households list by village: home label, pin status, members (display name or masked email — never the
   full address), hidden-from-directory flag, pin flags; per-village counts (adoption).
 - **Pending invites over the limit → Approve / Decline** (`jc_admin_invite_decide`).
-- Fix a home's village / type / number (`jc_admin_home_edit`); hide / show in the directory
-  (`jc_admin_home_suppress`); remove a member, optionally deleting the account (`jc_admin_member_remove`).
+- Fix a home's village / type / number (`jc_admin_home_edit`); ~~hide / show in the directory~~ (removed by HH,
+  2026-11-12); remove a member, optionally deleting the account (`jc_admin_member_remove`).
 - Admin log (`jc_admin_log_list`); links from App Health notices ("household left", "pin far away") to the home.
 - Verify each RPC's live shape before building (they date from S1, never exercised by a screen).
 
@@ -174,7 +174,7 @@ Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas 
   how to join, e.g. a WhatsApp group link). No sign-ups, no capacity. Residents **suggest** a meetup (or an event) →
   it lands in Organizer Tools → an admin approves with one tap → published. Direct resident posting later, once
   moderation and the contact-person (PII) question are settled. Needs its own `/plan-change`.
-- **"Hidden homes stay hidden" above is void** — home hiding is being removed (`docs/plans/HH-remove-home-hiding.md`).
+- **"Hidden homes stay hidden" above is void** — home hiding was removed 2026-11-12 (`docs/plans/HH-remove-home-hiding.md`).
 
 ### Light mode  ·  fast follower (Zee 2026-11-11)
 - The light palette already exists in `tokens.css` (`[data-theme="light"]`, contrast-checked); every page pins
