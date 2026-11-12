@@ -24,7 +24,7 @@ var filter = "all";
 var SPECIES = ["cat", "dog", "bird", "rabbit", "other"];
 var CARE = ["sterilized", "dewormed", "vaccination", "treatment"];
 var ptBusy = false;
-var form = null;      /* edit: { id | null, species, name, description, wanderer, microchipped } — survives a language switch */
+var form = null;      /* edit: { id | null, species, name, description, wanderer, microchipped, photo_path, photo (picked: data URL) } — survives a language switch */
 var sheet = null;     /* on the pet page: null | "missing" | "found" | "sight" */
 var sight = null;     /* { note, lat, lng } while the sighting form is open */
 var missDraft = null; /* { note } while the missing sheet is open */
@@ -101,6 +101,87 @@ function ptWrite(b, call, done, fail){
   });
 }
 
+/* ---------- photos (R5c) ----------
+   Private bucket: the server picks the path (jc_pet_photo_begin), the household uploads, the server checks and
+   swaps it in (jc_pet_photo_commit). Shown through short-lived signed URLs, asked once per path per page view;
+   until (or unless) one loads, the paw stays. Photos are shrunk on the phone first (≤ 1280 px JPEG). */
+var PHOTO_MAX = 1280, PHOTO_TTL = 3600;
+var photoUrls = {}, photoAsked = {};
+function photoHtml(p, size, cls){
+  var path = typeof p.photo_path === "string" && p.photo_path ? p.photo_path : null;
+  if (!path) return jcIcon("pets", size);
+  return '<span class="ptph ' + cls + '" data-photo="' + esc(path) + '">' + jcIcon("pets", size) + '</span>';
+}
+function placePhotos(){
+  Array.prototype.forEach.call(document.querySelectorAll("[data-photo]"), function(s){
+    var u = photoUrls[s.dataset.photo];
+    if (!u || s.querySelector("img")) return;
+    var img = document.createElement("img");
+    img.alt = ""; img.decoding = "async";
+    img.addEventListener("load", function(){ s.classList.add("has"); });
+    img.addEventListener("error", function(){ img.remove(); s.classList.remove("has"); });   /* the paw stays */
+    img.src = u;
+    s.appendChild(img);
+  });
+}
+function fillPhotos(){
+  var need = [];
+  Array.prototype.forEach.call(document.querySelectorAll("[data-photo]"), function(s){
+    var path = s.dataset.photo;
+    if (!photoUrls[path] && !photoAsked[path] && need.indexOf(path) < 0) need.push(path);
+  });
+  placePhotos();
+  if (!need.length) return;
+  need.forEach(function(path){ photoAsked[path] = true; });
+  jcDb.storage.from("pet-photos").createSignedUrls(need, PHOTO_TTL).then(function(r){
+    (r && Array.isArray(r.data) ? r.data : []).forEach(function(x){
+      if (x && !x.error && typeof x.path === "string" && typeof x.signedUrl === "string" && x.signedUrl.indexOf(JC_URL + "/") === 0)
+        photoUrls[x.path] = x.signedUrl;
+    });
+    placePhotos();
+  }, function(){ /* unreadable: the paw stays */ });
+}
+/* the picked file → a JPEG data URL ≤ 1280 px. Drawing an <img> onto a canvas applies the photo's EXIF rotation. */
+function shrinkPhoto(file){
+  return new Promise(function(done, fail){
+    var bad = function(){ fail(jcErr("PHOTO_UNREADABLE")); };
+    if (!file || (file.type && !/^image\//.test(file.type))) return bad();
+    var r = new FileReader();
+    r.onerror = bad;
+    r.onload = function(){
+      var img = new Image();
+      img.onerror = bad;
+      img.onload = function(){
+        var w = img.naturalWidth, h = img.naturalHeight;
+        if (!w || !h) return bad();
+        var k = Math.min(1, PHOTO_MAX / Math.max(w, h)), c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+        var g = c.getContext("2d");
+        if (!g) return bad();
+        g.drawImage(img, 0, 0, c.width, c.height);
+        var url = c.toDataURL("image/jpeg", 0.82);
+        var n = Math.floor((url.length - url.indexOf(",") - 1) * 3 / 4);
+        if (url.indexOf("data:image/jpeg") !== 0 || n < 1024 || n > 2000000) return bad();   /* blank or too big */
+        done(url);
+      };
+      img.src = r.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+function uploadPhoto(id, dataUrl){
+  return rpc("jc_pet_photo_begin", { p_pet: id, p_ext: "jpg" }).then(function(b){
+    if (!hObj(b) || typeof b.path !== "string") throw jcErr("UNKNOWN");
+    var bin = atob(dataUrl.slice(dataUrl.indexOf(",") + 1)), buf = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    /* raw bytes, not a Blob: a Blob would go up as a multipart form */
+    return jcDb.storage.from("pet-photos").upload(b.path, buf.buffer, { contentType: "image/jpeg", upsert: false }).then(function(r){
+      if (!r || r.error) throw jcErr("PHOTO_UPLOAD_FAILED");
+      return rpc("jc_pet_photo_commit", { p_pet: id });
+    });
+  });
+}
+
 /* ---------- data ---------- */
 function loadList(then){
   var seq = ++listSeq;
@@ -169,7 +250,7 @@ function backToList(code, okText){
   loadList(code || okText ? function(){ if (code) ptMsg(code); else showOk(okText); } : null);
   show("list");
 }
-function draw(){ var r = jcFocusKeep(); VIEWS[current](); r(); }
+function draw(){ var r = jcFocusKeep(); VIEWS[current](); r(); fillPhotos(); }
 
 /* ---------- views ---------- */
 function show(name){
@@ -182,6 +263,7 @@ function show(name){
   var refocus = jcFocusKeep();
   VIEWS[name]();
   refocus();
+  fillPhotos();
 }
 
 /* noState: the pet page lists the status in its facts, so its chip row doesn't repeat it */
@@ -196,7 +278,7 @@ function chips(p, noState){
 function card(p){
   var where = p.kind === "owned" ? homeText(p.home) : (p.territory || "");
   return '<li class="' + (p.missing === true ? "missing" : "") + '" data-pet="' + esc(p.id) + '">' +
-    '<div class="evtop"><div class="pthead">' + jcIcon("pets", 22) + '<b dir="auto">' + esc(p.name) + '</b></div></div>' +
+    '<div class="evtop"><div class="pthead">' + photoHtml(p, 22, "thumb") + '<b dir="auto">' + esc(p.name) + '</b></div></div>' +
     '<div class="meta">' + esc(speciesText(p) + " · " + kindText(p)) + '</div>' +
     (where ? '<div class="meta" dir="auto">' + esc(where) + '</div>' : '') +
     (chips(p) ? '<div class="head">' + chips(p) + '</div>' : '') +
@@ -259,7 +341,7 @@ var VIEWS = {
       filter = b.dataset.filter; show("list");
       var f = el("ptF-" + filter); if (f) f.focus();
     });
-    on("ptAdd", function(){ form = { id: null, species: "cat", name: "", description: "", wanderer: false, microchipped: false }; show("edit"); });
+    on("ptAdd", function(){ form = { id: null, species: "cat", name: "", description: "", wanderer: false, microchipped: false, photo_path: null, photo: null }; show("edit"); });
   },
 
   pet: function(){
@@ -270,7 +352,8 @@ var VIEWS = {
     }
     if (!pet) { el("view").innerHTML = msgBox() + '<p class="help" role="status">' + esc(jcT("working")) + '</p>'; return; }
     var p = pet, h = '';
-    h += '<div class="pthero"><div class="pthead">' + jcIcon("pets", 30) + '<h1 dir="auto">' + esc(p.name) + '</h1></div>' +
+    h += '<div class="pthero">' + (p.photo_path ? photoHtml(p, 44, "big") : '') +
+      '<div class="pthead">' + (p.photo_path ? '' : jcIcon("pets", 30)) + '<h1 dir="auto">' + esc(p.name) + '</h1></div>' +
       '<p class="meta">' + esc(speciesText(p) + " · " + kindText(p)) + '</p>' +
       (chips(p, true) ? '<div class="head">' + chips(p, true) + '</div>' : '') + '</div>';
     if (p.missing === true) {
@@ -406,7 +489,8 @@ function wirePet(){
     var b = el(was === "sight" ? "ptSight" : "ptMiss"); if (b) b.focus(); });
   on("ptEdit", function(){
     sheet = null; sight = null; missDraft = null;       /* a half-typed sighting doesn't reopen after Edit (review L5) */
-    form = { id: p.id, was: p.name, species: p.species, name: p.name, description: p.description || "", wanderer: p.wanderer === true, microchipped: p.microchipped === true };
+    form = { id: p.id, was: p.name, species: p.species, name: p.name, description: p.description || "", wanderer: p.wanderer === true, microchipped: p.microchipped === true,
+             photo_path: p.photo_path || null, photo: null };
     show("edit");
   });
   /* the missing switch */
@@ -469,6 +553,12 @@ VIEWS.edit = function(){
   el("view").innerHTML = '<h1 dir="auto">' + esc(f.id ? jcFmt("pt_edit_title", { n: f.name || "" }) : jcT("cta_pets")) + '</h1>' + msgBox() +
     '<form class="panel" id="ptForm" novalidate>' +
     '<label>' + esc(jcT("pt_name")) + '<input type="text" id="ptName" maxlength="40" dir="auto" autocomplete="off" required></label>' +
+    '<fieldset id="ptPhotoBox"><legend>' + esc(jcT("pt_photo")) + '</legend><div class="ptphotoedit">' +
+      (f.photo ? '<span class="ptph big has"><img id="ptPhotoNew" alt="" src="' + esc(f.photo) + '"></span>'
+       : f.photo_path ? photoHtml({ photo_path: f.photo_path }, 44, "big") : '') +
+      '<label class="btn ghost" id="ptPhotoPick" for="ptPhotoIn">' + esc(jcT(f.photo || f.photo_path ? "pt_photo_change" : "pt_photo_add")) + '</label>' +
+      '<input type="file" id="ptPhotoIn" class="sr-only" accept="image/*"' + (ptBusy ? ' disabled' : '') + '></div>' +
+      '<p class="help" id="ptPhotoHelp">' + esc(jcT(f.photo ? "pt_photo_ready" : "pt_photo_help")) + '</p></fieldset>' +
     '<fieldset><legend>' + esc(jcT("pt_species")) + '</legend><div class="opts" id="ptSpecies">' + SPECIES.map(function(s){
       return '<button type="button" data-sp="' + s + '" aria-pressed="' + (f.species === s) + '">' + esc(jcT("pt_sp_" + s)) + '</button>';
     }).join("") + '</div></fieldset>' +
@@ -487,6 +577,19 @@ VIEWS.edit = function(){
   el("ptDescIn").addEventListener("input", function(){ f.description = el("ptDescIn").value; });
   el("ptWand").addEventListener("change", function(){ f.wanderer = el("ptWand").checked; });
   el("ptChipIn").addEventListener("change", function(){ f.microchipped = el("ptChipIn").checked; });
+  el("ptPhotoIn").addEventListener("change", function(){
+    var file = el("ptPhotoIn").files && el("ptPhotoIn").files[0];
+    if (!file || ptBusy) return;
+    el("ptPhotoHelp").textContent = jcT("working");
+    shrinkPhoto(file).then(function(url){
+      if (form !== f || current !== "edit") return;
+      f.photo = url; draw();
+    }, function(e){
+      if (form !== f || current !== "edit") return;
+      el("ptPhotoHelp").textContent = jcT("pt_photo_help");
+      ptMsg(e.code || "PHOTO_UNREADABLE");
+    });
+  });
   each("[data-sp]", function(b){
     if (SPECIES.indexOf(b.dataset.sp) < 0) return;
     f.species = b.dataset.sp;
@@ -506,13 +609,25 @@ VIEWS.edit = function(){
     var name = f.name.trim();
     if (!name) { ptMsg("NAME_EMPTY"); el("ptName").focus(); return; }
     var fields = { species: f.species, name: name, description: f.description.trim() || null, wanderer: f.wanderer, microchipped: f.microchipped };
-    ptWrite(el("ptSave"), function(){ return rpc("jc_pet_save", { p_pet: f.id, p_fields: fields }); }, function(c){
-      var id = isPet(c) ? c.id : f.id, added = !f.id;
+    var photo = f.photo;
+    ptWrite(el("ptSave"), function(){
+      return rpc("jc_pet_save", { p_pet: f.id, p_fields: fields }).then(function(c){
+        var id = isPet(c) ? c.id : f.id;
+        if (!photo || !id) return { c: c };
+        /* the details are saved either way: a photo that fails is said plainly, never loses the rest */
+        return uploadPhoto(id, photo).then(function(){ return { c: c }; }, function(e){ return { c: c, photoErr: (e && e.code) || "UNKNOWN" }; });
+      });
+    }, function(r){
+      var c = r.c, id = isPet(c) ? c.id : f.id, added = !f.id;
       form = null; pets = null;
       if (!id) { tab = "mine"; backToList(); return; }
       pet = null; setUrl("pet=" + encodeURIComponent(id) + (tab === "list" ? "" : "&tab=" + tab));
       show("pet");
-      loadPet(id, function(){ showOk(jcFmt(added ? "pt_added" : "pt_saved", { n: name })); });
+      loadPet(id, function(){
+        if (!r.photoErr) return showOk(jcFmt(added ? "pt_added" : "pt_saved", { n: name }));
+        var t = jcT("pt_err_" + r.photoErr);
+        say("err", jcFmt("pt_photo_failed", { n: name, why: t === "pt_err_" + r.photoErr ? jcErrText({ code: r.photoErr }) : t }));
+      });
     }, function(code){
       if (code === "NOT_FOUND") { form = null; backToList("NOT_FOUND"); return true; }
       return false;
