@@ -37,6 +37,7 @@
   --jc-info:#58c4d4;          /* allergy-friendly / informational marker */
   --jc-mine:#8fb4ff;          /* "yours" on court slots: a hue no other slot state uses (Zee 2026-11-09: green on green) */
   --jc-mine-ink:#0b1633;      /* text on --jc-mine */
+  --jc-me:#3a86ff;            /* the "you are here" dot on maps — the blue people recognise (Zee 2026-11-11); same in light */
   /* shape & type */
   --jc-radius:14px;
   --jc-radius-pill:999px;

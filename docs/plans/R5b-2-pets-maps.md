@@ -53,6 +53,14 @@ would break the consistency rule; (2) three pin pickers exist and none is shared
   / tiles beyond one view), tap → callback.
 - **Events, Courts, home pin, admin venue pin switch to it** in the same PR, with the full e2e suite as the guard
   (≈ 560 tests) + screenshots of every map before / after. Nothing should look different.
+- **As built (2026-11-12, `feat/r5b2a-map-kit`):** the kit went into the existing `assets/map.js` (already loaded on
+  every map page, so no new `<script>` tags), not a new `mapkit.js`. Pieces: `jcMapColors` (the Find Me dot is now the
+  `--jc-me` token), `JC_POPUP`, `jcDirectionsUrl`, `jcMapLayers` (Street / Satellite), `jcLocate`, `jcMeDot`,
+  `jcMapHtml` (the full map's buttons), `jcMapFull` (Full Screen + Escape), `jcPinPickerHtml` / `jcPinPicker`.
+  **`jcMiniMap` deferred to R5b-2b-2** — its first user, so it isn't dead code until then; the Pets sighting button
+  also moves to the kit there (Pets doesn't load Leaflet yet). Only behaviour difference: Escape on the Courts full
+  map now leaves an open window's Escape alone, as Events already did. Map specs 283/283; before/after screenshots of
+  the event map (EN, AR, full screen, Street) and the home pin (EN, AR) are byte-identical.
 
 ### R5b-2b — Pets on the kit
 1. **Badges** (sketch A) — *corrected against the brand direction (2026-11-11)*: the four signal colours are

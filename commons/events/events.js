@@ -17,6 +17,7 @@ if (EVENT_ID && !/^[0-9a-f-]{36}$/i.test(EVENT_ID)) EVENT_ID = null;
 var TABS = ["map", "list", "mine"];
 
 var state = null, cfg = null, current = null, map = null;
+var full = jcMapFull(function(){ return map; }, fitMap);   /* the map, bigger (assets/map.js); fitMap is hoisted */
 var data = null;          /* last jc_event_get */
 var tab = TABS.indexOf(params.get("tab")) >= 0 ? params.get("tab") : "map";
 var editing = false;      /* My home tab: the sign-up form is open */
@@ -184,7 +185,7 @@ function show(name){
   /* state first: map.remove() fires popupclose, which must not draw onto a dying map (review R1) */
   var old = map;
   map = null; homeLayer = null; popupOpen = false; pendingRepaint = false; mineShown = null;
-  mapFull = false; document.body.classList.remove("mapfull");   /* any redraw: the map is back in the page */
+  full.reset();   /* any redraw: the map is back in the page */
   jcMapRemove(old);
   current = name;
   setLook(name === "list" ? null : lookOf(data && data.event));
@@ -761,12 +762,8 @@ var listSort = "number";   /* number | distance */
 var userPos = null;
 
 function locate(done){
-  if (!navigator.geolocation) return showErr("LOCATE_FAILED");
-  navigator.geolocation.getCurrentPosition(function(p){
-    userPos = L.latLng(p.coords.latitude, p.coords.longitude);
-    done();
-  }, function(err){ setMapFull(false); showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED"); },   /* the message sits above the map: leave full screen to show it (courts review, parity) */
-  { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+  jcLocate(function(lat, lng){ userPos = L.latLng(lat, lng); done(); },
+    function(code){ full.set(false); showErr(code); });   /* the message sits above the map: leave full screen to show it (courts review, parity) */
 }
 function dist(e){ return userPos && hasPos(e) ? userPos.distanceTo(L.latLng(e.lat, e.lng)) : null; }
 function fmtDist(m){ return m < 1000 ? Math.round(m / 10) * 10 + " m" : (m / 1000).toFixed(1) + " km"; }
@@ -777,7 +774,7 @@ function byNumber(a, b){
   return String(a.number).localeCompare(String(b.number), "en", { numeric: true, sensitivity: "base" });
 }
 function directionsUrl(e){
-  return "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(e.lat + "," + e.lng) + "&travelmode=walking";
+  return jcDirectionsUrl(e.lat, e.lng);
 }
 function pinUrl(e){ return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(e.lat + "," + e.lng); }
 function answers(e){
@@ -847,7 +844,7 @@ function measureDesc(){
 function fitMap(){
   var m = el("map");
   if (!m) return;
-  if (mapFull) { if (map) map.invalidateSize(); return; }   /* full screen: CSS sizes it */
+  if (full.on) { if (map) map.invalidateSize(); return; }   /* full screen: CSS sizes it */
   /* innerHeight follows Safari's toolbar; visualViewport would also shrink on pinch-zoom (review) */
   var vh = window.innerHeight;
   var bar = el("tabbar") ? el("tabbar").getBoundingClientRect().height : 0;
@@ -863,26 +860,6 @@ function fitMap(){
   m.style.height = h + "px";
   if (map) map.invalidateSize();
 }
-/* The map, bigger (Zee, 2026-11-07): the map box fills the screen above everything, and one button
-   both opens and closes it (Escape too). A CSS expand, so it works in iOS Safari, which has no element
-   Fullscreen API; Leaflet re-measures once the box has its new size. */
-var mapFull = false;
-function setMapFull(on){
-  var w = document.querySelector(".evmapwrap"), b = el("fullBtn");
-  mapFull = !!on && !!w;
-  if (w) w.classList.toggle("full", mapFull);
-  document.body.classList.toggle("mapfull", mapFull);
-  if (b) {
-    b.textContent = jcT(mapFull ? "ev_map_close" : "ev_map_full");
-    b.setAttribute("aria-pressed", String(mapFull));
-  }
-  if (!mapFull) fitMap();
-  requestAnimationFrame(function(){ if (map) map.invalidateSize(); });
-}
-document.addEventListener("keydown", function(e){
-  /* an open window (Map Labels) takes its own Escape — one press closes only that (code review L5) */
-  if (e.key === "Escape" && mapFull && !document.querySelector("dialog[open]")) setMapFull(false);
-});
 
 var fitTimer = null;
 function fitSoon(){ clearTimeout(fitTimer); fitTimer = setTimeout(function(){ measureDesc(); fitMap(); }, 120); }
@@ -897,16 +874,11 @@ function renderMap(entries){
     entries = hasPos(spot) ? [spot] : [];   /* both coordinates, or no pin (review) */
   }
   var unpinned = venue ? 0 : entries.filter(function(e){ return !hasPos(e); }).length;
-  mapFull = false; document.body.classList.remove("mapfull");   /* a redrawn map starts in the page */
+  full.reset();   /* a redrawn map starts in the page */
   el("body").innerHTML =
-    '<div class="evmapwrap"><div class="evmap" id="map"></div>' +
-      /* top right, one row: Map Labels · Street; Find Me bottom right (Zee, 2026-11-06) */
-      '<div class="mapbtns">' +
-        (venue || !legendHtml(ev) ? '' : '<button type="button" class="lang" id="labelsBtn" aria-haspopup="dialog">' + esc(jcT("ev_labels")) + '</button>') +
-        '<button type="button" class="lang" id="layerBtn">' + esc(jcT(layer === "sat" ? "pin_street" : "pin_sat")) + '</button></div>' +
-      '<button type="button" class="lang maplocate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button>' +
-      /* bottom left, clear of the zoom (top left), Street / Map Labels (top right) and Find Me (bottom right) */
-      '<button type="button" class="lang mapfull" id="fullBtn" aria-pressed="false">' + esc(jcT("ev_map_full")) + '</button></div>' +
+    /* top right, one row: Map Labels · Street; Find Me bottom right (Zee, 2026-11-06) */
+    jcMapHtml("map", layer, { before: venue || !legendHtml(ev) ? '' :
+      '<button type="button" class="lang" id="labelsBtn" aria-haspopup="dialog">' + esc(jcT("ev_labels")) + '</button>' }) +
     '<dialog class="sheet" id="labels" aria-label="' + esc(jcT("ev_labels")) + '"></dialog>' +
     '<div id="mapAfter">' +
     (unpinned ? '<p class="help" style="margin-top:8px">' + esc(unpinned) + ' · ' + esc(jcT("ev_unpinned")) +
@@ -917,7 +889,7 @@ function renderMap(entries){
       '</p>' : '') + '</div>';
   on("seeList", function(e){ e.preventDefault(); el("tab-list").click(); });
   on("labelsBtn", openLabels);
-  on("fullBtn", function(){ setMapFull(!mapFull); });
+  on("fullBtn", function(){ full.set(!full.on); });
   var m0 = document.querySelector(".evmapwrap");
   var dl = el("labels");   /* a tap on the dimmed backdrop closes it */
   if (dl) dl.addEventListener("click", function(e2){
@@ -931,16 +903,8 @@ function renderMap(entries){
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitSoon);
   var c = (cfg && cfg.map) || {};
   map = L.map("map", { zoomControl: true }).setView([c.lat || 24.53, c.lng || 54.43], c.zoom || 14);
-  var tiles = L.tileLayer(jcTiles[layer].url, jcTiles[layer].opts).addTo(map);
-  on("layerBtn", function(){
-    layer = layer === "sat" ? "street" : "sat";
-    map.removeLayer(tiles);
-    tiles = L.tileLayer(jcTiles[layer].url, jcTiles[layer].opts).addTo(map);
-    el("layerBtn").textContent = jcT(layer === "sat" ? "pin_street" : "pin_sat");
-  });
-  var styles = getComputedStyle(document.documentElement);
-  var accent = styles.getPropertyValue("--jc-accent").trim() || "#3e9b76";
-  var ink = styles.getPropertyValue("--jc-ink").trim() || "#f6f2e9";
+  jcMapLayers(map, "layerBtn", layer, function(l){ layer = l; });
+  var col = jcMapColors(), accent = col.accent, ink = col.ink;
   var pts = [], me = null;
   entries.forEach(function(e){ if (hasPos(e)) pts.push([e.lat, e.lng]); });
   if (venue && pts.length) {
@@ -967,18 +931,13 @@ function renderMap(entries){
   on("locateBtn", function(){
     locate(function(){
       if (!map) return;
-      if (me) me.setLatLng(userPos);
-      else me = L.circleMarker(userPos, { radius: 6, weight: 3, color: "#fff", fillColor: "#3a86ff", fillOpacity: 1 }).addTo(map);
+      me = jcMeDot(map, userPos, me);
       map.setView(userPos, Math.max(map.getZoom(), 17));
     });
   });
   if (pts.length > 1) map.fitBounds(pts, { padding: [30, 30], maxZoom: 18 });
   else if (pts.length === 1) map.setView(pts[0], 18);
 }
-
-/* a phone-sized popup the map pans clear of the edges: room for the zoom buttons on one side, and
-   below for "Find Me" (Zee, 2026-11-06: the popup hid its own close button) */
-var POPUP_OPTS = { maxWidth: 250, minWidth: 180, autoPanPaddingTopLeft: [12, 24], autoPanPaddingBottomRight: [12, 24] };
 
 /* the homes' pins, in their own layer so a refresh redraws them without moving the map */
 function drawHomes(entries){
@@ -988,7 +947,7 @@ function drawHomes(entries){
     if (!hasPos(e)) return;
     /* your own home on top of its neighbours */
     L.marker([e.lat, e.lng], { icon: pinIcon(e), zIndexOffset: e.mine ? 1000 : 0, keyboard: true, title: jcHomeLabel(e) })
-      .addTo(homeLayer).bindPopup(function(){ return popupHtml(e); }, POPUP_OPTS);   /* rebuilt on open: distance stays current */
+      .addTo(homeLayer).bindPopup(function(){ return popupHtml(e); }, JC_POPUP);   /* rebuilt on open: distance stays current */
   });
 }
 
