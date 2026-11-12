@@ -1675,7 +1675,7 @@ function courtDraftMsg(id, text, err){
   b.type = "button"; b.className = "mini"; b.id = "ctMsgPub"; b.textContent = jcT("ct_act_publish");
   b.style.marginInlineStart = "10px";
   b.addEventListener("click", function(){ if (!ctBusy) courtSetStatus(id, "published", b); });
-  m.appendChild(b);
+  m.appendChild(b);  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
 }
 function ctMsg(code){
   var t = jcT("ct_err_" + code);
@@ -1732,35 +1732,49 @@ function saveCourt(publish){
     ctEd = null; admTab = "courts";
     try { history.replaceState(null, "", "?tab=courts"); } catch(e){}
     show("home");
+    try { window.scrollTo(0, 0); } catch(e){}    /* review M1: the form is long — the message must not land above the screen */
   }
   function saved(id){ return draftNow ? courtDraftMsg(id, jcT("ct_saved_draft")) : showOk(jcT("ct_saved")); }
   var unchanged = f && !Object.keys(fields).length;
   if (unchanged && !publish) { back(); return saved(f.id); }
-  ["ctSave", "ctSavePub"].forEach(function(b){ busy(b, true); });
+  if (ctEd.saving) return;                        /* review L4: a redraw (language switch) re-enables the buttons */
   var mine = ctEd;
+  mine.saving = true;
+  ["ctSave", "ctSavePub"].forEach(function(b){ busy(b, true); });
+  function here(){ return current === "court" && ctEd === mine; }
+  function onList(){ return current === "home" && admTab === "courts"; }
   var known = ((ct && ct.list) || []).map(function(x){ return x.id; });     /* to find the new court's id in the reply */
   var save = unchanged ? Promise.resolve(null) : rpc("jc_admin_facility_save", { p_facility: f ? f.id : null, p_fields: fields });
   save.then(function(list){
     /* the save landed: the list is right even if they already left the editor (review M1) */
     if (list !== null) { if (ct && Array.isArray(list)) ct.list = list.filter(hObj); else ct = null; }
-    if (current !== "court" || ctEd !== mine) { if (current === "home" && admTab === "courts") show("home"); return; }
     var fresh = ((ct && ct.list) || []).filter(function(x){ return known.indexOf(x.id) < 0; });
+    if (fresh.length > 1) fresh = fresh.filter(function(x){ return x.name_en === v.name_en; });    /* another admin added one too */
     var id = f ? f.id : fresh.length === 1 ? fresh[0].id : null;
-    if (!publish || !id) { back(); return saved(id); }
+    if (!publish) {
+      if (here()) { back(); saved(id); } else if (onList()) show("home");
+      return;
+    }
+    if (!id) {                                    /* review M2: never a silent downgrade to a draft */
+      if (here()) back(); else if (onList()) show("home"); else return;
+      var m = el("msg"); if (m) { m.className = "msg err"; m.textContent = jcT("ct_pub_lost"); }
+      return;
+    }
+    /* review L3: Publish was asked for — it goes ahead even if they've left the editor meanwhile */
     rpc("jc_admin_facility_status", { p_facility: id, p_status: "published" }).then(function(l2){
       if (ct && Array.isArray(l2)) ct.list = l2.filter(hObj);
-      if (current !== "court" || ctEd !== mine) { if (current === "home" && admTab === "courts") show("home"); return; }
-      back(); showOk(jcT("ct_done_publish"));
+      if (here()) back(); else if (onList()) show("home"); else return;
+      showOk(jcT("ct_done_publish"));
     }, function(e){
       if (e.code === "NOT_ADMIN") return fail(e);
-      if (current !== "court" || ctEd !== mine) return;
-      back();
+      if (here()) back(); else if (onList()) show("home"); else return;
       courtDraftMsg(id, jcFmt("ct_pub_failed", { why: ctErrText(e.code) }), true);
     });
   }, function(e){
+    mine.saving = false;
     ["ctSave", "ctSavePub"].forEach(function(b){ busy(b, false); });
     if (e.code === "NOT_ADMIN") return fail(e);
-    ctMsg(e.code);
+    if (here()) ctMsg(e.code);
   });
 }
 function ctErrText(code){ var t = jcT("ct_err_" + code); return t === "ct_err_" + code ? jcErrText({ code: code }) : t; }

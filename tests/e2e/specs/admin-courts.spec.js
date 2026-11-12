@@ -23,11 +23,13 @@ function backend(opts = {}) {
     jc_admin_facilities_list: () => (opts.listFails ? raise("NETWORK_X") : allowed() ? list() : raise("NOT_ADMIN")),
     jc_admin_booking_rules: () => (allowed() ? ok({ enabled: !!opts.enabled, per_home_per_day: 1, per_home_active: 2,
       configured: {}, retention_days: 90, defaults: { window_days: 7, slot_minutes: 60 } }) : raise("NOT_ADMIN")),
-    jc_admin_facility_save: (a) => {
+    jc_admin_facility_save: async (a) => {
+      if (st.hold) await st.hold;                                   // a test can make the save answer late
       if (!allowed()) return raise("NOT_ADMIN");
       if (opts.saveError) return raise(opts.saveError);
       if (a.p_facility === null) {
         n += 1;
+        if (opts.alsoAdded) st.courts.push(COURT(Object.assign({ id: "other-" + n }, opts.alsoAdded)));   // another admin, same moment
         st.courts.push(COURT(Object.assign({ id: "new-" + n }, a.p_fields)));
       } else Object.assign(st.courts.find((c) => c.id === a.p_facility), a.p_fields);
       return list();
@@ -435,4 +437,71 @@ test("publish state AR: buttons, note and the amber draft chip in Arabic", async
   await page.locator('[data-ct="edit"][data-id="c1"]').click();
   await expect(page.locator("#ctSavePub")).toHaveText("حفظ ونشر");
   await expect(page.locator("#ctSave")).toHaveText("حفظ كمسودة");
+});
+
+test("publish state review M2: another admin's new court arrives too → the right one is published; can't tell → says so", async ({ page }) => {
+  const b = backend({ alsoAdded: { name_en: "Their Court" } });
+  const { calls } = await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openCourts(page);
+  await page.locator("#ctNew").click();
+  await page.locator("#ct_name_en").fill("Court 2");
+  await page.locator('input[name="ct_kind"][value="tennis"]').check();
+  await page.locator("#ctSavePub").click();
+  await expect(page.locator("#msg")).toHaveText("Published — residents can see it now.");
+  expect(lastCall(calls, "jc_admin_facility_status").args).toEqual({ p_facility: "new-1", p_status: "published" });
+  await expect(page.locator('[data-court="other-1"] .chip.draft')).toBeVisible();
+  // same name on both → no guess: nothing published, and it says so
+  await page.locator("#ctNew").click();
+  await page.locator("#ct_name_en").fill("Their Court");
+  await page.locator('input[name="ct_kind"][value="tennis"]').check();
+  const before = calls.filter((c) => c.name === "jc_admin_facility_status").length;
+  await page.locator("#ctSavePub").click();
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft, but it didn't publish — tap Publish on it in the list below.");
+  await expect(page.locator("#msg")).toHaveClass(/err/);
+  expect(calls.filter((c) => c.name === "jc_admin_facility_status").length).toBe(before);
+});
+
+test("publish state review L3/L4: leaving mid-save still publishes; a redraw can't send a second save", async ({ page }) => {
+  const b = backend();
+  const { calls } = await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openCourts(page);
+  await page.locator("#ctNew").click();
+  await page.locator("#ct_name_en").fill("Court 2");
+  await page.locator('input[name="ct_kind"][value="tennis"]').check();
+  let release;
+  b.st.hold = new Promise((r) => { release = r; });
+  await page.locator("#ctSavePub").click();
+  await expect.poll(() => calls.filter((c) => c.name === "jc_admin_facility_save").length).toBe(1);
+  await page.locator("#langBtn").click();                                // redraw: buttons come back enabled
+  await expect(page.locator("#ctSavePub")).toHaveText("حفظ ونشر");
+  await page.locator("#ctSavePub").click();
+  await page.waitForTimeout(300);                                        // a second save would have been sent by now
+  await page.locator("#ctCancel").click();                               // and leave before the save lands
+  await expect(page.locator("#ctNew")).toBeVisible();
+  b.st.hold = null; release();
+  await expect.poll(() => calls.filter((c) => c.name === "jc_admin_facility_status").length).toBe(1);
+  expect(calls.filter((c) => c.name === "jc_admin_facility_save").length).toBe(1);
+  await expect(page.locator('[data-court="new-1"] .chip.draft')).toHaveCount(0);
+});
+
+test("publish state review M1: after saving from the bottom of the long form the message is on screen", async ({ page }) => {
+  const b = backend({ courts: Array.from({ length: 15 }, (_, i) => COURT({ id: "k" + i, name_en: "Court K" + i })) });   // a long list
+  await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openCourts(page);
+  await page.locator("#ctNew").click();
+  await page.locator("#ct_name_en").fill("Court 2");
+  await page.locator('input[name="ct_kind"][value="tennis"]').check();
+  await page.locator("#ctSave").scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
+  await page.locator("#ctSave").click();
+  await expect(page.locator("#ctMsgPub")).toBeInViewport();
+  await page.locator('[data-ct="edit"][data-id="new-1"]').click();
+  await page.locator("#ctSavePub").scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(300);
+  await page.locator("#ctSavePub").click();
+  await expect(page.locator("#msg")).toHaveText("Published — residents can see it now.");
+  await expect(page.locator("#msg")).toBeInViewport();
 });
