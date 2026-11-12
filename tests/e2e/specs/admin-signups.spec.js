@@ -293,8 +293,7 @@ test("home-pin Undo puts the home's old pin back (a different RPC than the move)
   await page.goto("admin/");
   await openSignups(page, "test-event");
   await card(page, "12").locator('[data-su="pin"]').click();
-  await page.locator("#coords").fill("24.5400, 54.4400");
-  await page.locator("#coordsGo").click();
+  await page.evaluate(() => vmap.setView([24.54, 54.44], 18));
   page.once("dialog", (d) => d.accept());
   await page.locator("#pmHome").click();
   await expect(page.locator("#msg")).toContainText("Villa 12's pin moved.");
@@ -312,8 +311,7 @@ test("event-pin Undo over an existing event pin restores that pin, not the home'
   await page.goto("admin/");
   await openSignups(page, "test-event");
   await card(page, "7").locator('[data-su="pin"]').click();
-  await page.locator("#coords").fill("24.5400, 54.4400");
-  await page.locator("#coordsGo").click();
+  await page.evaluate(() => vmap.setView([24.54, 54.44], 18));
   page.once("dialog", (d) => d.accept());
   await page.locator("#pmEvent").click();
   await expect(page.locator("#msg")).toContainText("Townhouse 7 is pinned here for this event.");

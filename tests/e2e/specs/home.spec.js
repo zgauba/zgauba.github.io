@@ -358,31 +358,21 @@ test("language toggle keeps what you typed", async ({ page }) => {
   await expect(page.locator("#number")).toHaveValue("42");
 });
 
-test("pin: paste coordinates (plain or Google Maps link) moves the map; junk is refused", async ({ page }) => {
+test("pin: set on the map only — no coordinates box; the spot under the ring is what's saved", async ({ page }) => {
   const hb = homeBackend(MEMBER);
   const { calls } = await stubBackend(page, { rpc: hb.rpc });
   await signIn(page);
   await page.goto("home/?view=pin");
-  await page.locator("#coords").fill("hello");
-  await page.locator("#coordsGo").click();
-  await expect(page.locator("#msg")).toContainText("don't look like coordinates");
-  await page.locator("#coords").fill("https://www.google.com/maps/place/Villa+12/@24.5512,54.4123,17z");
-  await page.locator("#coordsGo").click();
-  // wait until the stub has RECORDED the save — reading `calls` right after the click raced
-  // it, and so did waitForRequest (it fires before the route handler runs). Flaked: polish PR.
+  await expect(page.locator("#map")).toBeVisible();
+  await expect(page.locator("#coords, #coordsGo")).toHaveCount(0);           // Zee 2026-11-12: map only
+  await expect(page.locator("body")).not.toContainText("coordinates");
+  await page.evaluate(() => map.setView([24.5512, 54.4123], 19));          // the resident pans the map
   const saves = () => calls.filter((c) => c.name === "jc_home_pin_set").length;
   await page.locator("#savePin").click();
   await expect.poll(saves).toBe(1);
-  let a = calls.filter((c) => c.name === "jc_home_pin_set").pop().args;
+  const a = calls.filter((c) => c.name === "jc_home_pin_set").pop().args;
   expect(Math.abs(a.p_lat - 24.5512)).toBeLessThan(0.0002);
   expect(Math.abs(a.p_lng - 54.4123)).toBeLessThan(0.0002);
-  await page.goto("home/?view=pin");
-  await page.locator("#coords").fill("24.5301° N, 54.4312° E");
-  await page.locator("#coordsGo").click();
-  await page.locator("#savePin").click();
-  await expect.poll(saves).toBe(2);
-  a = calls.filter((c) => c.name === "jc_home_pin_set").pop().args;
-  expect(Math.abs(a.p_lat - 24.5301)).toBeLessThan(0.0002);
 });
 
 // ---- T5.2 PR 1: the pin is required; the pin screen can return to an event ----

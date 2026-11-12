@@ -349,6 +349,7 @@ test("publish state: new court note, Save and Publish publishes the new court in
   await openCourts(page);
   await page.locator("#ctNew").click();
   await expect(page.locator("#ctStateNote")).toHaveText("New courts start as drafts — residents see a court only once it's published.");
+  await expect(page.locator("#coords, #coordsGo")).toHaveCount(0);           // Zee 2026-11-12: pins on the map only
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/courts-new-editor.png", fullPage: true });
   await expect(page.locator("#ctForm .row button.btn").last()).toHaveText("Cancel");
   await expect(page.locator("#ctSavePub")).toHaveText("Save and Publish");

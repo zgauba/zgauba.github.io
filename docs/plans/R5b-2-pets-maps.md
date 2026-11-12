@@ -18,7 +18,7 @@
 |---|---|---|
 | Detail page = header block, then a tab row (`jcTabsHtml` / `jcTabsWire`, `?tab=`), Map tab full height | Event page: `map · list · mine` (`events.js:18-26, 276-312`, `fitMap` 847-866) | One long scroll |
 | Map: Street / Satellite, Map Labels, Find Me (blue dot), Full Screen (CSS `.evmapwrap.full`), popups with walking Directions | `events.js renderMap` 892-973 and **a copy** in `bookings.js` 308-359 ("keep in step") | No map |
-| Pin picker: map pans under a fixed centre ring, Find Me, paste coordinates, Save reads the centre | Home pin (full page, `home.js` 64-126); admin venue pin (`admin.js` 2203-2255, 240 px) | Bare geolocation button |
+| Pin picker: map pans under a fixed centre ring, Find Me, Save reads the centre (paste-coordinates box removed 2026-11-12 — map only) | Home pin (full page, `home.js` 64-126); admin venue pin (`admin.js` 2203-2255, 240 px) | Bare geolocation button |
 | Status pill | `.soon` (events), `.badge` (app.css), `.pill` (hub) | Plain grey chips |
 | Mini (preview) map | **Nowhere** | — |
 

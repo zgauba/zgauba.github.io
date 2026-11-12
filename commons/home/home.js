@@ -71,10 +71,6 @@ var VIEWS = {
         '<div class="layers"><button type="button" class="lang" id="layerBtn">' + esc(jcT("pin_street")) + '</button></div>' +
         '<button type="button" class="lang locate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
       '<p class="help" style="margin-top:8px">' + esc(jcT("pin_privacy")) + '</p>' +
-      '<label class="field" style="margin-top:10px">' + esc(jcT("pin_paste")) +
-        '<span class="row"><input type="text" id="coords" dir="ltr" inputmode="decimal" autocomplete="off" placeholder="24.5301, 54.4312">' +
-        '<button type="button" class="btn ghost" id="coordsGo" style="flex:0 0 auto">' + esc(jcT("pin_paste_go")) + '</button></span></label>' +
-      '<p class="help">' + esc(jcT("pin_paste_help")) + '</p>' +
       msgBox() +
       '<div class="row section"><button class="btn" id="savePin" type="button">' + esc(jcT("pin_save")) + '</button>' +
         /* changing an existing pin can be abandoned; a first pin can't be skipped */
@@ -105,13 +101,6 @@ var VIEWS = {
         busy("locateBtn", false);
         showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED");
       }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
-    });
-    /* Paste from Google Maps (Halloween parity): moves the map only — the resident
-       still confirms with "That's my home". */
-    on("coordsGo", function(){
-      var p = jcParseLatLng(el("coords").value);
-      if (!p) return showErr("BAD_COORDS");
-      map.setView(p, 19);
     });
     on("cancelPin", function(){ if (NEXT) location.href = NEXT; else show("myhome"); });
     on("savePin", function(){

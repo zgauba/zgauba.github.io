@@ -270,8 +270,7 @@ test("fix a pin: map opens on the home's pin, the confirm names the home, exact 
   await expect(page.locator("h1")).toHaveText("Fix Pin");
   await expect(page.locator(".sub")).toHaveText("Villa 7 · Ain Al Maha");
   await expect(page.getByText("Showing the home's own pin.")).toBeVisible();
-  await page.locator("#coords").fill("24.5400, 54.4400");                // a new spot, so save ≠ Undo
-  await page.locator("#coordsGo").click();
+  await page.evaluate(() => vmap.setView([24.54, 54.44], 18));          // a new spot, so save ≠ Undo
   let asked = "";
   page.once("dialog", (d) => { asked = d.message(); d.accept(); });
   await page.locator("#hhPinGo").click();
@@ -329,8 +328,7 @@ test("set a pin for a home with none: flags shown, no Undo (nothing to put back)
   await expect(page.locator("h1")).toHaveText("Set Pin");
   await expect(page.getByText("This home has no pin yet.")).toBeVisible();
   await expect(page.locator(".panel .flags")).toContainText("Pin far away");
-  await page.locator("#coords").fill("24.5350, 54.4350");
-  await page.locator("#coordsGo").click();
+  await page.evaluate(() => vmap.setView([24.535, 54.435], 18));
   page.once("dialog", (d) => d.accept());
   await page.locator("#hhPinGo").click();
   await expect(page.locator("#msg")).toHaveText("Townhouse 40's pin saved. It had no pin before, so there's nothing to undo.");
