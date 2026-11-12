@@ -141,6 +141,11 @@ label.check span small{display:block; color:var(--jc-muted); font-size:12.5px; f
 /* R4b-1b — Courts */
 .ctlist li.retired{opacity:.65}
 .ctchips{display:flex; flex-wrap:wrap; gap:4px; margin-top:4px}
+/* a draft = residents can't see it (Zee 2026-11-11): warn amber, the brand's "needs a step" signal */
+.chip.draft{color:var(--jc-warn); border-color:var(--jc-warn); font-weight:600}
+li[data-event] .chip.draft{display:table; margin:3px 0 2px}
+.notice.draftnote{border-color:var(--jc-warn); color:var(--jc-warn)}
+#ctStateNote{margin-bottom:12px}
 #ctForm .row label{flex:1 1 0}
 #ctForm input[type=time]{width:100%}
 /* R4b-2 — a court's day view */

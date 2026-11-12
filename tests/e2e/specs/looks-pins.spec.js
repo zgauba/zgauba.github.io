@@ -147,7 +147,7 @@ test("templates pre-tick the allergy-friendly choice (teal pumpkin / nut-free)",
     await page.locator("#title_en").fill("T " + tpl);
     await expect(page.locator('.qcard[data-q="0"] [data-c-allergy]')).toHaveCount(3);
     await page.locator("#save").click();
-    await expect(page.locator("#msg")).toHaveText("Saved.");
+    await expect(page.locator("#msg")).toHaveText("Saved as a draft. Residents can't see it until you publish it.");
     const saves = calls.filter((c) => c.name === "jc_admin_event_save");
     expect(saves[saves.length - 1].args.p_fields.payload_schema.fields.treats.allergy_friendly).toEqual(want);
   }
@@ -177,7 +177,7 @@ test("builder: tick / untick allergy-friendly per choice → only the ticked one
   await q.locator("[data-c-allergy]").nth(0).uncheck();                  // changed their mind: cakes aren't
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);  // still fits a phone
   await page.locator("#save").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft. Residents can't see it until you publish it.");
   const saves = calls.filter((c) => c.name === "jc_admin_event_save");
   expect(saves[saves.length - 1].args.p_fields.payload_schema.fields.what_s_on_the_table.allergy_friendly).toEqual(["fruit"]);
 });
@@ -191,7 +191,7 @@ test("builder: nothing ticked → no allergy_friendly key is stored", async ({ p
   await page.locator('[data-tpl="yard_sale"]').click();                  // icon question, nothing pre-ticked
   await page.locator("#title_en").fill("Yard sale");
   await page.locator("#save").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft. Residents can't see it until you publish it.");
   const saves = calls.filter((c) => c.name === "jc_admin_event_save");
   expect(saves[saves.length - 1].args.p_fields.payload_schema.fields.items).not.toHaveProperty("allergy_friendly");
 });
@@ -312,7 +312,7 @@ test("builder: Halloween template pre-ticks 'Both gates' as a split ring; ticks 
   await gate.locator("[data-c-split]").nth(0).check();
   await gate.locator("[data-c-split]").nth(0).uncheck();
   await page.locator("#save").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft. Residents can't see it until you publish it.");
   const saves = calls.filter((c) => c.name === "jc_admin_event_save");
   expect(saves[saves.length - 1].args.p_fields.payload_schema.fields.entrance.ring_split).toEqual(["both"]);
 });

@@ -20,7 +20,7 @@ test("lock: a wrong code says so; an events code opens the list (drafts included
   await expect(page.locator("#msg")).toHaveText("That code didn't work.");
   await unlock(page, "EVENTS-CODE-1");
   await expect(page.locator(".sub")).toHaveText("Unlocked: Events");
-  await expect(page.locator('li[data-event="national-day-2026"] small')).toContainText("Draft — only organizers can see it");
+  await expect(page.locator('li[data-event="national-day-2026"] .chip.draft')).toHaveText("Draft — only organizers can see it");
   await expect(page.locator('li[data-event="test-event"] small')).toContainText("Live · sign-ups open");
   await expect(page.locator('li[data-event="halloween-2026"] small')).toContainText("Closed");
   await expect(page.locator("[data-rotate]")).toHaveCount(0);                 // only community admins change codes
@@ -57,7 +57,7 @@ test("new event from the Halloween template: short name follows the title; quest
   await expect(page.locator("#f_supply")).toBeChecked();
   await expect(page.locator("#f_crowd_reports")).toBeChecked();
   await page.locator("#save").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft. Residents can't see it until you publish it.");
   const f = lastCall(calls, "jc_admin_event_save").args;
   expect(f.p_event).toBeNull();
   expect(Object.keys(f.p_fields).sort()).toEqual(["features", "look", "payload_schema", "slug", "title_en"]);  // empty fields + default kind not sent
@@ -66,7 +66,7 @@ test("new event from the Halloween template: short name follows the title; quest
   expect(f.p_fields.payload_schema.fields.entrance).toMatchObject({ pin: "ring", label_en: "Kids should come to…",
     labels_en: { front: "Front gate", garden: "Garden gate (park side)", both: "Both gates" } });
   expect(f.p_fields.payload_schema.fields.treats).toMatchObject({ pin: "glyph", glyphs: { candy: "🍬", non_food: "🎃", both: "🍬🎃" } });
-  await expect(page.locator('li[data-event="halloween-2027"] small')).toContainText("Draft");
+  await expect(page.locator('li[data-event="halloween-2027"] .chip.draft')).toContainText("Draft");
 });
 
 // Premortem #1: an edit sends ONLY what changed, so two organizers don't overwrite each other.
@@ -288,7 +288,7 @@ test("write questions from scratch: pick-one with icons, yes/no, short answer �
   await q.locator('[data-q-label="en"]').fill("Anything else?");
   await q.locator("[data-q-type]").selectOption("text");
   await page.locator("#save").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft. Residents can't see it until you publish it.");
   expect(lastCall(calls, "jc_admin_event_save").args.p_fields.payload_schema).toEqual({ fields: {
     what_are_you_selling: { type: "enum", required: true, label_en: "What are you selling?", label_ar: "ماذا تبيع؟",
       values: ["clothes", "toys_games", "furniture"],
@@ -341,7 +341,7 @@ test("reorder and remove questions; keys of existing questions never change", as
   page.once("dialog", (d) => d.accept());
   await page.locator('.qcard[data-q="2"] [data-qact="del"]').click();                  // drop handout
   await page.locator("#save").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft. Residents can't see it until you publish it.");
   const fields = lastCall(calls, "jc_admin_event_save").args.p_fields.payload_schema.fields;
   expect(Object.keys(fields)).toEqual(["treats", "entrance"]);                          // keys kept, order kept
   expect(fields.treats.label_en).toBe("What's on offer?");
@@ -354,7 +354,7 @@ test("reopening a draft and saving untouched questions sends nothing", async ({ 
   await openNewDraft(page, "Untouched");
   await page.locator("#useHalloween").click();
   await page.locator("#save").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft. Residents can't see it until you publish it.");
   const n = calls.filter((c) => c.name === "jc_admin_event_save").length;
   await page.locator('li[data-event="untouched"] [data-act="edit"]').click();
   await page.locator("#save").click();
@@ -619,7 +619,7 @@ test("Market template: one place + JICM notice + spots; place pinned from pasted
   expect(calls.filter((c) => c.name === "jc_admin_event_save")).toHaveLength(0);
   await page.locator("#capacity").fill("30");
   await page.locator("#save").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft. Residents can't see it until you publish it.");
   const f = lastCall(calls, "jc_admin_event_save").args.p_fields;
   expect(f).toMatchObject({ kind: "venue", look: "market", venue_name_en: "Central Park",
     venue_lat: 24.5305, venue_lng: 54.4305, capacity: 30, spots: true });
@@ -672,7 +672,7 @@ test("required fields: a homes event with a title saves without any prompt", asy
   await expect(page.locator("#title_en")).toHaveClass(/missing/);
   await page.locator("#title_en").fill("Street sale");
   await page.locator("#save").click();                                            // no dialog expected
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft. Residents can't see it until you publish it.");
 });
 
 test("editing: the kind is locked once homes signed up; an untouched venue sends nothing; one change sends one field", async ({ page }) => {
@@ -696,14 +696,14 @@ test("editing: the kind is locked once homes signed up; an untouched venue sends
   expect(calls.filter((c) => c.name === "jc_admin_event_save")).toHaveLength(n);
   await page.locator("#capacity").fill("50");
   await page.locator("#save").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft. Residents can't see it until you publish it.");
   expect(lastCall(calls, "jc_admin_event_save").args.p_fields).toEqual({ capacity: 50 });
   // switching a draft to homes sends only the kind (the server clears the place)
   await page.locator('li[data-event="picnic"] [data-act="edit"]').click();
   await page.locator('input[name="kind"][value="homes"]').check();
   await expect(page.locator("#venueBox")).toBeHidden();
   await page.locator("#save").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");                          // wait for the call (raced on CI)
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft. Residents can't see it until you publish it.");                          // wait for the call (raced on CI)
   expect(lastCall(calls, "jc_admin_event_save").args.p_fields).toEqual({ kind: "homes" });
 });
 
@@ -722,7 +722,7 @@ test("venue editor: Enter in the coordinates box moves the map and never saves; 
   await page.locator("#setVenue").click();
   await page.locator("#venue_name_en").fill("Seef Park");
   await page.locator("#save").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft. Residents can't see it until you publish it.");
   expect(lastCall(calls, "jc_admin_event_save").args.p_fields).toEqual({
     kind: "venue", venue_name_en: "Seef Park", venue_lat: 24.5301, venue_lng: 54.4312 });
 });
@@ -748,7 +748,7 @@ test("description toolbar: buttons add the markers; the preview shows the format
   await page.locator(".richbar .rich-ul").first().click();                       // toggles off
   await expect(t).toHaveValue("**Join us**\nbring gloves");
   await page.locator("#save").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft. Residents can't see it until you publish it.");
   expect(calls.filter((c) => c.name === "jc_admin_event_save").pop().args.p_fields.description_en).toBe("**Join us**\nbring gloves");
 });
 

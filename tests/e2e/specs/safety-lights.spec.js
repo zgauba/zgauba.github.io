@@ -121,7 +121,7 @@ test("Holiday Lights template: a homes event, the switch only, three questions, 
   await expect(page.locator(".qcard")).toHaveCount(3);
   await page.locator("#title_en").fill("Holiday Lights 2026");
   await page.locator("#save").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toHaveText("Saved as a draft. Residents can't see it until you publish it.");
   const f = lastCall(calls, "jc_admin_event_save").args;
   expect(f.p_event).toBeNull();
   expect(Object.keys(f.p_fields).sort()).toEqual(["features", "look", "payload_schema", "slug", "title_en"]);   // no safety sent

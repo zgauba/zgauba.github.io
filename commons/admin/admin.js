@@ -891,8 +891,10 @@ var VIEWS = {
   court: function(){
     var f = ctEd.f, locked = !!(f && f.upcoming > 0);
     var v = ctEd.draft || courtValues(f);
+    var pub = !!(f && courtStatus(f) === "published");      /* Zee 2026-11-11: say where it stands, and that Publish is a step */
     el("view").innerHTML =
       '<h1>' + esc(jcT(f ? "ct_edit" : "ct_new")) + '</h1>' +
+      '<p class="' + (pub ? 'notice' : 'notice draftnote') + '" id="ctStateNote">' + esc(jcT(pub ? "ct_ed_published" : f ? "ct_ed_draft" : "ct_ed_new")) + '</p>' +
       '<form class="panel" id="ctForm" novalidate data-no-autoreload>' +
         '<p class="help">' + REQ + ' ' + esc(jcT("ct_req_note")) + '</p>' +
         '<label><span>' + esc(jcT("ct_name_en")) + REQ + '</span><input id="ct_name_en" type="text" maxlength="60" required aria-required="true" dir="ltr"></label>' +
@@ -920,7 +922,11 @@ var VIEWS = {
           '<label>' + esc(jcT("ct_window")) + '<input id="ct_window" type="number" inputmode="numeric" min="1" max="30" step="1"></label>' +
           '<p class="help">' + esc(jcT("ct_window_help")) + '</p></div></fieldset>' +
         msgBox() +
-        '<div class="row"><button class="btn" id="ctSave" type="submit">' + esc(jcT("ct_save")) + '</button>' +
+        (pub
+          ? '<div class="row"><button class="btn" id="ctSave" type="submit">' + esc(jcT("ct_save")) + '</button>'
+          /* Enter = the draft save (the form's only submit button); publishing is always a tap on its own button */
+          : '<div class="row"><button class="btn" id="ctSavePub" type="button">' + esc(jcT("ct_save_publish")) + '</button>' +
+            '<button class="btn ghost" id="ctSave" type="submit">' + esc(jcT("ct_save_draft")) + '</button>') +
         '<button class="btn ghost" id="ctCancel" type="button">' + esc(jcT("ct_cancel")) + '</button></div>' +
       '</form>';
     el("ct_name_en").value = v.name_en; el("ct_name_ar").value = v.name_ar; el("ct_note").value = v.location_note;
@@ -936,7 +942,8 @@ var VIEWS = {
     vmap = initPinMap(ctEd.pin ? [ctEd.pin.lat, ctEd.pin.lng] : null);
     on("ctPinHere", function(){ if (vmap) { ctEd.pin = centerOf(vmap); drawCourtPin(); } });
     on("ctCancel", function(){ ctEd = null; show("home"); });
-    el("ctForm").addEventListener("submit", function(e){ e.preventDefault(); saveCourt(); });
+    el("ctForm").addEventListener("submit", function(e){ e.preventDefault(); saveCourt(false); });
+    on("ctSavePub", function(){ saveCourt(true); });
   },
 
   /* R4b-2 — one court, one day */
@@ -1391,7 +1398,8 @@ function eventRow(e){
   var place = e.kind === "venue"                                     /* T5.2 2c */
     ? (e.venue_name_en ? jcFmt("adm_at", { v: ar() && e.venue_name_ar ? e.venue_name_ar : e.venue_name_en }) : jcT("adm_no_venue"))
     : null;
-  var line = [status ? jcT(status) : jcFmt("adm_status_ended", { t: fmtDate(closesAt(e)) }), place, fmtDate(e.starts_at),
+  var isDraft = e.status === "draft";     /* a draft wears the amber pill instead of a word in the line (Zee 2026-11-11) */
+  var line = [isDraft ? null : status ? jcT(status) : jcFmt("adm_status_ended", { t: fmtDate(closesAt(e)) }), place, fmtDate(e.starts_at),
               jcFmt(e.kind === "venue" ? "adm_households" : "adm_homes", { n: e.entries || 0 })].filter(Boolean).join(" · ");
   var acts = "";
   function btn(a, label, ghost){
@@ -1412,7 +1420,9 @@ function eventRow(e){
   if (e.status === "archived") acts = '<a class="btn ghost small" href="../events/?id=' + esc(e.id) + '">' + esc(jcT("adm_numbers")) + '</a>';
   if (e.status !== "draft") acts = btn("signups", jcT("adm_signups")) + acts;      /* T5.2 PR 4 */
   if (e.status !== "archived" && has("community")) acts += btn("admins", jcT("adm_admins"), true);
-  return '<li data-event="' + esc(e.slug) + '"><div><b>' + esc(title(e)) + '</b><small>' + esc(line) + '</small></div>' +
+  return '<li data-event="' + esc(e.slug) + '"><div><b>' + esc(title(e)) + '</b>' +
+    (isDraft ? '<span class="chip draft">' + esc(jcT("adm_status_draft")) + '</span>' : '') +
+    '<small>' + esc(line) + '</small></div>' +
     '<div class="acts">' + acts + '</div>' +
     (closing === e.id
       ? '<form class="closeform" id="closeForm" novalidate><p class="help">' + esc(jcFmt("adm_close_help", { slug: e.slug })) + '</p>' +
@@ -1592,7 +1602,7 @@ function courtRow(f){
     .concat(st === "draft" ? [["published", "ct_act_publish"]] : st === "published" ? [["draft", "ct_act_unpublish"]] : [])
     .concat([["retired", "ct_act_retire"]]);
   return '<li data-court="' + esc(f.id) + '" class="' + st + '"><b dir="auto">' + esc(name) + '</b>' +
-    '<div class="ctchips"><span class="chip">' + esc(jcT("ct_st_" + st)) + '</span>' +
+    '<div class="ctchips"><span class="chip' + (st === "draft" ? ' draft' : '') + '">' + esc(jcT("ct_st_" + st)) + '</span>' +
     (f.lat == null && st !== "retired" ? '<span class="chip">' + esc(jcT("ct_no_pin")) + '</span>' : '') + '</div>' +
     '<div class="meta">' + esc(meta.join(" · ")) + '</div>' +
     (st !== "retired" && !f.walk_on ? '<div class="meta">' + esc(jcFmt("ct_upcoming", { n: n })) + '</div>' : '') +
@@ -1633,21 +1643,39 @@ function wireCourts(){
         : jcFmt(to === "draft" ? "ct_confirm_unpublish" : "ct_confirm_retire", { c: name }) +
           (f.walk_on || (n === 0 && courtStatus(f) !== "published") ? "" : " " + jcFmt(n > 0 ? why : why + "_now", { n: n }));
       if (!window.confirm(ask)) return;
-      ctBusy = true; b.disabled = true;
-      rpc("jc_admin_facility_status", { p_facility: f.id, p_status: to }).then(function(list){
-        ctBusy = false;
-        if (ct && Array.isArray(list)) ct.list = list.filter(hObj);
-        if (current !== "home") return;
-        show("home");
-        showOk(jcT(to === "published" ? "ct_done_publish" : to === "draft" ? "ct_done_unpublish" : "ct_done_retire"));
-      }, function(e){
-        ctBusy = false; b.disabled = false;
-        if (e.code === "NOT_ADMIN") return fail(e);
-        if (e.code === "BAD_STATE" || e.code === "NOT_FOUND") { ct = null; ctNote = e.code; return show("home"); }
-        ctMsg(e.code);
-      });
+      courtSetStatus(f.id, to, b);
     });
   });
+}
+/* one status change (list row or the "saved as a draft" message's Publish); b = the button that asked */
+function courtSetStatus(id, to, b){
+  ctBusy = true; b.disabled = true;
+  rpc("jc_admin_facility_status", { p_facility: id, p_status: to }).then(function(list){
+    ctBusy = false;
+    if (ct && Array.isArray(list)) ct.list = list.filter(hObj);
+    if (current !== "home") return;
+    show("home");
+    showOk(jcT(to === "published" ? "ct_done_publish" : to === "draft" ? "ct_done_unpublish" : "ct_done_retire"));
+  }, function(e){
+    ctBusy = false; b.disabled = false;
+    if (e.code === "NOT_ADMIN") return fail(e);
+    if (e.code === "BAD_STATE" || e.code === "NOT_FOUND") { ct = null; ctNote = e.code; return show("home"); }
+    ctMsg(e.code);
+  });
+}
+/* Zee 2026-11-11: a draft save said only "Saved." and the court never showed up for residents — say it's a draft,
+   and put Publish right there. err = the publish half of "Save and Publish" failed (the save itself landed). */
+function courtDraftMsg(id, text, err){
+  showOk(text);
+  var m = el("msg"), f = courtById(id);
+  if (!m) return;
+  if (err) m.className = "msg err";
+  if (!f || courtStatus(f) !== "draft") return;
+  var b = document.createElement("button");
+  b.type = "button"; b.className = "mini"; b.id = "ctMsgPub"; b.textContent = jcT("ct_act_publish");
+  b.style.marginInlineStart = "10px";
+  b.addEventListener("click", function(){ if (!ctBusy) courtSetStatus(id, "published", b); });
+  m.appendChild(b);
 }
 function ctMsg(code){
   var t = jcT("ct_err_" + code);
@@ -1678,7 +1706,7 @@ function drawCourtPin(){
 function minutes(t){ var m = /^(\d\d):(\d\d)$/.exec(t || ""); return m ? +m[1] * 60 + +m[2] : null; }
 /* Mirrors the table's checks (S3): name 1–60, whole-minute same-day hours with room for one slot, window 1–30.
    An edit sends ONLY what changed — an untouched grid never trips RULES_LOCKED. */
-function saveCourt(){
+function saveCourt(publish){
   var v = courtForm(), f = ctEd.f;
   if (!v.name_en) return ctMsg("NO_NAME");
   if (!v.kind) return ctMsg("NO_KIND");
@@ -1699,22 +1727,43 @@ function saveCourt(){
   });
   var pinWas = f && f.lat != null ? f.lat + "," + f.lng : null, pinNow = ctEd.pin ? ctEd.pin.lat + "," + ctEd.pin.lng : null;
   if (ctEd.pin && (!f || pinNow !== pinWas)) { fields.lat = ctEd.pin.lat; fields.lng = ctEd.pin.lng; }
-  if (f && !Object.keys(fields).length) { ctEd = null; show("home"); return showOk(jcT("ct_saved")); }
-  busy("ctSave", true);
-  var mine = ctEd;
-  rpc("jc_admin_facility_save", { p_facility: f ? f.id : null, p_fields: fields }).then(function(list){
-    /* the save landed: the list is right even if they already left the editor (review M1) */
-    if (ct && Array.isArray(list)) ct.list = list.filter(hObj); else ct = null;
-    if (current !== "court" || ctEd !== mine) { if (current === "home" && admTab === "courts") show("home"); return; }
+  var draftNow = !f || courtStatus(f) === "draft";
+  function back(){
     ctEd = null; admTab = "courts";
     try { history.replaceState(null, "", "?tab=courts"); } catch(e){}
-    show("home"); showOk(jcT("ct_saved"));
+    show("home");
+  }
+  function saved(id){ return draftNow ? courtDraftMsg(id, jcT("ct_saved_draft")) : showOk(jcT("ct_saved")); }
+  var unchanged = f && !Object.keys(fields).length;
+  if (unchanged && !publish) { back(); return saved(f.id); }
+  ["ctSave", "ctSavePub"].forEach(function(b){ busy(b, true); });
+  var mine = ctEd;
+  var known = ((ct && ct.list) || []).map(function(x){ return x.id; });     /* to find the new court's id in the reply */
+  var save = unchanged ? Promise.resolve(null) : rpc("jc_admin_facility_save", { p_facility: f ? f.id : null, p_fields: fields });
+  save.then(function(list){
+    /* the save landed: the list is right even if they already left the editor (review M1) */
+    if (list !== null) { if (ct && Array.isArray(list)) ct.list = list.filter(hObj); else ct = null; }
+    if (current !== "court" || ctEd !== mine) { if (current === "home" && admTab === "courts") show("home"); return; }
+    var fresh = ((ct && ct.list) || []).filter(function(x){ return known.indexOf(x.id) < 0; });
+    var id = f ? f.id : fresh.length === 1 ? fresh[0].id : null;
+    if (!publish || !id) { back(); return saved(id); }
+    rpc("jc_admin_facility_status", { p_facility: id, p_status: "published" }).then(function(l2){
+      if (ct && Array.isArray(l2)) ct.list = l2.filter(hObj);
+      if (current !== "court" || ctEd !== mine) { if (current === "home" && admTab === "courts") show("home"); return; }
+      back(); showOk(jcT("ct_done_publish"));
+    }, function(e){
+      if (e.code === "NOT_ADMIN") return fail(e);
+      if (current !== "court" || ctEd !== mine) return;
+      back();
+      courtDraftMsg(id, jcFmt("ct_pub_failed", { why: ctErrText(e.code) }), true);
+    });
   }, function(e){
-    busy("ctSave", false);
+    ["ctSave", "ctSavePub"].forEach(function(b){ busy(b, false); });
     if (e.code === "NOT_ADMIN") return fail(e);
     ctMsg(e.code);
   });
 }
+function ctErrText(code){ var t = jcT("ct_err_" + code); return t === "ct_err_" + code ? jcErrText({ code: code }) : t; }
 
 /* ---------- court day view (R4b-2; server S3 + R4a / R4a-2) ---------- */
 /* Days are community-time dates (jc_admin_facility_day takes a date in cfg.tz) and every time shown is in cfg.tz,
@@ -2905,7 +2954,8 @@ function saveEvent(){
   busy("save", true);
   rpc("jc_admin_event_save", { p_event: ev ? ev.id : null, p_fields: f }).then(function(list){
     events = list; ed = null; show("home");
-    showOk(miss.length ? jcFmt(orig.coming_soon ? "adm_saved_soon_missing" : "adm_saved_draft_missing", { list: missText }) : jcT("adm_saved"));
+    showOk(miss.length ? jcFmt(orig.coming_soon ? "adm_saved_soon_missing" : "adm_saved_draft_missing", { list: missText })
+      : jcT(draft ? "adm_saved_draft" : "adm_saved"));
   }, function(err){ busy("save", false); fail(err); });
 }
 

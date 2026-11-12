@@ -39,6 +39,7 @@ function backend(opts = {}) {
       const okMove = (c.status === "draft" && ["published", "retired"].includes(a.p_status)) ||
                      (c.status === "published" && ["draft", "retired"].includes(a.p_status));
       if (!okMove) return raise("BAD_STATE");
+      if (opts.publishError && a.p_status === "published") return raise(opts.publishError);
       c.status = a.p_status;
       if (a.p_status !== "published") c.upcoming = 0;
       return list();
@@ -126,7 +127,7 @@ test("new court: checks first (nothing sent), then the exact fields incl. the pi
   await page.locator("#ctPinHere").click();
   await expect(page.locator("#ctPinState")).toHaveText("Court pinned.");
   await page.locator("#ctSave").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toContainText("Saved as a draft. Residents can't see it until you publish.");
   const sent = lastCall(calls, "jc_admin_facility_save").args;
   expect(sent.p_facility).toBeNull();
   expect(Object.keys(sent.p_fields).sort()).toEqual(["close_time", "kind", "lat", "lng", "location_note", "name_ar", "name_en",
@@ -148,13 +149,13 @@ test("edit sends only what changed; saving untouched sends nothing", async ({ pa
   await expect(page.locator("#ct_open")).toHaveValue("07:00");
   await expect(page.locator("#ctPinState")).toHaveText("Court pinned.");
   await page.locator("#ctSave").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toContainText("Saved as a draft. Residents can't see it until you publish.");
   expect(calls.some((c) => c.name === "jc_admin_facility_save")).toBe(false);
   await page.locator('[data-ct="edit"][data-id="c1"]').click();
   await page.locator("#ct_name_ar").fill("ملعب ١");
   await page.locator("#ct_window").fill("10");
   await page.locator("#ctSave").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toContainText("Saved as a draft. Residents can't see it until you publish.");
   expect(lastCall(calls, "jc_admin_facility_save").args).toEqual({ p_facility: "c1", p_fields: { name_ar: "ملعب ١", window_days: 10 } });
 });
 
@@ -319,7 +320,7 @@ test("code review M2: a walk-on court never fails on the hidden slot / days ahea
   await expect(page.locator("#msg")).toHaveText("Closing has to be at least 30 minutes after opening.");
   await page.locator("#ct_close").fill("07:30");
   await page.locator("#ctSave").click();
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#msg")).toContainText("Saved as a draft. Residents can't see it until you publish.");
   expect(lastCall(calls, "jc_admin_facility_save").args.p_fields).toEqual({ walk_on: true, close_time: "07:30", slot_minutes: 30 });
 });
 
@@ -336,4 +337,102 @@ test("language switch keeps hours, slot and a blank days-ahead exactly", async (
   await expect(page.locator("#ct_open")).toHaveValue("06:30");
   await expect(page.locator("#ct_slot")).toHaveValue("90");
   await expect(page.locator("#ct_window")).toHaveValue("");
+});
+
+// Zee 2026-11-11: "no message when I first save it and no visual indication that there may be another step"
+test("publish state: new court note, Save and Publish publishes the new court in one go", async ({ page }) => {
+  const b = backend({ courts: [COURT()] });
+  const { calls } = await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openCourts(page);
+  await page.locator("#ctNew").click();
+  await expect(page.locator("#ctStateNote")).toHaveText("New courts start as drafts — residents see a court only once it's published.");
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/courts-new-editor.png", fullPage: true });
+  await expect(page.locator("#ctForm .row button.btn").last()).toHaveText("Cancel");
+  await expect(page.locator("#ctSavePub")).toHaveText("Save and Publish");
+  await expect(page.locator("#ctSave")).toHaveText("Save as Draft");
+  await page.locator("#ct_name_en").fill("Court 2");
+  await page.locator('input[name="ct_kind"][value="tennis"]').check();
+  page.on("dialog", () => { throw new Error("no confirm: the button says what it does"); });
+  await page.locator("#ctSavePub").click();
+  await expect(page.locator("#msg")).toHaveText("Published — residents can see it now.");
+  const names = calls.map((c) => c.name).filter((n) => /^jc_admin_facility_(save|status)$/.test(n));
+  expect(names).toEqual(["jc_admin_facility_save", "jc_admin_facility_status"]);
+  expect(lastCall(calls, "jc_admin_facility_status").args).toEqual({ p_facility: "new-1", p_status: "published" });
+  await expect(page.locator('[data-court="new-1"] .chip').first()).toHaveText("Published");
+  await expect(page.locator('[data-court="new-1"] .chip.draft')).toHaveCount(0);
+  await expect(page.locator('[data-court="c1"] .chip.draft')).toHaveText("Draft — residents can't see it yet");
+});
+
+test("publish state: Save as Draft says so, with Publish right in the message (no confirm)", async ({ page }) => {
+  const b = backend();
+  const { calls } = await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openCourts(page);
+  await page.locator("#ctNew").click();
+  await page.locator("#ct_name_en").fill("Court 2");
+  await page.locator('input[name="ct_kind"][value="tennis"]').check();
+  await page.locator("#ct_name_en").press("Enter");                    // Enter = the draft save, never a publish
+  await expect(page.locator("#msg")).toContainText("Saved as a draft. Residents can't see it until you publish.");
+  await expect(page.locator("#msg")).toHaveClass(/ok/);
+  expect(calls.some((c) => c.name === "jc_admin_facility_status")).toBe(false);
+  await expect(page.locator('[data-court="new-1"] .chip.draft')).toHaveText("Draft — residents can't see it yet");
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/courts-draft-saved.png" });
+  page.on("dialog", () => { throw new Error("no confirm"); });
+  await page.locator("#ctMsgPub").click();
+  await expect(page.locator("#msg")).toHaveText("Published — residents can see it now.");
+  expect(lastCall(calls, "jc_admin_facility_status").args).toEqual({ p_facility: "new-1", p_status: "published" });
+  await expect(page.locator('[data-court="new-1"] .chip.draft')).toHaveCount(0);
+});
+
+test("publish state: the save lands but publishing fails → says it's still a draft, Publish to retry", async ({ page }) => {
+  const b = backend({ publishError: "NETWORK_X" });
+  await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openCourts(page);
+  await page.locator("#ctNew").click();
+  await page.locator("#ct_name_en").fill("Court 2");
+  await page.locator('input[name="ct_kind"][value="tennis"]').check();
+  await page.locator("#ctSavePub").click();
+  await expect(page.locator("#msg")).toContainText("Saved as a draft, but it didn't publish:");
+  await expect(page.locator("#msg")).toHaveClass(/err/);
+  await expect(page.locator("#ctMsgPub")).toBeVisible();
+  await expect(page.locator('[data-court="new-1"] .chip.draft')).toBeVisible();
+});
+
+test("publish state: a published court's editor says so and only saves; an untouched draft publishes without a save", async ({ page }) => {
+  const b = backend({ courts: [COURT({ status: "published" }), COURT({ id: "c2", name_en: "Two" })] });
+  const { calls } = await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openCourts(page);
+  await page.locator('[data-ct="edit"][data-id="c1"]').click();
+  await expect(page.locator("#ctStateNote")).toHaveText("Published — residents can see this court.");
+  await expect(page.locator("#ctSavePub")).toHaveCount(0);
+  await expect(page.locator("#ctSave")).toHaveText("Save");
+  await page.locator("#ct_note").fill("By the gate");
+  await page.locator("#ctSave").click();
+  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#ctMsgPub")).toHaveCount(0);
+  await page.locator('[data-ct="edit"][data-id="c2"]').click();
+  await expect(page.locator("#ctStateNote")).toHaveText("Draft — residents can't see this court yet.");
+  await expect(page.locator("#ctStateNote")).toHaveClass(/draftnote/);
+  const saves = calls.filter((c) => c.name === "jc_admin_facility_save").length;
+  await page.locator("#ctSavePub").click();
+  await expect(page.locator("#msg")).toHaveText("Published — residents can see it now.");
+  expect(calls.filter((c) => c.name === "jc_admin_facility_save").length).toBe(saves);
+  expect(lastCall(calls, "jc_admin_facility_status").args).toEqual({ p_facility: "c2", p_status: "published" });
+});
+
+test("publish state AR: buttons, note and the amber draft chip in Arabic", async ({ page }) => {
+  const b = backend({ courts: [COURT()] });
+  await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await page.addInitScript(() => { try { localStorage.setItem("jc_lang", "ar"); } catch (e) {} });
+  await openCourts(page);
+  await expect(page.locator('[data-court="c1"] .chip.draft')).toHaveText("مسودة — لا يراه السكان بعد");
+  const amber = await page.locator('[data-court="c1"] .chip.draft').evaluate((n) => getComputedStyle(n).color);
+  expect(amber).toBe("rgb(242, 179, 60)");
+  await page.locator('[data-ct="edit"][data-id="c1"]').click();
+  await expect(page.locator("#ctSavePub")).toHaveText("حفظ ونشر");
+  await expect(page.locator("#ctSave")).toHaveText("حفظ كمسودة");
 });
