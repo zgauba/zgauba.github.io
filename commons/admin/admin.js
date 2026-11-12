@@ -2267,16 +2267,14 @@ function initVenueMap(){
   });
 }
 
-/* The markup initPinMap wires up: map + ring, Streets / Satellite, Find me, paste coordinates */
+/* The markup initPinMap wires up: map + ring, Streets / Satellite, Find me (pins are set on the map only — Zee 2026-11-12) */
 function pinMapHtml(){
   return '<div class="pinmap vpin"><div class="map" id="vmap"></div><div class="ring" aria-hidden="true"></div>' +
       '<div class="layers"><button type="button" class="lang" id="layerBtn">' + esc(jcT("pin_street")) + '</button></div>' +
-      '<button type="button" class="lang locate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>' +
-    '<span class="row"><input type="text" id="coords" dir="ltr" inputmode="decimal" autocomplete="off" placeholder="24.5301, 54.4312" aria-label="' + esc(jcT("pin_paste")) + '">' +
-      '<button type="button" class="btn ghost" id="coordsGo" style="flex:0 0 auto">' + esc(jcT("pin_paste_go")) + '</button></span>';
+      '<button type="button" class="lang locate" id="locateBtn">' + esc(jcT("pin_locate")) + '</button></div>';
 }
-/* The pin-drop map in #vmap (venue pin, pin move): Streets / Satellite, Find me, paste
-   coordinates. center = [lat, lng] or null for the community's own view. */
+/* The pin-drop map in #vmap (venue pin, court pin, pin move): Streets / Satellite, Find me.
+   center = [lat, lng] or null for the community's own view. */
 function initPinMap(center){
   if (typeof L === "undefined") return null;
   var c = (cfg && cfg.map) || {};
@@ -2296,15 +2294,6 @@ function initPinMap(center){
       if (vmap === m) m.setView([pos.coords.latitude, pos.coords.longitude], 18);
     }, function(err){ showErr(err && err.code === 1 ? "LOCATE_DENIED" : "LOCATE_FAILED"); },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
-  });
-  on("coordsGo", function(){
-    var p = jcParseLatLng(el("coords").value);
-    if (!p) return showErr("BAD_COORDS");
-    m.setView(p, 18);
-  });
-  /* the box may sit inside a form: Enter means "Go", never "save the event" (review) */
-  el("coords").addEventListener("keydown", function(e){
-    if (e.key === "Enter") { e.preventDefault(); el("coordsGo").click(); }
   });
   return m;
 }

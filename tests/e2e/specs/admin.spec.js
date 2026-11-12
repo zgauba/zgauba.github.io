@@ -609,8 +609,7 @@ test("Market template: one place + JICM notice + spots; place pinned from pasted
   await expect(page.locator("#venueState")).toHaveText("No place pinned yet — needed before you publish.");
   await page.locator("#title_en").fill("Kids Market");
   await page.locator("#venue_name_en").fill("Central Park");
-  await page.locator("#coords").fill("24.5305, 54.4305");
-  await page.locator("#coordsGo").click();
+  await page.evaluate(() => vmap.setView([24.5305, 54.4305], 18));                   // pan the map
   await page.locator("#setVenue").click();
   await expect(page.locator("#venueState")).toHaveText("Place pinned.");
   await page.locator("#capacity").fill("2.5");
@@ -707,7 +706,7 @@ test("editing: the kind is locked once homes signed up; an untouched venue sends
   expect(lastCall(calls, "jc_admin_event_save").args.p_fields).toEqual({ kind: "homes" });
 });
 
-test("venue editor: Enter in the coordinates box moves the map and never saves; homes → venue sends kind + place", async ({ page }) => {
+test("venue editor: map only (no coordinates box); homes → venue sends kind + place", async ({ page }) => {
   const ab = adminBackend({ scopes: ["community"] });
   const { calls } = await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
@@ -715,10 +714,8 @@ test("venue editor: Enter in the coordinates box moves the map and never saves; 
   await page.locator('li[data-event="national-day-2026"] [data-act="edit"]').click();   // a homes draft
   await page.locator('input[name="kind"][value="venue"]').check();
   await expect(page.locator("#venueBox")).toBeVisible();
-  await page.locator("#coords").fill("https://maps.google.com/?q=24.5301,54.4312");
-  await page.locator("#coords").press("Enter");
-  await expect(page.locator("#form")).toBeVisible();                                    // still editing
-  expect(calls.filter((c) => c.name === "jc_admin_event_save")).toHaveLength(0);
+  await expect(page.locator("#coords, #coordsGo")).toHaveCount(0);                     // Zee 2026-11-12: map only
+  await page.evaluate(() => vmap.setView([24.5301, 54.4312], 18));
   await page.locator("#setVenue").click();
   await page.locator("#venue_name_en").fill("Seef Park");
   await page.locator("#save").click();
