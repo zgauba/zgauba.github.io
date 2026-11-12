@@ -86,6 +86,7 @@ async function stubBackend(page, opts = {}) {
     logout: () => ({ status: 204, body: null }),
   }, opts.auth || {});
 
+  let signs = 0;                                    // each signing hands out a new token (like the real thing)
   await page.route(/^https?:\/\/(?!localhost|127\.0\.0\.1)/, async (route) => {
     const req = route.request();
     // map tiles (Esri / OSM): answered empty, never fetched, not counted as escapes
@@ -135,7 +136,7 @@ async function stubBackend(page, opts = {}) {
       if (req.method() === "POST" && (m = rest.match(/^\/object\/sign\/([^/]+)$/))) {
         calls.push({ kind: "storage", name: "sign", args, signedIn });
         res = sh.sign ? await sh.sign(m[1], args, { signedIn })
-          : ok((args.paths || []).map((p) => ({ path: p, signedURL: "/object/sign/" + m[1] + "/" + p + "?token=t", error: null })));
+          : ok((args.paths || []).map((p) => ({ path: p, signedURL: "/object/sign/" + m[1] + "/" + p + "?token=t" + (++signs), error: null })));
       } else if (req.method() === "GET" && (m = rest.match(/^\/object\/sign\/([^/]+)\/(.+)$/))) {
         const path = decodeURIComponent(m[2]);
         calls.push({ kind: "storage", name: "image", args: { bucket: m[1], path }, signedIn });

@@ -106,20 +106,28 @@ function ptWrite(b, call, done, fail){
    swaps it in (jc_pet_photo_commit). Shown through short-lived signed URLs, asked once per path per page view;
    until (or unless) one loads, the paw stays. Photos are shrunk on the phone first (≤ 1280 px JPEG). */
 var PHOTO_MAX = 1280, PHOTO_TTL = 3600;
-var photoUrls = {}, photoAsked = {};
+var PHOTO_IN_MAX = 25e6, PHOTO_PX_MAX = 50e6;        /* refuse before decoding: a huge file / bitmap can kill the tab */
+var photoUrls = {}, photoAsked = {};                 /* path → { url, exp } · path → true while being signed */
+var shrinkSeq = 0;
 function photoHtml(p, size, cls){
   var path = typeof p.photo_path === "string" && p.photo_path ? p.photo_path : null;
   if (!path) return jcIcon("pets", size);
   return '<span class="ptph ' + cls + '" data-photo="' + esc(path) + '">' + jcIcon("pets", size) + '</span>';
 }
+/* a signed URL is good for an hour; re-sign 5 minutes early so a long-open page never keeps a dead one (review) */
+function photoUrl(path){ var u = photoUrls[path]; return u && u.exp > Date.now() ? u.url : null; }
 function placePhotos(){
   Array.prototype.forEach.call(document.querySelectorAll("[data-photo]"), function(s){
-    var u = photoUrls[s.dataset.photo];
+    var path = s.dataset.photo, u = photoUrl(path);
     if (!u || s.querySelector("img")) return;
     var img = document.createElement("img");
     img.alt = ""; img.decoding = "async";
     img.addEventListener("load", function(){ s.classList.add("has"); });
-    img.addEventListener("error", function(){ img.remove(); s.classList.remove("has"); });   /* the paw stays */
+    img.addEventListener("error", function(){
+      img.remove(); s.classList.remove("has");                                     /* the paw stays */
+      var c = photoUrls[path];
+      if (c && c.url === u && !c.retried) { photoUrls[path] = { url: u, exp: 0, retried: true }; fillPhotos(); }   /* one fresh signing */
+    });
     img.src = u;
     s.appendChild(img);
   });
@@ -128,41 +136,52 @@ function fillPhotos(){
   var need = [];
   Array.prototype.forEach.call(document.querySelectorAll("[data-photo]"), function(s){
     var path = s.dataset.photo;
-    if (!photoUrls[path] && !photoAsked[path] && need.indexOf(path) < 0) need.push(path);
+    if (!photoUrl(path) && !photoAsked[path] && need.indexOf(path) < 0) need.push(path);
   });
   placePhotos();
   if (!need.length) return;
   need.forEach(function(path){ photoAsked[path] = true; });
+  var exp = Date.now() + (PHOTO_TTL - 300) * 1000;
+  function done(){ need.forEach(function(path){ delete photoAsked[path]; }); }
   jcDb.storage.from("pet-photos").createSignedUrls(need, PHOTO_TTL).then(function(r){
+    done();
     (r && Array.isArray(r.data) ? r.data : []).forEach(function(x){
-      if (x && !x.error && typeof x.path === "string" && typeof x.signedUrl === "string" && x.signedUrl.indexOf(JC_URL + "/") === 0)
-        photoUrls[x.path] = x.signedUrl;
+      if (x && !x.error && typeof x.path === "string" && typeof x.signedUrl === "string" && x.signedUrl.indexOf(JC_URL + "/") === 0) {
+        var was = photoUrls[x.path];
+        if (was && was.retried && was.url === x.signedUrl) return;                  /* same dead URL: leave the paw */
+        photoUrls[x.path] = { url: x.signedUrl, exp: exp, retried: !!(was && was.retried) };
+      }
     });
     placePhotos();
-  }, function(){ /* unreadable: the paw stays */ });
+  }, function(){ done(); /* unreadable now: the paw stays; tried again on the next redraw */ });
 }
-/* the picked file → a JPEG data URL ≤ 1280 px. Drawing an <img> onto a canvas applies the photo's EXIF rotation. */
+var PHOTO_TYPES = /^image\/(jpeg|png|webp|heic|heif|gif)$/;
+/* the picked file → a JPEG data URL ≤ 1280 px. Drawing an <img> onto a canvas applies the photo's EXIF rotation and
+   leaves the EXIF (incl. GPS) behind: only the canvas output is ever sent. */
 function shrinkPhoto(file){
   return new Promise(function(done, fail){
     var bad = function(){ fail(jcErr("PHOTO_UNREADABLE")); };
-    if (!file || (file.type && !/^image\//.test(file.type))) return bad();
+    if (!file || (file.type && !PHOTO_TYPES.test(file.type)) || file.size > PHOTO_IN_MAX) return bad();
     var r = new FileReader();
     r.onerror = bad;
     r.onload = function(){
       var img = new Image();
       img.onerror = bad;
       img.onload = function(){
-        var w = img.naturalWidth, h = img.naturalHeight;
-        if (!w || !h) return bad();
-        var k = Math.min(1, PHOTO_MAX / Math.max(w, h)), c = document.createElement("canvas");
-        c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
-        var g = c.getContext("2d");
-        if (!g) return bad();
-        g.drawImage(img, 0, 0, c.width, c.height);
-        var url = c.toDataURL("image/jpeg", 0.82);
-        var n = Math.floor((url.length - url.indexOf(",") - 1) * 3 / 4);
-        if (url.indexOf("data:image/jpeg") !== 0 || n < 1024 || n > 2000000) return bad();   /* blank or too big */
-        done(url);
+        try {
+          var w = img.naturalWidth, h = img.naturalHeight;
+          if (!w || !h || w * h > PHOTO_PX_MAX) return bad();
+          var k = Math.min(1, PHOTO_MAX / Math.max(w, h)), c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+          var g = c.getContext("2d");
+          if (!g) return bad();
+          g.drawImage(img, 0, 0, c.width, c.height);
+          var url = c.toDataURL("image/jpeg", 0.82);
+          c.width = c.height = 0;                                                /* iOS keeps canvas memory otherwise */
+          var n = Math.floor((url.length - url.indexOf(",") - 1) * 3 / 4);
+          if (url.indexOf("data:image/jpeg") !== 0 || n < 1024 || n > 2000000) return bad();   /* blank or too big */
+          done(url);
+        } catch (e) { bad(); }
       };
       img.src = r.result;
     };
@@ -556,9 +575,11 @@ VIEWS.edit = function(){
     '<fieldset id="ptPhotoBox"><legend>' + esc(jcT("pt_photo")) + '</legend><div class="ptphotoedit">' +
       (f.photo ? '<span class="ptph big has"><img id="ptPhotoNew" alt="" src="' + esc(f.photo) + '"></span>'
        : f.photo_path ? photoHtml({ photo_path: f.photo_path }, 44, "big") : '') +
-      '<label class="btn ghost" id="ptPhotoPick" for="ptPhotoIn">' + esc(jcT(f.photo || f.photo_path ? "pt_photo_change" : "pt_photo_add")) + '</label>' +
-      '<input type="file" id="ptPhotoIn" class="sr-only" accept="image/*"' + (ptBusy ? ' disabled' : '') + '></div>' +
-      '<p class="help" id="ptPhotoHelp">' + esc(jcT(f.photo ? "pt_photo_ready" : "pt_photo_help")) + '</p></fieldset>' +
+      /* the input sits before its label so the label can show the keyboard focus (review a11y) */
+      '<input type="file" id="ptPhotoIn" class="sr-only" accept="image/*"' + (ptBusy ? ' disabled' : '') + '>' +
+      '<label class="btn ghost" id="ptPhotoPick" for="ptPhotoIn">' + esc(jcT(f.photo || f.photo_path ? "pt_photo_change" : "pt_photo_add")) + '</label></div>' +
+      '<p class="help" id="ptPhotoHelp" role="status">' + esc(jcT(f.shrinking ? "working" : f.photo ? "pt_photo_ready" : "pt_photo_help")) + '</p>' +
+      '<p class="help" id="ptPhotoWho">' + esc(jcT("pt_photo_who")) + '</p></fieldset>' +
     '<fieldset><legend>' + esc(jcT("pt_species")) + '</legend><div class="opts" id="ptSpecies">' + SPECIES.map(function(s){
       return '<button type="button" data-sp="' + s + '" aria-pressed="' + (f.species === s) + '">' + esc(jcT("pt_sp_" + s)) + '</button>';
     }).join("") + '</div></fieldset>' +
@@ -568,7 +589,7 @@ VIEWS.edit = function(){
     '<p class="help">' + esc(jcT("pt_wanderer_help")) + '</p>' +
     '<label class="check"><input type="checkbox" id="ptChipIn"' + (f.microchipped ? ' checked' : '') + '> <span>' + esc(jcT("pt_chip_q")) + '</span></label>' +
     '<p class="help">' + esc(jcFmt("pt_shown_with", { h: myHomeText() })) + '</p>' +
-    '<button class="btn" type="submit" id="ptSave"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcT("mh_save")) + '</button></form>' +
+    '<button class="btn" type="submit" id="ptSave"' + (ptBusy || f.shrinking ? ' disabled' : '') + '>' + esc(jcT("mh_save")) + '</button></form>' +
     (f.id ? '<div class="panel danger-zone"><p class="help">' + esc(jcFmt("pt_archive_help", { n: f.was })) + '</p>' +
       '<button class="btn ghost danger" type="button" id="ptArchive"' + (ptBusy ? ' disabled' : '') + '>' +
       esc(jcFmt("pt_archive_n", { n: f.was })) + '</button></div>' : '');
@@ -580,13 +601,22 @@ VIEWS.edit = function(){
   el("ptPhotoIn").addEventListener("change", function(){
     var file = el("ptPhotoIn").files && el("ptPhotoIn").files[0];
     if (!file || ptBusy) return;
+    /* the last file picked wins; Save waits (disabled) until it's ready — never a save without the photo (review) */
+    var mine = ++shrinkSeq;
+    f.shrinking = mine;
     el("ptPhotoHelp").textContent = jcT("working");
+    if (el("ptSave")) el("ptSave").disabled = true;
     shrinkPhoto(file).then(function(url){
-      if (form !== f || current !== "edit") return;
-      f.photo = url; draw();
+      if (f.shrinking !== mine) return;
+      f.shrinking = null;
+      if (form !== f) return;
+      f.photo = url;
+      if (current === "edit") { draw(); if (el("ptPhotoIn")) el("ptPhotoIn").focus(); }
     }, function(e){
+      if (f.shrinking !== mine) return;
+      f.shrinking = null;
       if (form !== f || current !== "edit") return;
-      el("ptPhotoHelp").textContent = jcT("pt_photo_help");
+      draw();
       ptMsg(e.code || "PHOTO_UNREADABLE");
     });
   });
@@ -606,6 +636,7 @@ VIEWS.edit = function(){
   });
   el("ptForm").addEventListener("submit", function(e){
     e.preventDefault();
+    if (f.shrinking) return;
     var name = f.name.trim();
     if (!name) { ptMsg("NAME_EMPTY"); el("ptName").focus(); return; }
     var fields = { species: f.species, name: name, description: f.description.trim() || null, wanderer: f.wanderer, microchipped: f.microchipped };

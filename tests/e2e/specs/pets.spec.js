@@ -656,19 +656,23 @@ test("R5c: the list signs every photo in one call; a photo that won't load leave
   const { calls } = await open(page, b);
   const rex = page.locator(`li[data-pet="${ID(1)}"] .ptph.thumb`);
   await expect.poll(() => loaded(rex)).toBe(true);
-  const signs = calls.filter((c) => c.name === "sign");
-  expect(signs).toHaveLength(1);
+  const signs = calls.filter((c) => c.name === "sign");                        // one batch for the whole list
   expect(signs[0].args.paths.sort()).toEqual(["jubail/x/luna.jpg", "jubail/x/rex.jpg"]);
   expect(signs[0].args.expiresIn).toBe(3600);
   const luna = page.locator(`li[data-pet="${ID(2)}"] .ptph.thumb`);
-  await expect.poll(() => calls.filter((c) => c.name === "image").length).toBe(2);
+  // Luna's photo fails → signed once more (review: a dead URL gets one fresh signing), then the paw stays — no loop
+  await expect.poll(() => calls.filter((c) => c.name === "sign").length).toBe(2);
+  expect(calls.filter((c) => c.name === "sign")[1].args.paths).toEqual(["jubail/x/luna.jpg"]);
+  await expect.poll(() => calls.filter((c) => c.name === "image" && c.args.path === "jubail/x/luna.jpg").length).toBe(2);
+  await page.waitForTimeout(300);
+  expect(calls.filter((c) => c.name === "sign")).toHaveLength(2);
   await expect(luna.locator("img")).toHaveCount(0);
   await expect(luna.locator("svg")).toBeVisible();
   await expect(page.locator(`li[data-pet="${ID(4)}"] .ptph`)).toHaveCount(0);           // no photo: the plain paw
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/pets-list-photos.png" });
   await page.locator(`[data-open="${ID(1)}"]`).click();                                  // the pet page reuses the signed URL
   await expect.poll(() => loaded(page.locator(".pthero .ptph.big"))).toBe(true);
-  expect(calls.filter((c) => c.name === "sign")).toHaveLength(1);
+  expect(calls.filter((c) => c.name === "sign")).toHaveLength(2);
 });
 
 test("R5c: the upload fails → the details are still saved and it says the photo didn't go up", async ({ page }) => {
@@ -728,5 +732,57 @@ test("R5c: an image that comes out (near) blank after shrinking is refused — n
   await page.locator("#ptPhotoIn").setInputFiles({ name: "dot.png", mimeType: "image/png", buffer: PNG_1 });   // decodes, 1×1
   await expect(page.locator("#msg")).toHaveText("That photo couldn't be read. Try another one.");
   await expect(page.locator("#ptPhotoNew")).toHaveCount(0);
+  expect(calls.filter((c) => c.kind === "storage" || /photo/.test(c.name))).toEqual([]);
+});
+
+test("R5c review: a page left open past the hour re-signs its photos instead of keeping dead links", async ({ page }) => {
+  const b = backend();
+  b.st.pets.find((p) => p.name === "Rex").photo_path = "jubail/x/rex.jpg";
+  const { calls } = await open(page, b);
+  await expect.poll(() => loaded(page.locator(`li[data-pet="${ID(1)}"] .ptph.thumb`))).toBe(true);
+  expect(calls.filter((c) => c.name === "sign")).toHaveLength(1);
+  await page.locator("#ptF-owned").click();                                   // a redraw inside the hour: reuses it
+  expect(calls.filter((c) => c.name === "sign")).toHaveLength(1);
+  await page.clock.fastForward("56:00");                                      // past the hour, less the 5-minute margin
+  await page.locator("#ptF-all").click();
+  await expect.poll(() => calls.filter((c) => c.name === "sign").length).toBe(2);
+});
+
+test("R5c review: Save waits while a photo is still being prepared — never saves without it; the last pick wins", async ({ page }) => {
+  const b = backend();
+  const { calls } = await open(page, b, { q: "?pet=" + ID(6) });
+  // hold the phone-side shrink until the test lets it go
+  await page.evaluate(() => {
+    const real = FileReader.prototype.readAsDataURL;
+    window.__shrinkGate = []; FileReader.prototype.readAsDataURL = function(f){ window.__shrinkGate.push(() => real.call(this, f)); };
+  });
+  await page.locator("#ptEdit").click();
+  await page.locator("#ptPhotoIn").setInputFiles(await bigJpeg(page));
+  await expect(page.locator("#ptPhotoHelp")).toHaveText("One moment…");
+  await expect(page.locator("#ptSave")).toBeDisabled();
+  await page.locator("#ptPhotoIn").setInputFiles({ name: "dot.png", mimeType: "image/png", buffer: PNG_1 });   // a second pick
+  await page.evaluate(() => window.__shrinkGate[1]());                        // the second (refused) one finishes first…
+  await expect(page.locator("#msg")).toHaveText("That photo couldn't be read. Try another one.");
+  await page.evaluate(() => window.__shrinkGate[0]());                        // …the first, now stale, is ignored
+  await page.waitForTimeout(300);
+  await expect(page.locator("#ptPhotoNew")).toHaveCount(0);
+  await expect(page.locator("#ptSave")).toBeEnabled();
+  await page.locator("#ptSave").click();
+  await expect(page.locator("#msg")).toHaveText("Saved.");
+  expect(calls.filter((c) => c.kind === "storage" || /photo/.test(c.name))).toEqual([]);
+});
+
+test("R5c review: says who sees the photo; a file over 25 MB is refused before it's read", async ({ page }) => {
+  const b = backend();
+  const { calls } = await open(page, b, { q: "?pet=" + ID(6) });
+  await page.locator("#ptEdit").click();
+  await expect(page.locator("#ptPhotoWho")).toHaveText(/^Neighbors in your community can see this photo\. Keep people, faces, house numbers and car plates out of it\./);
+  await page.evaluate(() => {                                                   // count reads: a refused file is never read
+    const real = FileReader.prototype.readAsDataURL; window.__reads = 0;
+    FileReader.prototype.readAsDataURL = function(f){ window.__reads++; return real.call(this, f); };
+  });
+  await page.locator("#ptPhotoIn").setInputFiles({ name: "huge.jpg", mimeType: "image/jpeg", buffer: Buffer.alloc(26e6, 0xff) });
+  await expect(page.locator("#msg")).toHaveText("That photo couldn't be read. Try another one.");
+  expect(await page.evaluate(() => window.__reads)).toBe(0);
   expect(calls.filter((c) => c.kind === "storage" || /photo/.test(c.name))).toEqual([]);
 });
