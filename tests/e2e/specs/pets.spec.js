@@ -796,15 +796,17 @@ test("R5c review: says who sees the photo; a file over 25 MB is refused before i
 });
 
 // ---- R5c-2: remove a photo ----
-test("R5c-2: Remove Photo asks first, then takes it down at once; the list and pet page drop it too", async ({ page }) => {
+test("R5c-2: Remove Photo asks first, then takes it down; Back returns to the pet (no photo), the list drops it", async ({ page }) => {
   const b = backend();
   b.st.pets.find((p) => p.name === "Mochi").photo_path = "jubail/x/mochi.jpg";
   const { calls } = await open(page, b, { q: "?pet=" + ID(6) });
   await expect.poll(() => loaded(page.locator(".pthero .ptph.big"))).toBe(true);
   await page.locator("#ptEdit").click();
   await expect(page.locator("#ptPhotoRemove")).toHaveText("Remove Photo");
-  page.once("dialog", (d) => { expect(d.message()).toBe("Remove Mochi's photo? Neighbors stop seeing it right away."); d.dismiss(); });
+  let asked = null;
+  page.once("dialog", async (d) => { asked = d.message(); await d.dismiss(); });
   await page.locator("#ptPhotoRemove").click();
+  await expect.poll(() => asked).toBe("Remove Mochi's photo? Neighbors will stop seeing it.");
   expect(named(calls, "jc_pet_photo_remove")).toHaveLength(0);                       // said no: nothing sent
   page.once("dialog", (d) => d.accept());
   await page.locator("#ptPhotoRemove").click();
@@ -813,10 +815,32 @@ test("R5c-2: Remove Photo asks first, then takes it down at once; the list and p
   await expect(page.locator("#ptPhotoBox .ptph")).toHaveCount(0);
   await expect(page.locator("#ptPhotoPick")).toHaveText("Add Photo");
   await expect(page.locator("#ptPhotoRemove")).toHaveCount(0);
-  await page.locator("#ptSave").click();                                              // nothing else changed: details save, no photo calls
-  await expect(page.locator("#msg")).toHaveText("Saved.");
+  await expect(page.locator("#ptPhotoIn")).toBeFocused();                              // focus kept in the photo field
+  await page.locator("#jcBackBtn").click();                                              // Back → the same pet, without its photo
+  await expect(page.locator(".pthero h1")).toHaveText("Mochi");
   await expect(page.locator(".pthero .ptph")).toHaveCount(0);
+  expect(new URL(page.url()).search).toBe("?pet=" + ID(6));
+  await page.locator("#jcBackBtn").click();                                              // the list re-reads: Mochi without a photo
+  await expect(page.locator(`li[data-pet="${ID(6)}"]`)).toBeVisible();
+  await expect(page.locator(`li[data-pet="${ID(6)}"] .ptph`)).toHaveCount(0);
   expect(calls.filter((c) => /photo_(begin|commit)/.test(c.name) || c.name === "upload")).toEqual([]);
+});
+
+test("R5c-2: already removed elsewhere (NO_PHOTO) reads as done; Drop on a pet with a saved photo keeps it", async ({ page }) => {
+  const b = backend();
+  b.st.pets.find((p) => p.name === "Mochi").photo_path = "jubail/x/mochi.jpg";
+  await open(page, b, { q: "?pet=" + ID(6) });
+  await page.locator("#ptEdit").click();
+  await page.locator("#ptPhotoIn").setInputFiles(await bigJpeg(page));                // pick, then change your mind
+  await expect(page.locator("#ptPhotoRemove")).toHaveCount(0);
+  await page.locator("#ptPhotoDrop").click();
+  await expect(page.locator("#ptPhotoRemove")).toBeVisible();                          // the saved photo is back in view
+  await expect.poll(() => loaded(page.locator("#ptPhotoBox .ptph.big"))).toBe(true);
+  b.st.pets.find((p) => p.name === "Mochi").photo_path = null;                       // a household member removed it meanwhile
+  page.once("dialog", (d) => d.accept());
+  await page.locator("#ptPhotoRemove").click();
+  await expect(page.locator("#msg")).toHaveText("Mochi's photo is removed.");
+  await expect(page.locator("#msg")).toHaveClass(/ok/);
 });
 
 test("R5c-2: a just-picked photo can be dropped before Save; no Remove on a pet without a photo", async ({ page }) => {

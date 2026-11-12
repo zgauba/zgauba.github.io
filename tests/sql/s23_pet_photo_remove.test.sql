@@ -64,7 +64,7 @@ begin
   if msg is distinct from 'NOT_ADMIN' then raise exception 'FAIL F01d resident removed a stray''s photo: %', msg; end if;
   k := k + 4;
 
-  -- ---------- F02 a pending upload by the household is left alone ----------
+  -- ---------- F02 a pending upload by another household member is cancelled by the removal (takedown wins) ----------
   perform pg_temp.s23_as(m2);
   v_p3 := jc_pet_photo_begin(v_dog, 'jpg') ->> 'path';
 
@@ -83,10 +83,13 @@ begin
     raise exception 'FAIL F03d ledger not retired: %', (select row_to_json(x) from jc_pet_photos x where path = v_p1); end if;
   if not exists (select 1 from storage.objects where bucket_id = 'pet-photos' and name = v_p1) then
     raise exception 'FAIL F03e the file went before the purge (it must stay for jc-photo-purge)'; end if;
-  if (select pending_photo_path from jc_pets where id = v_dog) is distinct from v_p3
-     or (select state from jc_pet_photos where path = v_p3) <> 'pending' then
-    raise exception 'FAIL F02 the pending upload was touched'; end if;
-  k := k + 6;
+  if (select pending_photo_path from jc_pets where id = v_dog) is not null
+     or (select pending_photo_by from jc_pets where id = v_dog) is not null
+     or (select state from jc_pet_photos where path = v_p3) <> 'retired' then
+    raise exception 'FAIL F02 the in-flight upload survived the takedown'; end if;
+  if (select updated_by from jc_pets where id = v_dog) <> o1 then raise exception 'FAIL F03f updated_by'; end if;
+  if not (v_p1 = any(jc_photo_purge_queue(1000))) then raise exception 'FAIL F03g the removed file is not queued for the purge'; end if;
+  k := k + 8;
 
   -- ---------- F04 nothing to remove → NO_PHOTO (no ledger change) ----------
   execute 'set local role authenticated';
@@ -95,12 +98,17 @@ begin
   if msg is distinct from 'NO_PHOTO' then raise exception 'FAIL F04 second remove: %', msg; end if;
   k := k + 1;
 
-  -- ---------- F05 the second member's pending upload can still be committed afterwards ----------
+  -- ---------- F05 the cancelled upload can't land: no write, no commit; a fresh upload works ----------
   perform pg_temp.s23_as(m2);
+  msg := null; begin insert into storage.objects (bucket_id, name, owner, metadata) values ('pet-photos', v_p3, m2, v_meta); exception when others then msg := sqlerrm; end;
+  if msg is null or msg not like 'new row violates row-level security policy%' then raise exception 'FAIL F05a cancelled upload still writable: %', msg; end if;
+  msg := pg_temp.s23_err(format('select jc_pet_photo_commit(%L)', v_dog));
+  if msg is distinct from 'NO_PENDING_PHOTO' then raise exception 'FAIL F05b cancelled upload committed: %', msg; end if;
+  v_p3 := jc_pet_photo_begin(v_dog, 'jpg') ->> 'path';
   insert into storage.objects (bucket_id, name, owner, metadata) values ('pet-photos', v_p3, m2, v_meta);
   v := jc_pet_photo_commit(v_dog);
-  if v ->> 'photo_path' <> v_p3 then raise exception 'FAIL F05 commit after remove: %', v; end if;
-  k := k + 1;
+  if v ->> 'photo_path' <> v_p3 then raise exception 'FAIL F05c fresh upload after remove: %', v; end if;
+  k := k + 3;
 
   -- ---------- F06 a Pets admin removes a stray's photo ----------
   perform pg_temp.s23_as(ad);

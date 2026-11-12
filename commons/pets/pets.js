@@ -579,7 +579,7 @@ VIEWS.edit = function(){
       '<input type="file" id="ptPhotoIn" class="sr-only" accept="image/*"' + (ptBusy ? ' disabled' : '') + '>' +
       '<div class="row"><label class="btn ghost" id="ptPhotoPick" for="ptPhotoIn">' + esc(jcT(f.photo || f.photo_path ? "pt_photo_change" : "pt_photo_add")) + '</label>' +
       /* R5c-2: a picked photo can be dropped before Save; a saved one removed now (with a confirm) */
-      (f.photo ? '<button class="btn ghost" type="button" id="ptPhotoDrop">' + esc(jcT("pt_photo_drop")) + '</button>'
+      (f.photo ? '<button class="btn ghost" type="button" id="ptPhotoDrop"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcT("pt_photo_drop")) + '</button>'
        : f.id && f.photo_path ? '<button class="btn ghost danger" type="button" id="ptPhotoRemove"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcT("pt_photo_remove")) + '</button>' : '') +
       '</div></div>' +
       '<p class="help" id="ptPhotoHelp" role="status">' + esc(jcT(f.shrinking ? "working" : f.photo ? "pt_photo_ready" : "pt_photo_help")) + '</p>' +
@@ -630,14 +630,20 @@ VIEWS.edit = function(){
     Array.prototype.forEach.call(document.querySelectorAll("[data-sp]"), function(x){ x.setAttribute("aria-pressed", String(x === b)); });
   });
   on("ptPhotoDrop", function(){ if (ptBusy) return; f.photo = null; shrinkSeq++; f.shrinking = null; draw(); if (el("ptPhotoIn")) el("ptPhotoIn").focus(); });
+  /* the open pet keeps its place (Back returns to it — review); only its photo goes; the list re-reads */
+  function photoGone(){
+    f.photo_path = null; pets = null;
+    if (pet && pet.id === f.id) pet.photo_path = null;
+    draw();
+    showOk(jcFmt("pt_photo_removed", { n: f.was }));
+    if (el("ptPhotoIn")) el("ptPhotoIn").focus();
+  }
   on("ptPhotoRemove", function(){
     if (!window.confirm(jcFmt("pt_photo_remove_q", { n: f.was }))) return;
     ptWrite(el("ptPhotoRemove"), function(){ return rpc("jc_pet_photo_remove", { p_pet: f.id }); }, function(){
-      f.photo_path = null; pet = null; pets = null;               /* the pet page / list re-read it */
-      draw();
-      showOk(jcFmt("pt_photo_removed", { n: f.was }));
+      photoGone();
     }, function(code){
-      if (code === "NO_PHOTO") { f.photo_path = null; pet = null; pets = null; draw(); showOk(jcFmt("pt_photo_removed", { n: f.was })); return true; }
+      if (code === "NO_PHOTO") { photoGone(); return true; }     /* already gone (another tap / household member) */
       if (code === "NOT_FOUND") { form = null; backToList("NOT_FOUND"); return true; }
       return false;
     });

@@ -4,9 +4,11 @@
 --
 -- jc_pet_photo_remove(p_pet): who may manage the pet (jc_pet_manage: the household for an owned pet, a Pets admin for a
 -- stray) clears photo_path and retires the current ledger row. The SELECT policy (pet_photo_can_read) only lets members
--- read the CURRENT path, so the photo is unreadable the moment this commits (already-issued signed URLs live ≤ 1 h);
--- jc-photo-purge deletes the retired object within a day. A pending upload, if any, is left alone (it is its uploader's
--- to commit or abandon). NO_PHOTO when there is nothing to remove.
+-- read the CURRENT path, so no new view can read it once this commits (signed URLs already issued live ≤ 1 h, and a
+-- phone may have it cached); jc-photo-purge deletes the retired object within a day (03:35 UTC run).
+-- A takedown wins (security review L2): an in-flight upload by anyone in the household is cancelled too — pending
+-- columns cleared, its ledger row retired (as jc_pet_retire does) — so a stale upload can't put a photo straight back;
+-- that uploader's commit then gets NO_PENDING_PHOTO. NO_PHOTO when there is no current photo (nothing changes).
 --
 -- DOWN: drop function public.jc_pet_photo_remove(uuid);  (photos removed meanwhile stay removed — the files are purged)
 
@@ -19,8 +21,10 @@ begin
   perform jc_module_on(v_comm, 'pets');
   p := jc_pet_manage(p_pet);
   if p.photo_path is null then raise exception 'NO_PHOTO'; end if;
-  update jc_pet_photos set state = 'retired', retired_at = now() where pet_id = p.id and state = 'current';
-  update jc_pets set photo_path = null, updated_at = now(), updated_by = v_user where id = p.id;
+  update jc_pet_photos set state = 'retired', retired_at = now() where pet_id = p.id and state in ('current', 'pending');
+  update jc_pets set photo_path = null, pending_photo_path = null, pending_photo_by = null, pending_photo_at = null,
+                     updated_at = now(), updated_by = v_user
+   where id = p.id;
   return jc_pet_card(p.id, v_home);
 end;
 $$;
