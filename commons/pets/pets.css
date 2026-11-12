@@ -78,3 +78,34 @@ legend{font-size:13px; font-weight:700; color:var(--jc-muted); margin-bottom:6px
 .ptphotoedit{display:flex; flex-direction:column; align-items:flex-start; gap:8px}
 .ptphotoedit .ptph.big{max-width:320px}
 #ptPhotoIn:focus-visible + #ptPhotoPick{outline:2px solid var(--jc-accent); outline-offset:2px}
+
+/* R5b-2b-1 — two-column photo cards (Zee 2026-11-12); missing pets full width on top, photo beside the text */
+.ptgrid{list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px}
+.ptgrid.wide{grid-template-columns:1fr}
+.ptgrid li{display:flex; min-width:0}
+.ptcard{font:inherit; color:var(--jc-ink); text-align:start; cursor:pointer; width:100%; display:flex; flex-direction:column;
+  background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius); padding:0; overflow:hidden}
+.ptcard:focus-visible{outline:2px solid var(--jc-accent); outline-offset:2px}
+.ptgrid li.missing .ptcard{border:2px solid var(--jc-danger)}
+.ptcard .ptph.tile{width:100%; aspect-ratio:1 / 1; border-radius:0; color:var(--jc-accent)}
+.ptgrid.wide .ptcard{flex-direction:row; align-items:stretch}
+.ptgrid.wide .ptph.tile{width:104px; aspect-ratio:auto; min-height:104px}
+.ptbody{display:flex; flex-direction:column; gap:4px; padding:10px 12px 12px; min-width:0; overflow-wrap:anywhere}
+.ptbody b{font-size:15px; line-height:1.25}
+.ptbody .meta{color:var(--jc-muted); font-size:12.5px; line-height:1.35}
+.ptbody .where{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.ptbody .head{gap:4px; margin-top:2px}
+/* badges: colour only for real states */
+.chip.miss{background:var(--jc-danger); border-color:var(--jc-danger); color:#2d0808}
+.chip.warn{border-color:var(--jc-warn); color:var(--jc-warn); font-weight:700}
+/* pet page: header, alarm, then the About · Sightings tabs */
+.alarm .acts{margin-top:10px}
+.alarm .btn{flex:1 1 auto}
+#ptPage{display:flex; flex-direction:column; gap:12px}
+#ptPage > h2.group:first-child{margin-top:0}
+.pthero{flex-direction:row; align-items:center; gap:14px}
+.pthero .ptph.tile{width:104px; height:104px; border-radius:14px; color:var(--jc-accent)}
+.ptwho{display:flex; flex-direction:column; gap:4px; min-width:0}
+.ptwho h1{margin:0; overflow-wrap:anywhere}
+/* dir="auto" keeps a Latin name's letters in order; in Arabic it still lines up with the rest of the card */
+html[dir="rtl"] .ptbody b, html[dir="rtl"] .ptwho h1{text-align:right}

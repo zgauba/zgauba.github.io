@@ -1,7 +1,7 @@
 // Shared stub backends for the events and organizer screens — used by the specs and by
 // shots/ (the /shot screenshot harness), so both see the same fake data.
 const { expect } = require("@playwright/test");
-const { ok, raise, MEMBER } = require("./stub");
+const { ok, raise, MEMBER, CONFIG } = require("./stub");
 
 // ── Events (T5.1) ──
 const LIVE_ID = "11111111-1111-4111-8111-111111111111";
@@ -454,6 +454,150 @@ async function signIn(page) {
   await expect(page).toHaveURL(/\/commons\/$/);
 }
 
-module.exports = { eventsBackend, adminBackend, signIn, LIVE_ID, PAST_ID, SCHEMA, LIVE, PAST, ENTRIES, STATS,
+// ── Pets (R5b-1 / R5c) — moved from pets.spec.js so /shot can show Pets screens too ──
+const PET_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+const PET_GROUP = "https://chat.whatsapp.com/AbCdEfGhIjKlMnOpQr12";
+const petId = (n) => "22222222-bbbb-4bbb-8bbb-00000000000" + n;
+const PET_MY_HOME = "h1";                                      // stub.js MEMBER: Villa 12 · Ain Al Maha
+const PET_V40 = { id: "h40", village: "seef-al-jubail", building: null, number: "40" };
+const PET_MINE_HOME = { id: PET_MY_HOME, village: "ain-al-maha", building: null, number: "12" };
+
+function petsBackend(opts = {}) {
+  const st = {
+    enabled: opts.enabled !== false,
+    me: opts.me || MEMBER,
+    admin: !!opts.admin,
+    group: opts.group === undefined ? PET_GROUP : opts.group,
+    pets: (opts.pets || [
+      { id: petId(1), kind: "owned", species: "dog", name: "Rex", home: PET_V40, missing: false },
+      { id: petId(2), kind: "owned", species: "cat", name: "Luna", home: PET_V40, missing: true, missing_since: "2026-11-10T15:00:00Z",
+        last_seen_note: "Near the beach park", sightings: [] },
+      { id: petId(3), kind: "stray", species: "cat", name: "Ginger", care_state: "under_care", territory: "Behind the mosque",
+        care: { sterilized: { s: "done", d: "2026-10-01", n: "Clinic A" }, vaccination: { s: "due", d: null, n: null } },
+        care_log: [{ kind: "fed", note: "Morning round", at: "2026-11-10T05:00:00Z" }],
+        sightings: [{ id: 7, note: "By the bins", lat: 24.531, lng: 54.432, seen_at: "2026-11-10T18:00:00Z", by_me: false },
+                    { id: 8, note: null, lat: null, lng: null, seen_at: "2026-11-09T18:00:00Z", by_me: true },
+                    // older than 24 h: the nightly job erased the reporter, so by_me is NULL (reporter = me → null), not false
+                    { id: 9, note: "Sleeping in the shade", lat: null, lng: null, seen_at: "2026-11-08T12:00:00Z", by_me: null }] },
+      { id: petId(4), kind: "stray", species: "dog", name: "Sandy", care_state: "known_fine", territory: "The marina" },
+      { id: petId(5), kind: "stray", species: "cat", name: "Biscuit", care_state: "rehomed" },
+      { id: petId(6), kind: "owned", species: "cat", name: "Mochi", home: PET_MINE_HOME, missing: false, wanderer: true },
+    ].concat(opts.extra || [])).map((p) => Object.assign({ description: null, wanderer: false, microchipped: false, missing: false,
+      missing_since: null, last_seen_note: null, care_state: null, photo_path: null, territory: null, territory_lat: null, territory_lng: null,
+      care: p.kind === "stray" ? {} : null, care_log: [], sightings: [], status: "active" }, p)),
+  };
+  let n = 0;
+  const homeOf = (p) => p.home;
+  const card = (p) => {
+    const h = homeOf(p), mine = !!(st.me.home && h && h.id === PET_MY_HOME);
+    return { id: p.id, kind: p.kind, species: p.species, name: p.name, description: p.description, wanderer: p.wanderer,
+      microchipped: p.microchipped, missing: p.missing, missing_since: p.missing_since, last_seen_note: p.last_seen_note,
+      care_state: p.care_state, photo_path: p.photo_path, mine,
+      home: h && !h.noHome ? { village: h.village, type: h.type, building: h.building, number: h.number } : null,   // type: R5b-1b server (absent = older server)
+      territory: p.territory, territory_lat: p.territory_lat, territory_lng: p.territory_lng, care: p.kind === "stray" ? p.care : null };
+  };
+  const find = (id) => st.pets.find((p) => p.id === id && p.status === "active");
+  const off = () => (st.enabled ? null : raise("MODULE_OFF"));
+  // st.hold[name] = a Promise: that RPC answers only once it resolves (a slow network, on demand)
+  st.hold = {};
+  const held = (name, f) => (a, c) => (st.hold[name] ? st.hold[name].then(() => f(a, c)) : f(a, c));
+  const manage = (id) => { const p = find(id); return p && p.kind === "owned" && card(p).mine ? p : null; };
+  const rpc = {
+    jc_config_get: () => ok(Object.assign({}, CONFIG, { tz: "Asia/Dubai", labels: opts.labels,
+      modules: { events: { enabled: false }, bookings: { enabled: false }, pets: { enabled: st.enabled } } })),
+    jc_me_get: (a, c) => (c.signedIn ? ok(st.me) : raise("NOT_SIGNED_IN")),
+    jc_pets_list: (a) => off() || (a.p_filter !== "all" ? raise("BAD_FILTER")
+      : ok(st.pets.filter((p) => p.status === "active").sort((x, y) => (y.missing - x.missing) || x.name.localeCompare(y.name)).map(card))),
+    jc_pet_get: (a) => {
+      if (off()) return off();
+      if (opts.getError) return raise(opts.getError);
+      const p = find(a.p_pet);
+      if (!p) return raise("NOT_FOUND");
+      const c = card(p);
+      const see = p.kind === "stray" || c.mine || st.admin;
+      return ok(Object.assign(c, { sightings: see ? p.sightings : null, care_log: p.kind === "stray" ? p.care_log : null }));
+    },
+    jc_pet_save: (a) => {
+      if (off()) return off();
+      if (!st.me.home) return raise("NO_HOME");
+      const f = a.p_fields;
+      if (a.p_pet === null) {
+        n += 1;
+        const p = { id: "33333333-cccc-4ccc-8ccc-00000000000" + n, kind: "owned", home: PET_MINE_HOME, missing: false, missing_since: null, last_seen_note: null, care_state: null,
+          photo_path: null, territory: null, territory_lat: null, territory_lng: null, care: null, care_log: [], sightings: [],
+          status: "active", description: null, wanderer: false, microchipped: false };
+        Object.assign(p, f);
+        st.pets.push(p);
+        return ok(card(p));
+      }
+      const p = manage(a.p_pet);
+      if (!p) return raise("NOT_FOUND");
+      Object.assign(p, f);
+      return ok(card(p));
+    },
+    jc_pet_archive: (a) => { const p = manage(a.p_pet); if (!p) return raise("NOT_FOUND"); p.status = "archived"; return ok({ pet_id: p.id, archived: true }); },
+    jc_pet_missing_set: (a) => {
+      const p = manage(a.p_pet);
+      if (!p) return raise("NOT_FOUND");
+      p.missing = a.p_missing;
+      p.missing_since = a.p_missing ? (p.missing_since || "2026-11-11T06:00:00Z") : null;
+      p.last_seen_note = a.p_missing ? a.p_note : null;
+      return ok(card(p));
+    },
+    jc_pet_sighting_add: (a) => {
+      if (opts.sightError) return raise(opts.sightError);
+      const p = find(a.p_pet);
+      if (!p) return raise("NOT_FOUND");
+      if (!(p.missing || (p.kind === "stray" && p.care_state !== "rehomed"))) return raise("SIGHTINGS_CLOSED");
+      if ((a.p_lat === null) !== (a.p_lng === null)) return raise("BAD_FIELDS");
+      p.sightings.unshift({ id: 100, note: a.p_note, lat: a.p_lat, lng: a.p_lng, seen_at: "2026-11-11T06:30:00Z", by_me: true });
+      return ok({ pet_id: p.id, logged: true });
+    },
+    jc_pets_group_get: () => off() || ok({ link: st.group }),
+    // R5c: the server picks the path; commit only once that exact object arrived (jc_pet_photo_begin / _commit)
+    jc_pet_photo_begin: (a) => {
+      if (off()) return off();
+      if (opts.beginError) return raise(opts.beginError);
+      if (!["jpg", "png", "webp"].includes(a.p_ext)) return raise("BAD_FIELDS");
+      const p = manage(a.p_pet);
+      if (!p) return raise("NOT_FOUND");
+      n += 1;
+      p.pending = "jubail/" + p.id + "/r" + n + "." + a.p_ext;
+      return ok({ bucket: "pet-photos", path: p.pending, expires_in_seconds: 900 });
+    },
+    jc_pet_photo_remove: (a) => {                                       // R5c-2
+      if (off()) return off();
+      const p = manage(a.p_pet);
+      if (!p) return raise("NOT_FOUND");
+      if (!p.photo_path) return raise("NO_PHOTO");
+      p.photo_path = null;
+      return ok(card(p));
+    },
+    jc_pet_photo_commit: (a) => {
+      const p = manage(a.p_pet);
+      if (!p) return raise("NOT_FOUND");
+      if (!p.pending) return raise("NO_PENDING_PHOTO");
+      if (!st.objects[p.pending]) return raise("PHOTO_MISSING");
+      p.photo_path = p.pending; p.pending = null;
+      return ok(card(p));
+    },
+  };
+  for (const k of ["jc_pets_list", "jc_pet_save", "jc_pet_get", "jc_pet_missing_set"]) rpc[k] = held(k, rpc[k]);
+  st.objects = {};
+  const storage = {
+    // write-once at the pending path only (storage policy pet_photo_can_write)
+    upload: (a) => {
+      if (opts.uploadFail) return { status: 500, body: { statusCode: "500", error: "internal", message: "boom" } };
+      if (a.bucket !== "pet-photos" || !st.pets.some((p) => p.pending === a.path) || st.objects[a.path])
+        return { status: 403, body: { statusCode: "403", error: "Unauthorized", message: "new row violates row-level security policy" } };
+      st.objects[a.path] = a;
+      return ok({ Key: "pet-photos/" + a.path, Id: "obj" });
+    },
+    // readable only while it is a pet's current photo (pet_photo_can_read); opts.broken = paths that fail to load
+    image: (path) => (st.pets.some((p) => p.photo_path === path) && !(opts.broken || []).includes(path) ? PET_PNG : null),
+  };
+  return { st, rpc, storage };
+}
+module.exports = { petsBackend, PET_GROUP, petId, PET_MY_HOME, PET_V40, PET_MINE_HOME, PET_PNG, eventsBackend, adminBackend, signIn, LIVE_ID, PAST_ID, SCHEMA, LIVE, PAST, ENTRIES, STATS,
   PIN_SCHEMA, home, pinEvent, PINS_ID, HAQ_ID, DAY_ID, LIGHTS_ID, LIGHTS_EVENT, LIGHTS_SAFETY, dayBackend, healthReport, NOTICES,
   ADMIN_DRAFT_ID, ADMIN_LIVE_ID, ADMIN_PAST_ID, ADMIN_MARKET_ID, ADMIN_MARKET };

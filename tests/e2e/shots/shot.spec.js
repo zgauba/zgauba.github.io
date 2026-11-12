@@ -2,6 +2,7 @@
 // (see playwright.shot.config.js); /shot is the wrapper. Never part of the normal suite.
 //
 //   SHOT_PATH     path under /commons/, e.g. "events/" or "events/?id=<LIVE_ID>"  (default "")
+//                 pets/ and pets/?pet=22222222-bbbb-4bbb-8bbb-00000000000<1-6> use the Pets stub
 //   SHOT_PERSONA  anon | member | member-no-home | member-no-pin | organizer | community-admin | event-admin
 //   SHOT_LANG     en | ar
 //   SHOT_FULL     1 = full page instead of the viewport
@@ -11,7 +12,7 @@
 // missing RPC — extend specs/stub.js or specs/backends.js rather than guessing here.
 const { test, expect } = require("@playwright/test");
 const { stubBackend, ok, CONFIG, MEMBER_NO_HOME, MEMBER_NO_PIN } = require("../specs/stub");
-const { eventsBackend, adminBackend, signIn } = require("../specs/backends");
+const { eventsBackend, adminBackend, signIn, petsBackend, petId } = require("../specs/backends");
 
 const PERSONAS = ["anon", "member", "member-no-home", "member-no-pin", "organizer", "community-admin", "event-admin"];
 const persona = process.env.SHOT_PERSONA || "member";
@@ -33,7 +34,15 @@ test("shot", async ({ page }) => {
   if (persona === "member-no-home") rpc.jc_me_get = (a, c) => ok(MEMBER_NO_HOME);
   if (persona === "member-no-pin") rpc.jc_me_get = (a, c) => ok(MEMBER_NO_PIN);
 
-  const { calls, escaped } = await stubBackend(page, { rpc });
+  // pets/: the Pets stub (specs/pets.spec.js data); Rex, Luna and Ginger carry photos so the cards show image boxes
+  let storage;
+  if ((process.env.SHOT_PATH || "").startsWith("pets")) {
+    const pb = petsBackend({ me: persona === "member-no-home" ? MEMBER_NO_HOME : undefined });
+    pb.st.pets.forEach((p) => { if ([petId(1), petId(2), petId(3)].includes(p.id)) p.photo_path = "jubail/" + p.id + "/r0.jpg"; });
+    Object.assign(rpc, pb.rpc);
+    storage = pb.storage;
+  }
+  const { calls, escaped } = await stubBackend(page, { rpc, storage });
   await page.addInitScript((l) => { try { localStorage.setItem("jc_lang", l); } catch (e) {} }, lang);
   if (persona !== "anon") await signIn(page);
   await page.goto(process.env.SHOT_PATH || "");
