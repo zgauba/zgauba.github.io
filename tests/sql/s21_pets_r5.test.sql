@@ -38,8 +38,6 @@ begin
   perform pg_temp.s21_as(o1);
   v_dog := (jc_pet_save(null, '{"species": "dog", "name": "Biscuit"}') ->> 'id')::uuid;
   execute 'reset role';
-  update jc_homes set directory_suppressed = true
-   where id = (select home_id from jc_home_members where user_id = o1);
   select home_id into v_h2 from jc_home_members where user_id = o2;
 
   -- ---------- R01 known & fine: a 4th care state; filters split strays / community ----------
@@ -162,57 +160,35 @@ begin
   perform jc_pet_missing_set(v_dog, true, null);
   k := k + 4;
 
-  -- ---------- R06 missing pet from a directory-hidden home: show-home opt-in ----------
+  -- ---------- R06 (HH 2026-11-11) no hidden homes: an owned pet's home is always on its card; no opt-in ----------
   perform pg_temp.s21_as(o2);
-  if jc_pet_get(v_dog) -> 'home' <> 'null'::jsonb then raise exception 'FAIL R06a hidden home shown without opt-in'; end if;
-  msg := pg_temp.s21_err(format('select jc_pet_missing_home_set(%L, true)', v_dog));
-  if msg is distinct from 'NOT_FOUND' then raise exception 'FAIL R06b neighbor opted in: %', msg; end if;
+  if jc_pet_get(v_dog) -> 'home' ->> 'number' is distinct from '1' then raise exception 'FAIL R06a home not shown: %', jc_pet_get(v_dog); end if;
+  if jc_pet_get(v_dog) ? 'show_home' then raise exception 'FAIL R06b show_home still sent'; end if;
+  if to_regprocedure('public.jc_pet_missing_home_set(uuid, boolean)') is not null then raise exception 'FAIL R06c opt-in RPC still exists'; end if;
+  if exists (select 1 from information_schema.columns where table_name = 'jc_pets' and column_name = 'missing_show_home') then
+    raise exception 'FAIL R06d opt-in column still exists'; end if;
+  -- found: the home stays shown (it always is)
   perform pg_temp.s21_as(o1);
-  msg := pg_temp.s21_err(format('select jc_pet_missing_home_set(%L, null)', v_dog));
-  if msg is distinct from 'BAD_FIELDS' then raise exception 'FAIL R06c null: %', msg; end if;
-  v := jc_pet_missing_home_set(v_dog, true);
-  if not (v ->> 'show_home')::boolean then raise exception 'FAIL R06d opt-in: %', v; end if;
+  perform jc_pet_missing_set(v_dog, false, null);
   perform pg_temp.s21_as(o2);
-  if jc_pet_get(v_dog) -> 'home' ->> 'number' is distinct from '1' then raise exception 'FAIL R06e opted-in home hidden: %', jc_pet_get(v_dog); end if;
-  if jc_pet_get(v_dog) -> 'show_home' <> 'null'::jsonb then raise exception 'FAIL R06e2 neighbor sees the opt-in flag (security L2)'; end if;
-  -- found: opt-in cleared, home hidden again; a new "missing" starts hidden
+  if jc_pet_get(v_dog) -> 'home' ->> 'number' is distinct from '1' then raise exception 'FAIL R06e found pet lost its home'; end if;
+  -- archiving a missing pet still clears the alarm
   perform pg_temp.s21_as(o1);
-  v := jc_pet_missing_set(v_dog, false, null);
-  if (v ->> 'show_home')::boolean then raise exception 'FAIL R06f found kept the opt-in'; end if;
-  msg := pg_temp.s21_err(format('select jc_pet_missing_home_set(%L, true)', v_dog));
-  if msg is distinct from 'NOT_MISSING' then raise exception 'FAIL R06g opt-in while home: %', msg; end if;
   perform jc_pet_missing_set(v_dog, true, null);
-  perform pg_temp.s21_as(o2);
-  if jc_pet_get(v_dog) -> 'home' <> 'null'::jsonb then raise exception 'FAIL R06h re-missing started shown'; end if;
-  -- archiving an opted-in missing pet works (constraint) and clears it
-  perform pg_temp.s21_as(o1);
-  perform jc_pet_missing_home_set(v_dog, true);
   perform jc_pet_archive(v_dog);
   execute 'reset role';
-  if (select row(status, missing, missing_show_home)::text from jc_pets where id = v_dog) <> '(archived,f,f)' then
-    raise exception 'FAIL R06i archive: %', (select row(status, missing, missing_show_home) from jc_pets where id = v_dog); end if;
-  -- an admin hiding a home ends its pets' opt-in (security M1)
+  if (select row(status, missing)::text from jc_pets where id = v_dog) <> '(archived,f)' then
+    raise exception 'FAIL R06f archive: %', (select row(status, missing) from jc_pets where id = v_dog); end if;
+  -- the household leaving (jc_home_vacated) archives a missing pet
   execute 'set local role authenticated';
   perform pg_temp.s21_as(o2);
   v := jc_pet_save(null, '{"species": "cat", "name": "Pepper"}');
   perform jc_pet_missing_set((v ->> 'id')::uuid, true, null);
-  perform jc_pet_missing_home_set((v ->> 'id')::uuid, true);
-  perform pg_temp.s21_as(ad);
-  perform jc_admin_unlock('S21-COMMUNITY-01');
-  perform jc_admin_home_suppress(v_h2, true);
-  perform pg_temp.s21_as(o1);
-  if jc_pet_get((v ->> 'id')::uuid) -> 'home' <> 'null'::jsonb then raise exception 'FAIL R06j suppressed home still shown'; end if;
-  execute 'reset role';
-  if (select missing_show_home from jc_pets where id = (v ->> 'id')::uuid) then raise exception 'FAIL R06k opt-in survived suppression'; end if;
-  -- the household leaving (jc_home_vacated) clears an opted-in missing pet
-  execute 'set local role authenticated';
-  perform pg_temp.s21_as(o2);
-  perform jc_pet_missing_home_set((v ->> 'id')::uuid, true);
   perform jc_home_leave();
   execute 'reset role';
-  if (select row(status, missing, missing_show_home)::text from jc_pets where id = (v ->> 'id')::uuid) <> '(archived,f,f)' then
-    raise exception 'FAIL R06l vacated: %', (select row(status, missing, missing_show_home) from jc_pets where id = (v ->> 'id')::uuid); end if;
-  k := k + 13;
+  if (select row(status, missing)::text from jc_pets where id = (v ->> 'id')::uuid) <> '(archived,f)' then
+    raise exception 'FAIL R06g vacated: %', (select row(status, missing) from jc_pets where id = (v ->> 'id')::uuid); end if;
+  k := k + 7;
 
   -- ---------- R07 retention: reporter erased after 24 h, rows deleted after 30 days ----------
   insert into jc_pet_sightings (community_id, pet_id, reporter, note, seen_at) values
@@ -299,7 +275,6 @@ begin
   -- ---------- R09 the new RPCs: authenticated only ----------
   if has_function_privilege('anon', 'public.jc_pets_group_get()', 'execute')
      or has_function_privilege('anon', 'public.jc_admin_pets_group_set(text)', 'execute')
-     or has_function_privilege('anon', 'public.jc_pet_missing_home_set(uuid, boolean)', 'execute')
      or has_function_privilege('anon', 'public.jc_admin_pet_care_set(uuid, text, text, date, text)', 'execute') then
     raise exception 'FAIL R09 anon can call a new pets RPC'; end if;
   k := k + 1;

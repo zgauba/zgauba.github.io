@@ -13,7 +13,7 @@ declare
   a5 uuid := '00000000-0000-4000-8000-000000001705';  -- per-event admin only
   r1 uuid := '00000000-0000-4000-8000-000000001706';  -- home 1
   r2 uuid := '00000000-0000-4000-8000-000000001707';  -- home 2
-  r3 uuid := '00000000-0000-4000-8000-000000001708';  -- home 3 (directory-suppressed)
+  r3 uuid := '00000000-0000-4000-8000-000000001708';  -- home 3
   b1 uuid := '00000000-0000-4000-8000-000000001709';  -- testville17b courts admin
   tz text := 'Asia/Dubai';
   d1 date; v jsonb; s jsonb; k int := 0; n int; msg text; q text;
@@ -63,7 +63,6 @@ begin
   perform pg_temp.s17_as(b1); perform jc_join('testville17b', 'S17B-JOIN-CODE-01'); perform jc_admin_unlock('S17B-BOOKINGS-01');
   execute 'reset role';
   if h1 is null or h2 is null or h3 is null then raise exception 'FAIL setup: homes %, %, %', h1, h2, h3; end if;
-  update jc_homes set directory_suppressed = true where id = h3;
   -- households joined before today (my_bookings shows cancellations made after joining; one transaction = one now())
   update jc_home_members set joined_at = now() - interval '1 day' where user_id in (r1, r2, r3);
   insert into jc_events (community_id, slug, title_en, status) values ('testville17', 's17-night', 'S17 night', 'live') returning id into ev;
@@ -154,12 +153,12 @@ begin
   perform pg_temp.s17_as(r1);
   s := pg_temp.s17_slot(jc_facility_day(ct, d1), pg_temp.s17_at(d1, '11:00'));
   if s ->> 'state' is distinct from 'booked' or s -> 'home' is distinct from 'null'::jsonb then raise exception 'FAIL P01g booked-private shows the home: %', s; end if;
-  -- a directory-suppressed home always shows as "Booked"
+  -- a non-private booking shows its home's label to neighbors (HH 2026-11-11: no hidden homes)
   perform pg_temp.s17_as(r3);
   bk3 := (jc_booking_book(ct, pg_temp.s17_at(d1, '10:00'), false) ->> 'booking_id')::uuid;
   perform pg_temp.s17_as(r1);
   s := pg_temp.s17_slot(jc_facility_day(ct, d1), pg_temp.s17_at(d1, '10:00'));
-  if s ->> 'state' is distinct from 'booked' or s -> 'home' is distinct from 'null'::jsonb then raise exception 'FAIL P01h suppressed home shown: %', s; end if;
+  if s ->> 'state' is distinct from 'booked' or s -> 'home' ->> 'number' is distinct from '3' then raise exception 'FAIL P01h home label: %', s; end if;
   -- admins always see the home and the privacy flag
   perform pg_temp.s17_as(a2);
   s := pg_temp.s17_slot(jc_admin_facility_day(ct, d1), pg_temp.s17_at(d1, '09:00'));

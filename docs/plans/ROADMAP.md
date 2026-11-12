@@ -141,7 +141,10 @@ nothing changes on screen until an admin renames. Names are public-safe → `mod
 `jc_config_get`). Needs its own `/plan-change`: where names show (bar, page titles, hub cards, Settings, app
 install), length caps for the bar, AR required or falling back, who renames (community admins).
 
-### R5 — Pets of Jubail  ·  R5a ✓ applied 2026-11-10 (PR #86); then R5b → R5c → R5d (`docs/plans/R5-pets.md`)
+### R5 — Pets of Jubail  ·  R5a ✓ applied 2026-11-10 (PR #86); R5b-1 ✓ (#90, #92)
+**Order (Zee 2026-11-11):** remove home hiding (`HH-remove-home-hiding.md`) → **R5c photos** (a photo matters more
+than a map for finding a missing pet) → R5b-2a shared map kit → R5b-2b Pets maps / tabs / badges
+(`R5b-2-pets-maps.md`) → R5d Organizer Tools. (`docs/plans/R5-pets.md`)
 Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas "Jubail Pets Concept" + PDF.
 - Directory: **owned** · **community "known & fine"** · **stray under care** (care record: sterilized,
   dewormed, vaccination, under treatment — kept by the carer group).

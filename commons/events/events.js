@@ -377,8 +377,8 @@ function renderMine(){
         ? '<p class="spot">' + (mine.spot ? esc(jcFmt("ev_your_spot", { s: mine.spot })) : esc(jcT("ev_spot_pending"))) + '</p>' : '') +
       (rows.length ? '<ul class="answers">' + rows.join("") + '</ul>' : '') +
       (mine.note ? '<p class="mynote">' + esc(mine.note) + '</p>' : '') +
-      /* R2a (U1): an organizer hid this sign-up, or the home is hidden from the directory — say so */
-      (!isVenue(ev) && (mine.hidden || mine.home_hidden) ? '<p class="help notshown" role="note">' + esc(jcT("ev_not_shown")) + '</p>' : '') +
+      /* R2a (U1): an organizer hid this sign-up — say so (homes can't be hidden any more, HH 2026-11-11) */
+      (!isVenue(ev) && mine.hidden ? '<p class="help notshown" role="note">' + esc(jcT("ev_not_shown")) + '</p>' : '') +
       (isVenue(ev) ? '' : pinLine(h)) +
       (openNow(ev) ? '<button class="btn" type="button" id="toSignup">' + esc(jcFmt("ev_update_btn", { h: myLabel() })) + '</button>' : '') +
       (ended(ev) ? '<p class="help">' + esc(jcT("ev_ended_help")) + '</p>'

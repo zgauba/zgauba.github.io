@@ -1151,7 +1151,7 @@ function mnSave(k, v, form){
   });
 }
 
-var LOG_KEYS = { home_edit: "y", home_pin_set: "y", home_suppress: "y", member_remove: "y", invite_approve: "y",
+var LOG_KEYS = { home_edit: "y", home_pin_set: "y", home_suppress: "y" /* old rows (HH removed the action) */, member_remove: "y", invite_approve: "y",
   invite_decline: "y", code_rotate: "y", broadcast_set: "y", notice_resolve: "y", event_save: "y", event_publish: "y",
   event_signups: "y", event_announce: "y", event_close: "y", event_autoclose: "y", entry_moderate: "y", entry_pin_set: "y",
   entry_spot_set: "y", event_admin_link: "y", event_admin_accept: "y", event_admin_revoke: "y",
@@ -1193,7 +1193,6 @@ function pinFlags(h){
 function pinFlagged(h){ return !!h && pinFlags(h).length > 0; }
 function homeCard(h){
   var flags = pinFlags(h);
-  if (h.suppressed) flags.push(jcT("adm_hh_suppressed"));
   if (!h.members.length) flags.push(jcT("adm_hh_empty"));
   var open = hh.open && hh.open.id === h.id ? hh.open : null;
   function b(a, label, cls, m){
@@ -1206,8 +1205,7 @@ function homeCard(h){
       b("remove", jcT("adm_hh_remove"), "danger", i) + '</li>';
   }).join("") + '</ul>' : '';
   var acts = '<div class="acts">' + b("edit", jcT("adm_hh_edit")) +
-    b("pin", jcT(h.lat != null ? "adm_hh_pin_fix" : "adm_hh_pin_set")) +
-    (h.suppressed ? b("show", jcT("adm_hh_show")) : b("hide", jcT("adm_hh_hide"))) + '</div>';
+    b("pin", jcT(h.lat != null ? "adm_hh_pin_fix" : "adm_hh_pin_set")) + '</div>';   /* HH: no Hide / Show */
   var form = '';
   if (open && open.what === "edit") {
     var vs = ((cfg && cfg.villages) || []).filter(function(v){ return v.status === "delivered" || v.key === h.village; });
@@ -1299,9 +1297,6 @@ function wireHouseholds(){
         }
         return;
       }
-      b.disabled = true;
-      hhWrite("jc_admin_home_suppress", { p_home: h.id, p_on: a === "hide" },
-        jcFmt(a === "hide" ? "adm_hh_hidden_ok" : "adm_hh_shown_ok", { h: jcHomeLabel(h) }));
     });
   });
   Array.prototype.forEach.call(document.querySelectorAll("[data-cancel]"), function(b){

@@ -9,7 +9,7 @@ declare
   v_auth_expected text[] := array[
     -- S1
     'jc_account_delete', 'jc_admin_code_rotate', 'jc_admin_exit', 'jc_admin_home_edit',
-    'jc_admin_home_suppress', 'jc_admin_homes_list', 'jc_admin_invite_decide', 'jc_admin_log_list',
+    'jc_admin_homes_list', 'jc_admin_invite_decide', 'jc_admin_log_list',
     'jc_admin_member_remove', 'jc_admin_notice_resolve', 'jc_admin_notices_list', 'jc_admin_unlock',
     'jc_config_get', 'jc_directory_list', 'jc_display_name_set', 'jc_home_claim',
     'jc_home_edit', 'jc_home_leave', 'jc_home_pin_set', 'jc_invite_accept', 'jc_invite_create',
@@ -50,7 +50,7 @@ declare
     -- R4a-2 (per-person module admins by invite link)
     'jc_module_admin_link_create', 'jc_module_admin_accept', 'jc_module_admins_list', 'jc_module_admin_revoke',
     -- R5a (pets to spec)
-    'jc_pet_missing_home_set', 'jc_admin_pet_care_set', 'jc_pets_group_get', 'jc_admin_pets_group_set',
+    'jc_admin_pet_care_set', 'jc_pets_group_get', 'jc_admin_pets_group_set',
     -- RM-a (renamable modules)
     'jc_admin_module_label_set'];
 begin

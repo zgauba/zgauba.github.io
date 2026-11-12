@@ -1,11 +1,10 @@
 /* Pets page (R5b-1) — residents' pet directory. Plan: docs/plans/R5-pets.md (Zee decisions 2026-11-10/11).
    Views: list (tabs List · My Pets) · pet (?pet=<uuid>) · edit (add / edit one of my home's pets).
-   Server: jc_pets_list, jc_pet_get, jc_pet_save, jc_pet_archive, jc_pet_missing_set, jc_pet_missing_home_set,
+   Server: jc_pets_list, jc_pet_get, jc_pet_save, jc_pet_archive, jc_pet_missing_set,
    jc_pet_sighting_add, jc_pets_group_get (S4 + R5a). The Map tab is R5b-2; photos are R5c; the admin side is R5d.
    PRIVACY — this page renders what the server sends and nothing else:
-   - a pet's home arrives only when the home is in the directory, or while the pet is missing AND its household
-     opted in (Q6). My own pet arriving with no home therefore means my home is hidden from the directory, which
-     is when the missing switch offers the opt-in;
+   - an owned pet's home arrives on its card (homes can't be hidden — HH, Zee 2026-11-11); shown only when it
+     arrives;
    - sightings arrive only for strays / community animals, my own pets, and Pets admins; never who reported one
      ("by_me" is the reporter's own flag, and disappears once the server erases the reporter within 48 h);
    - the WhatsApp group link is members-only (jc_pets_group_get, never the public config); it is set as an
@@ -28,7 +27,7 @@ var ptBusy = false;
 var form = null;      /* edit: { id | null, species, name, description, wanderer, microchipped } — survives a language switch */
 var sheet = null;     /* on the pet page: null | "missing" | "found" | "sight" */
 var sight = null;     /* { note, lat, lng } while the sighting form is open */
-var missDraft = null; /* { note, show } while the missing sheet is open */
+var missDraft = null; /* { note } while the missing sheet is open */
 var sent = null;      /* the note of the sighting just sent: the WhatsApp message tells the group about it */
 var group;            /* undefined = not read yet; null = none / unreadable; else the checked invite link */
 
@@ -73,10 +72,6 @@ function myHomeText(){
 function when(iso){ return typeof iso === "string" && !isNaN(Date.parse(iso)) ? jcDayText(jcDateOf(iso, cfg)) + " · ⁦" + jcClock(iso, cfg) + "⁩" : ""; }
 /* sightings are open for a missing pet, or a stray / community animal that isn't rehomed (server: SIGHTINGS_CLOSED) */
 function sightOpen(p){ return p.missing === true || (p.kind === "stray" && p.care_state !== "rehomed"); }
-/* my own pet with no home on its card = my home is hidden from the directory (see the header) */
-function homeHidden(p){ return p.mine === true && (!hObj(p.home) || p.show_home === true); }
-/* an admin hid my home (residents can't): then "neighbors see your pet with your home" would be untrue — say nothing */
-function myHomeKnownHidden(){ return (pet && homeHidden(pet)) || (pets || []).some(function(p){ return isPet(p) && homeHidden(p); }); }
 function petUrl(p){ return location.origin + location.pathname + "?pet=" + encodeURIComponent(p.id); }
 function petById(id){ return (pets || []).filter(function(p){ return p.id === id; })[0]; }
 function matches(p){
@@ -286,7 +281,6 @@ var VIEWS = {
     var facts = [];
     if (p.kind === "owned") {
       if (hObj(p.home)) facts.push(['pt_lives', homeText(p.home)]);
-      else if (p.mine === true) facts.push(['pt_lives', jcT("pt_home_hidden")]);
       if (p.wanderer === true) facts.push(['pt_wanderer', jcT("pt_wanderer_help")]);
       facts.push(['pt_chip', jcT(p.microchipped === true ? "pt_yes" : "pt_no_or_unknown")]);
     } else {
@@ -322,21 +316,13 @@ function careHtml(p){
 function ownerHtml(p){
   var h = '<h2 class="group">' + esc(jcT("pt_yours")) + '</h2><div class="panel" id="ptOwner">';
   if (sheet === "missing") {
-    var d = missDraft || { note: "", show: false };
+    var d = missDraft || { note: "" };
     h += '<p><b>' + esc(jcFmt("pt_miss_q", { n: p.name })) + '</b></p>' +
       '<label>' + esc(jcT("pt_miss_note")) + '<textarea id="ptMissNote" maxlength="200" dir="auto">' + esc(d.note) + '</textarea></label>' +
       '<p class="help">' + esc(jcT("pt_miss_help")) + '</p>' +
-      (homeHidden(p) ? '<label class="check"><input type="checkbox" id="ptMissShow"' + (d.show ? ' checked' : '') + '> <span>' +
-        esc(jcFmt("pt_show_home", { h: myHomeText(), n: p.name })) + '</span></label>' +
-        '<p class="help">' + esc(jcT("pt_show_home_help")) + '</p>' : '') +
       '<div class="acts"><button class="btn danger-fill" type="button" id="ptMissGo"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcT("pt_miss_go")) + '</button>' +
       '<button class="btn ghost" type="button" id="ptSheetKeep">' + esc(jcT("ct_cancel")) + '</button></div>';
   } else if (p.missing === true) {
-    if (homeHidden(p)) {
-      h += '<label class="check"><input type="checkbox" id="ptShowHome"' + (p.show_home === true ? ' checked' : '') + (ptBusy ? ' disabled' : '') + '> <span>' +
-        esc(jcFmt("pt_show_home", { h: myHomeText(), n: p.name })) + '</span></label>' +
-        '<p class="help">' + esc(jcT("pt_show_home_help")) + '</p>';
-    }
     h += '<div class="acts"><button class="btn" type="button" id="ptFound"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcFmt("pt_found", { n: p.name })) + '</button></div>';
   } else {
     h += '<button class="btn danger-fill wide" type="button" id="ptMiss">' + esc(jcT("pt_miss")) + '</button>';
@@ -424,24 +410,15 @@ function wirePet(){
     show("edit");
   });
   /* the missing switch */
-  on("ptMiss", function(){ sheet = "missing"; missDraft = { note: "", show: false }; draw(); var t = el("ptMissNote"); if (t) t.focus(); });
+  on("ptMiss", function(){ sheet = "missing"; missDraft = { note: "" }; draw(); var t = el("ptMissNote"); if (t) t.focus(); });
   var mn = el("ptMissNote"); if (mn) mn.addEventListener("input", function(){ missDraft.note = mn.value; });
-  var ms = el("ptMissShow"); if (ms) ms.addEventListener("change", function(){ missDraft.show = ms.checked; });
   on("ptMissGo", function(){
-    var note = el("ptMissNote").value.trim(), showHome = !!(el("ptMissShow") && el("ptMissShow").checked);
+    var note = el("ptMissNote").value.trim();
     ptWrite(el("ptMissGo"), function(){
-      return rpc("jc_pet_missing_set", { p_pet: p.id, p_missing: true, p_note: note || null }).then(function(c){
-        if (!showHome) return { card: c };
-        /* the alarm is up even if this second step fails: say so, never a silent "home hidden" */
-        return rpc("jc_pet_missing_home_set", { p_pet: p.id, p_show: true }).then(function(c2){ return { card: c2 }; },
-          function(e){ return { card: c, homeErr: (e && e.code) || "UNKNOWN" }; });
-      });
-    }, function(r){
+      return rpc("jc_pet_missing_set", { p_pet: p.id, p_missing: true, p_note: note || null });
+    }, function(){
       sheet = null; missDraft = null; pets = null;
-      loadPet(p.id, function(){
-        if (r.homeErr) say("err", jcT("pt_show_home_failed"));
-        else showOk(jcFmt("pt_missing_done", { n: p.name }));
-      });
+      loadPet(p.id, function(){ showOk(jcFmt("pt_missing_done", { n: p.name })); });
     }, function(code){ if (code === "NOT_FOUND") { backToList("NOT_FOUND"); return true; } return false; });
   });
   on("ptFound", function(){
@@ -450,19 +427,6 @@ function wirePet(){
       pets = null; sent = null;
       loadPet(p.id, function(){ showOk(jcFmt("pt_found_done", { n: p.name })); });
     }, function(code){ if (code === "NOT_FOUND") { backToList("NOT_FOUND"); return true; } return false; });
-  });
-  var sh = el("ptShowHome");
-  if (sh) sh.addEventListener("change", function(){
-    var want = sh.checked;
-    if (ptBusy) { sh.checked = !want; return; }
-    ptWrite(sh, function(){ return rpc("jc_pet_missing_home_set", { p_pet: p.id, p_show: want }); }, function(){
-      pets = null;
-      loadPet(p.id, function(){ showOk(jcT(want ? "pt_home_shown" : "pt_home_unshown")); if (el("ptShowHome")) el("ptShowHome").focus(); });
-    }, function(code){
-      sh.checked = !want;
-      if (code === "NOT_MISSING" || code === "NOT_FOUND") { loadPet(p.id, function(){ ptMsg(code); }); return true; }
-      return false;
-    });
   });
   /* a sighting */
   on("ptSight", function(){ sheet = "sight"; sight = { note: "", lat: null, lng: null }; draw(); var t = el("ptSightNote"); if (t) t.focus(); });
@@ -513,7 +477,7 @@ VIEWS.edit = function(){
     '<label class="check"><input type="checkbox" id="ptWand"' + (f.wanderer ? ' checked' : '') + '> <span>' + esc(jcT("pt_wanderer_q")) + '</span></label>' +
     '<p class="help">' + esc(jcT("pt_wanderer_help")) + '</p>' +
     '<label class="check"><input type="checkbox" id="ptChipIn"' + (f.microchipped ? ' checked' : '') + '> <span>' + esc(jcT("pt_chip_q")) + '</span></label>' +
-    (myHomeKnownHidden() ? '' : '<p class="help">' + esc(jcFmt("pt_shown_with", { h: myHomeText() })) + '</p>') +
+    '<p class="help">' + esc(jcFmt("pt_shown_with", { h: myHomeText() })) + '</p>' +
     '<button class="btn" type="submit" id="ptSave"' + (ptBusy ? ' disabled' : '') + '>' + esc(jcT("mh_save")) + '</button></form>' +
     (f.id ? '<div class="panel danger-zone"><p class="help">' + esc(jcFmt("pt_archive_help", { n: f.was })) + '</p>' +
       '<button class="btn ghost danger" type="button" id="ptArchive"' + (ptBusy ? ' disabled' : '') + '>' +

@@ -52,20 +52,27 @@ test("event day ends when the server says the event ended, even if ends_at says 
   await expect(page.locator("#live")).toHaveCount(0);           // no switch / supply after the end
 });
 
-for (const [flag, what] of [["hidden", "an organizer hid the sign-up"], ["home_hidden", "the home is hidden from the directory"]]) {
-  test(`My Sign-Up tells the household its home isn't on the map (${what})`, async ({ page }) => {
-    const eb = eventsBackend({ mine: { id: "m", status: "in", payload: { treats: "candy", handout: "door" }, note: null,
-      hidden: flag === "hidden", home_hidden: flag === "home_hidden" } });
-    await stubBackend(page, { rpc: eb.rpc });
-    await signIn(page);
-    await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
-    await expect(page.locator("#cta .notshown")).toHaveText("Your home isn't shown on the map, so neighbors won't see it.");
-  });
-}
+test("My Sign-Up tells the household its home isn't on the map (an organizer hid the sign-up)", async ({ page }) => {
+  const eb = eventsBackend({ mine: { id: "m", status: "in", payload: { treats: "candy", handout: "door" }, note: null, hidden: true } });
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
+  await expect(page.locator("#cta .notshown")).toHaveText("Your home isn't shown on the map, so neighbors won't see it.");
+});
+
+// HH (Zee 2026-11-11): homes can't be hidden — an old server's home_hidden flag alone no longer says "not shown"
+test("My Sign-Up: home_hidden from an old server is ignored", async ({ page }) => {
+  const eb = eventsBackend({ mine: { id: "m", status: "in", payload: { treats: "candy", handout: "door" }, note: null, hidden: false, home_hidden: true } });
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
+  await expect(page.locator("#cta")).toBeVisible();
+  await expect(page.locator("#cta .notshown")).toHaveCount(0);
+});
 
 test("My Sign-Up: a household on the map sees no 'not shown' line", async ({ page }) => {
   const eb = eventsBackend({ mine: { id: "m", status: "in", payload: { treats: "candy", handout: "door" }, note: null,
-    hidden: false, home_hidden: false } });
+    hidden: false } });
   await stubBackend(page, { rpc: eb.rpc });
   await signIn(page);
   await page.goto("events/?id=" + LIVE_ID + "&tab=mine");
