@@ -780,7 +780,7 @@ var JC_STRINGS = {
     bk_err_WALK_ON: "That court is walk-on now: no booking needed.",
     bk_err_CANCEL_GONE: "That booking has already started or was cancelled.",
     /* R5b-1 — Pets (residents) */
-    pt_tab_list: "List", pt_tab_mine: "My Pets",
+    pt_tab_list: "List", pt_tab_mine: "My Pets", pt_tab_about: "About", pt_tab_sightings: "Sightings",
     pt_filter: "Show",
     pt_f_all: "All", pt_f_owned: "Pets", pt_f_wanderers: "Wanderers", pt_f_strays: "Strays", pt_f_community: "Community animals",
     pt_none: "No pets listed yet. Add yours from My Pets.",
@@ -1935,7 +1935,7 @@ var JC_STRINGS = {
     bk_err_WALK_ON: "أصبح هذا الملعب بدخول حر: لا حاجة للحجز.",
     bk_err_CANCEL_GONE: "بدأ هذا الحجز أو أُلغي بالفعل.",
     /* R5b-1 — Pets (residents) — DRAFT Arabic, pending native review */
-    pt_tab_list: "القائمة", pt_tab_mine: "حيواناتي",
+    pt_tab_list: "القائمة", pt_tab_mine: "حيواناتي", pt_tab_about: "نبذة", pt_tab_sightings: "المشاهدات",
     pt_filter: "عرض",
     pt_f_all: "الكل", pt_f_owned: "الحيوانات الأليفة", pt_f_wanderers: "المتجوّلة", pt_f_strays: "الضالّة", pt_f_community: "حيوانات المجتمع",
     pt_none: "لا توجد حيوانات مدرجة بعد. أضف حيوانك من حيواناتي.",
