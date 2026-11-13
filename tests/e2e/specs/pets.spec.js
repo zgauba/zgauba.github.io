@@ -191,7 +191,7 @@ test("a neighbor's pet at home: 'Seen Rex out on their own?' — household-only 
   expect(named(calls, "jc_pets_group_get")).toEqual([]);
   await expect(page.locator("#ptSight")).toHaveText("Seen Rex out on their own?");
   await page.locator("#ptSight").click();
-  await expect(page.locator("#ptSightPrivacy")).toHaveText("Only Rex's household sees this report. If they report Rex missing within a day, neighbors helping to search see it too. It never shows who you are. We delete the record of who sent it within 48 hours, and the report itself after 30 days.");
+  await expect(page.locator("#ptSightPrivacy")).toHaveText("Only Rex's household and the community's pet admins see this report. If they report Rex missing within a day, neighbors helping to search see it too. It never shows who you are. We delete the record of who sent it within 48 hours, and the report itself after 30 days.");
   await page.locator("#ptSightNote").fill("By the canal");
   await page.locator("#ptSightGo").click();
   await expect(page.locator("#msg")).toHaveText("Thanks. Rex's household will see your report.");
@@ -199,6 +199,7 @@ test("a neighbor's pet at home: 'Seen Rex out on their own?' — household-only 
   await expect(page.locator("#ptSightings")).toHaveCount(0);                 // still the household's only
   const url = new URL(page.url()).origin + "/commons/pets/?pet=" + ID(1);
   await expect(page.locator("#ptWaText")).toHaveText("Is this Rex (Dog)? I just saw them out on their own: By the canal. Details on Commons: " + url);
+  await expect(page.locator("#ptWaOut")).toHaveText("Sharing is your choice: this message goes to everyone in the chat, not only Rex's household.");
   await expect(page.locator("#ptWaGroup")).toHaveAttribute("href", GROUP);
 });
 
@@ -703,6 +704,41 @@ test("Map tab with nothing to place says so; a stray's territory spot is a dashe
   await expect(page.locator("#ptSightings li").nth(11).locator(".ptmini")).toHaveCount(0);
 });
 
+test("review: small maps are lazy (only near the screen), the server's order isn't trusted, and a redraw leaves no stray maps", async ({ page }) => {
+  // 12 located sightings sent OLDEST first: the page still puts the newest on top
+  const many = Array.from({ length: 12 }, (_, i) => ({ id: 300 + i, note: "s" + i, lat: 24.53 + i / 1000, lng: 54.43, seen_at: new Date(NOW - (12 - i) * 3600e3).toISOString(), by_me: false }));
+  const b = backend({ extra: [{ id: XID("f1"), kind: "stray", species: "dog", name: "Lots", care_state: "under_care", sightings: many }] });
+  await open(page, b, { q: "?pet=" + XID("f1") + "&show=sightings" });
+  await expect(page.locator("#ptSightings li").first()).toContainText("s11");
+  await expect(page.locator("#ptSightings .ptmini").first()).toHaveClass(/leaflet-container/);
+  await expect(page.locator("#ptSightings .ptmini").nth(9)).not.toHaveClass(/leaflet-container/);    // far below: not built yet
+  await page.locator("#ptSightings .ptmini").nth(9).scrollIntoViewIfNeeded();
+  await expect(page.locator("#ptSightings .ptmini").nth(9)).toHaveClass(/leaflet-container/);
+  const built = await page.locator(".leaflet-container").count();
+  await page.locator("#langBtn").click();
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect.poll(() => page.locator(".leaflet-container").count()).toBeLessThanOrEqual(built);   // rebuilt, never piled up
+  await page.locator("#ptpg-map").click();
+  await expect(page.locator(".leaflet-container")).toHaveCount(1);                                // only the Map tab's map
+});
+
+test("review: Cancel then reopen the pin map — the first, cancelled locate failing late never rewrites the second", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__cbs = [];
+    navigator.geolocation.getCurrentPosition = (ok, bad) => { window.__cbs.push({ ok, bad }); };
+  });
+  await open(page, backend(), { q: "?pet=" + ID(3) + "&show=sightings" });
+  await page.locator("#ptSight").click();
+  await page.locator("#ptPosAdd").click();
+  await page.locator("#ptPickCancel").click();
+  await page.locator("#ptPosAdd").click();
+  await page.evaluate(() => window.__cbs[1].ok({ coords: { latitude: 24.5312345, longitude: 54.4329876 } }));
+  await expect(page.locator("#ptPickHelp")).toHaveText("Move the map so the ring is where you saw Ginger.");
+  await page.evaluate(() => window.__cbs[0].bad({ code: 2 }));                 // the cancelled one, late
+  await expect(page.locator("#ptPickHelp")).toHaveText("Move the map so the ring is where you saw Ginger.");
+  await expect(page.locator("#ptPickOk")).toBeEnabled();
+});
+
 test("Add Location Pin: asks for a fresh fix; can't find me → the community's centre, said plainly; the pin sent is where the ring is", async ({ page }) => {
   await page.addInitScript(() => {
     window.__geo = [];
@@ -715,7 +751,9 @@ test("Add Location Pin: asks for a fresh fix; can't find me → the community's 
   await expect(page.locator("#ptPickHelp")).toHaveText("Couldn't find where you are, so the map shows the community's centre. Move it so the ring is where you saw Ginger.");
   expect((await page.evaluate(() => window.__geo))[0]).toMatchObject({ maximumAge: 0, enableHighAccuracy: true });   // never an old fix
   await expect(page.locator("#msg")).toHaveText("");                       // not an error: the map is still usable
+  await expect(page.locator("#ptPickOk")).toBeDisabled();                  // never the centre by accident (security L2)
   await page.evaluate(() => map.setView([24.5355555, 54.4344444], 18, { animate: false }));   // the person moves the map
+  await expect(page.locator("#ptPickOk")).toBeEnabled();
   await page.locator("#ptPickOk").click();
   await page.locator("#ptSightGo").click();
   await expect(page.locator("#msg")).toHaveText("Thanks. Your sighting was sent.");

@@ -103,11 +103,15 @@ function canReport(p){ return sightOpen(p) && !(outAlone(p) && p.mine === true);
 function hasMap(p){ return (p.missing === true || (p.kind === "stray" && p.care_state !== "rehomed")) && typeof L !== "undefined"; }
 /* the WhatsApp share: missing pets and strays; an "out on their own" report only once sent ("Is this Rex?") */
 function shareOn(p){ return canReport(p) && (!outAlone(p) || sent !== null); }
-function sightList(p){ return Array.isArray(p.sightings) ? p.sightings.filter(hObj) : []; }
+/* newest first, on the phone too (the small maps and the amber box rely on it — review L2); undated last */
+function sightList(p){
+  var t = function(s){ var x = Date.parse(s.seen_at); return isFinite(x) ? x : -Infinity; };
+  return Array.isArray(p.sightings) ? p.sightings.filter(hObj).map(function(s, i){ return [s, i]; })
+    .sort(function(a, b){ return t(b[0]) - t(a[0]) || a[1] - b[1]; }).map(function(x){ return x[0]; }) : [];
+}
 /* sightings with a location, newest first */
 function located(p){
-  return sightList(p).filter(function(s){ return finite(s.lat) && finite(s.lng) && isFinite(Date.parse(s.seen_at)); })
-    .sort(function(a, b){ return Date.parse(b.seen_at) - Date.parse(a.seen_at); });
+  return sightList(p).filter(function(s){ return finite(s.lat) && finite(s.lng) && isFinite(Date.parse(s.seen_at)); });
 }
 function terrPos(p){ return p.kind === "stray" && finite(p.territory_lat) && finite(p.territory_lng) ? [p.territory_lat, p.territory_lng] : null; }
 function petUrl(p){ return location.origin + location.pathname + "?pet=" + encodeURIComponent(p.id); }
@@ -566,7 +570,8 @@ function pickText(p){
 }
 function pickHtml(p){
   return '<p class="help" id="ptPickHelp" role="status">' + esc(pickText(p)) + '</p>' + jcPinPickerHtml("ptPick") +
-    '<div class="acts"><button class="btn" type="button" id="ptPickOk">' + esc(jcT("pt_pick_ok")) + '</button>' +
+    /* never the community's centre by accident: when it couldn't find you, the map must be moved first (security L2) */
+    '<div class="acts"><button class="btn" type="button" id="ptPickOk"' + (sight && sight.where === "centre" && !sight.moved ? ' disabled' : '') + '>' + esc(jcT("pt_pick_ok")) + '</button>' +
     '<button class="btn ghost" type="button" id="ptPickCancel">' + esc(jcT("ct_cancel")) + '</button></div>';
 }
 function drawPicker(p){
@@ -576,14 +581,18 @@ function drawPicker(p){
   var m = map = jcPinPicker("ptPick", { center: s0.view || [c.lat || 24.53, c.lng || 54.43], zoom: s0.zoom || c.zoom || 16, locateZoom: 18,
     onError: function(code){ if (map === m) ptMsg(code); }, alive: function(){ return map === m; } });
   /* a redraw (language switch) reopens the map where it was left */
-  m.on("moveend", function(){ if (sight === s0 && map === m) { var x = m.getCenter(); s0.view = [x.lat, x.lng]; s0.zoom = m.getZoom(); } });
+  m.on("moveend", function(){
+    if (sight !== s0 || map !== m) return;
+    var x = m.getCenter(); s0.view = [x.lat, x.lng]; s0.zoom = m.getZoom();
+    if (s0.where === "centre" && !s0.moved) { s0.moved = true; var b = el("ptPickOk"); if (b) b.disabled = false; }
+  });
 }
 var MINI_MAX = 10;                                    /* small maps on the newest 10 sightings with a location */
 function sightingsHtml(p){
   var h = '<h2 class="group">' + esc(jcT("pt_sightings")) + '</h2>', minisLeft = typeof L !== "undefined" ? MINI_MAX : 0;
   /* the household's own pet at home: where neighbours' "out on their own" reports land */
   if (!p.sightings.length) return h + '<p class="help" id="ptSightings">' + esc(outAlone(p) && p.mine === true ? jcFmt("pt_out_none", { n: p.name }) : jcT("pt_sightings_none")) + '</p>';
-  return h + '<ul class="bklist" id="ptSightings">' + p.sightings.filter(hObj).map(function(s){
+  return h + '<ul class="bklist" id="ptSightings">' + sightList(p).map(function(s){
     var pos = finite(s.lat) && finite(s.lng), mini = pos && minisLeft-- > 0;
     return '<li><div class="meta">' + esc(when(s.seen_at)) + (s.by_me === true ? ' · ' + esc(jcT("pt_by_me")) : '') + '</div>' +
       (s.note ? '<div dir="auto">' + esc(s.note) + '</div>' : '') +
@@ -620,6 +629,8 @@ function drawShare(){
   if (!box || !pet) return;
   var text = waText(pet);
   box.innerHTML = '<h2 class="group" id="ptShareHead">' + esc(jcT("pt_share")) + '</h2>' +
+    /* an "out on their own" report was the household's only: sharing it is the reporter's own, separate choice (security M2) */
+    (outAlone(pet) ? '<p class="help" id="ptWaOut">' + esc(jcFmt("pt_wa_out_group", { n: pet.name })) + '</p>' : '') +
     '<p class="wamsg" id="ptWaText" dir="auto">' + esc(text) + '</p>' +
     '<div class="acts">' + (group ? '<a class="btn" id="ptWaGroup" target="_blank" rel="noopener noreferrer">' + esc(jcT("pt_wa_group")) + '</a>' : '') +
     '<a class="btn ghost" id="ptWaAny" target="_blank" rel="noopener noreferrer">' + esc(jcT("pt_wa_any")) + '</a></div>' +
@@ -675,28 +686,30 @@ function wirePet(){
   /* Add Location Pin: the pin map opens; the phone's location (a fresh fix, never an old one) only moves it */
   on("ptPosAdd", function(){
     var s0 = sight;
-    s0.picking = true; s0.where = "locating"; s0.view = null; s0.zoom = null;
+    var tok = s0.tok = {};                               /* each open of the pin map: a cancelled one's late fix never lands (review L1) */
+    s0.picking = true; s0.where = "locating"; s0.view = null; s0.zoom = null; s0.moved = false;
     draw();
     var t = el("ptPickHelp"); if (t) { t.setAttribute("tabindex", "-1"); t.focus(); }
     jcLocate(function(lat, lng){
-      if (sight !== s0 || !s0.picking || current !== "pet") return;
+      if (sight !== s0 || s0.tok !== tok || !s0.picking || current !== "pet") return;
       s0.where = "you"; s0.view = [lat, lng]; s0.zoom = 18;
       if (map && el("ptPick")) map.setView([lat, lng], 18, { animate: false });
       if (el("ptPickHelp")) el("ptPickHelp").textContent = pickText(p);
     }, function(){
-      if (sight !== s0 || !s0.picking || current !== "pet") return;
+      if (sight !== s0 || s0.tok !== tok || !s0.picking || current !== "pet") return;
       s0.where = "centre";
       if (el("ptPickHelp")) el("ptPickHelp").textContent = pickText(p);
+      if (el("ptPickOk") && !s0.moved) el("ptPickOk").disabled = true;
     }, true);
   });
   on("ptPickOk", function(){
     if (!map || !sight) return;
     /* ~1 m is plenty for "where it was seen" */
     var c = map.getCenter();
-    sight.lat = Math.round(c.lat * 1e5) / 1e5; sight.lng = Math.round(c.lng * 1e5) / 1e5; sight.picking = false;
+    sight.lat = Math.round(c.lat * 1e5) / 1e5; sight.lng = Math.round(c.lng * 1e5) / 1e5; sight.picking = false; sight.tok = null;
     draw(); var x = el("ptPosClear"); if (x) x.focus();
   });
-  on("ptPickCancel", function(){ sight.picking = false; draw(); var a = el("ptPosAdd"); if (a) a.focus(); });
+  on("ptPickCancel", function(){ sight.picking = false; sight.tok = null; draw(); var a = el("ptPosAdd"); if (a) a.focus(); });
   on("ptPosClear", function(){ sight.lat = null; sight.lng = null; draw(); var a = el("ptPosAdd"); if (a) a.focus(); });
   /* the household's amber box: Report as missing, right there (the sheet is on About) */
   on("ptSeenMiss", function(){
@@ -787,7 +800,7 @@ function drawStrays(list){
 function seenOutHtml(p){
   var t = seenOut(p);
   if (!t) return '';
-  var s = sightList(p).filter(function(x){ return recent(x.seen_at, DAY); })[0];   /* the server sends newest first */
+  var s = sightList(p).filter(function(x){ return recent(x.seen_at, DAY); })[0];   /* newest first */
   return '<div class="seenbox" id="ptSeenOut"><b>' + esc(jcFmt("pt_out_box", { n: p.name, t: t })) + '</b>' +
     (s && s.note ? '<p dir="auto">' + esc(s.note) + '</p>' : '') +
     '<p>' + esc(jcFmt("pt_out_ignore", { n: p.name })) + '</p>' +
