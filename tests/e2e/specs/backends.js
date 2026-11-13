@@ -446,12 +446,20 @@ function adminBackend(opts = {}) {
   };
 }
 
-async function signIn(page) {
+async function signIn(page, opts = {}) {
   await page.goto("account/");
   await page.locator("#email").fill("a@example.com");
   await page.locator("#password").fill("correct-horse");
   await page.locator("#go").click();
   await expect(page).toHaveURL(/\/commons\/$/);
+  // the hub settles first: either its member view is drawn, or (no home yet) it has gone on to My Home. A goto before
+  // that races the hub's own location.replace ("navigation interrupted" — the WebKit flake, 2026-11-13).
+  // opts.settle === false: a test that holds the config on purpose (the hub can't settle until it's released)
+  if (opts.settle === false) return;
+  await expect(async () => {
+    if (/\/commons\/home\/$/.test(page.url())) return;
+    await expect(page.locator("#hub")).toBeVisible({ timeout: 250 });
+  }).toPass({ timeout: 10000 });
 }
 
 // ── Pets (R5b-1 / R5c) — moved from pets.spec.js so /shot can show Pets screens too ──

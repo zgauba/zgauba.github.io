@@ -42,3 +42,10 @@ A map-height fitter was tried and dropped. The Strays map is a fixed 46vh, so a 
 correctly unticks the box before Playwright's `check()` confirms the change ("did not change its state").
 **Fixed (test only):** `click()`, then the end state is asserted: unticked, error shown, box enabled. WebKit
 **30/30** on repeat; it failed within 5 repeats before. This closes the "WebKit courts flakes" carryover for this test.
+
+## CI follow-up 2: WebKit "Past: no home → never asked" (pre-existing race)
+The shared `signIn` returned once the URL reached the hub. For a member without a home, the hub then runs
+`location.replace("home/")`, and the test's next `goto` raced it ("navigation interrupted"). **Fixed (test only):**
+`signIn` now waits until the hub shows its member view or has gone on to My Home. One test holds the config on
+purpose, so it opts out with `signIn(page, { settle: false })`. WebKit **25/25** on repeat. **Full suite locally,
+both projects: 1168/1168.**
