@@ -539,8 +539,11 @@ function petsBackend(opts = {}) {
       const p = find(a.p_pet);
       if (!p) return raise("NOT_FOUND");
       const c = card(p);
+      // jc_pet_sight_from: strays / the household / Pets admin see all; others see a missing pet's from missing_since − 24 h
       const see = p.kind === "stray" || c.mine || st.admin;
-      return ok(Object.assign(c, { sightings: see ? p.sightings : null, care_log: p.kind === "stray" ? p.care_log : null }));
+      const since = p.missing && p.missing_since ? Date.parse(p.missing_since) - 864e5 : null;
+      const sightings = see ? p.sightings : since !== null ? p.sightings.filter((x) => Date.parse(x.seen_at) >= since) : null;
+      return ok(Object.assign(c, { sightings, care_log: p.kind === "stray" ? p.care_log : null }));
     },
     jc_pet_save: (a) => {
       if (off()) return off();
@@ -573,7 +576,8 @@ function petsBackend(opts = {}) {
       if (opts.sightError) return raise(opts.sightError);
       const p = find(a.p_pet);
       if (!p) return raise("NOT_FOUND");
-      if (!(p.missing || (p.kind === "stray" && p.care_state !== "rehomed"))) return raise("SIGHTINGS_CLOSED");
+      // open: missing, a stray not rehomed, or (R5b-2b-0) an owned pet out on its own that isn't a wanderer
+      if (!(p.missing || (p.kind === "stray" && p.care_state !== "rehomed") || (p.kind === "owned" && !p.wanderer))) return raise("SIGHTINGS_CLOSED");
       if ((a.p_lat === null) !== (a.p_lng === null)) return raise("BAD_FIELDS");
       p.sightings.unshift({ id: 100, note: a.p_note, lat: a.p_lat, lng: a.p_lng, seen_at: "2026-11-11T06:30:00Z", by_me: true });
       return ok({ pet_id: p.id, logged: true });

@@ -163,17 +163,75 @@ for (const lang of ["en", "ar"]) {
   });
 }
 
-test("someone else's pet that isn't missing: no sightings, no report button, no owner controls, no share", async ({ page }) => {
-  const b = backend();
-  const { calls } = await open(page, b, { q: "?pet=" + ID(1) });
-  await expect(page.locator("h1")).toHaveText("Rex");
+// R5b-2b-2b: ids past 9 (petId would make a 37-character id)
+const XID = (s) => "22222222-bbbb-4bbb-8bbb-0000000000" + s;
+
+test("a neighbor's wanderer that isn't missing: no sightings, no report button, no owner controls, no share", async ({ page }) => {
+  const b = backend({ extra: [{ id: XID("a1"), kind: "owned", species: "cat", name: "Pip", home: V40, wanderer: true }] });
+  const { calls } = await open(page, b, { q: "?pet=" + XID("a1") });
+  await expect(page.locator("h1")).toHaveText("Pip");
   await expect(page.locator("#ptFacts")).toContainText("Home 40 · Seef Al Jubail");
-  for (const id of ["#ptSight", "#ptShare", "#ptSightings", "#ptOwner", "#ptMiss", "#ptEdit", "#ptAlarm"]) await expect(page.locator(id)).toHaveCount(0);
-  await expect(page.locator('[role="tab"]')).toHaveCount(0);                 // nothing but About: no tab row
+  for (const id of ["#ptSight", "#ptShare", "#ptSightings", "#ptOwner", "#ptMiss", "#ptEdit", "#ptAlarm", "#ptSeenOut"]) await expect(page.locator(id)).toHaveCount(0);
+  await expect(page.locator('[role="tab"]')).toHaveCount(0);                 // a wanderer being out is normal: About only, no tab row
   expect(named(calls, "jc_pets_group_get")).toEqual([]);                  // the group link isn't even asked for
   await page.locator("#jcBackBtn").click();
   await expect(page.locator("#ptList")).toBeVisible();
   expect(new URL(page.url()).search).toBe("");
+});
+
+test("a neighbor's pet at home: 'Seen Rex out on their own?' — household-only said before sending; then 'Is this Rex?' to share", async ({ page }) => {
+  const b = backend();
+  const { calls } = await open(page, b, { q: "?pet=" + ID(1) });
+  await expect(page.locator('[role="tab"]')).toHaveText(["About", "Sightings"]);    // no Map: not missing, not a stray
+  await expect(page.locator("#ptpg-about")).toHaveAttribute("aria-selected", "true");
+  for (const id of ["#ptOwner", "#ptMiss", "#ptEdit", "#ptAlarm", "#ptSeenOut"]) await expect(page.locator(id)).toHaveCount(0);
+  await page.locator("#ptpg-sightings").click();
+  await expect(page.locator("#ptSightings")).toHaveCount(0);                 // the server sends a neighbor none
+  await expect(page.locator("#ptShare")).toHaveCount(0);                     // nothing to share until something was seen
+  expect(named(calls, "jc_pets_group_get")).toEqual([]);
+  await expect(page.locator("#ptSight")).toHaveText("Seen Rex out on their own?");
+  await page.locator("#ptSight").click();
+  await expect(page.locator("#ptSightPrivacy")).toHaveText("Only Rex's household sees this report. If they report Rex missing within a day, neighbors helping to search see it too. It never shows who you are. We delete the record of who sent it within 48 hours, and the report itself after 30 days.");
+  await page.locator("#ptSightNote").fill("By the canal");
+  await page.locator("#ptSightGo").click();
+  await expect(page.locator("#msg")).toHaveText("Thanks. Rex's household will see your report.");
+  expect(lastCall(calls, "jc_pet_sighting_add").args).toEqual({ p_pet: ID(1), p_note: "By the canal", p_lat: null, p_lng: null });
+  await expect(page.locator("#ptSightings")).toHaveCount(0);                 // still the household's only
+  const url = new URL(page.url()).origin + "/commons/pets/?pet=" + ID(1);
+  await expect(page.locator("#ptWaText")).toHaveText("Is this Rex (Dog)? I just saw them out on their own: By the canal. Details on Commons: " + url);
+  await expect(page.locator("#ptWaGroup")).toHaveAttribute("href", GROUP);
+});
+
+test("my own pet seen out on its own: amber box on every tab, the report on Sightings, Report as missing right there; no report button for me", async ({ page }) => {
+  const b = backend({ extra: [
+    { id: XID("b1"), kind: "owned", species: "dog", name: "Pepper", home: MINE_HOME, last_seen_at: "2026-11-11T04:30:00Z",
+      sightings: [{ id: 50, note: "By the canal", lat: null, lng: null, seen_at: "2026-11-11T04:30:00Z", by_me: false }] },
+    { id: XID("b2"), kind: "owned", species: "cat", name: "Tom", home: MINE_HOME },
+  ] });
+  await open(page, b, { q: "?pet=" + XID("b1") });
+  await expect(page.locator("#ptSeenOut")).toContainText("Pepper was seen out on their own · 2 h ago");
+  await expect(page.locator("#ptSeenOut")).toContainText("By the canal");
+  await expect(page.locator("#ptSeenOut")).toContainText("If Pepper is home, you can ignore this.");
+  await expect(page.locator("#ptAlarm")).toHaveCount(0);
+  await expect(page.locator('[role="tab"]')).toHaveText(["About", "Sightings (1)"]);
+  await page.locator("#ptpg-sightings").click();
+  await expect(page.locator("#ptSeenOut")).toBeVisible();
+  await expect(page.locator("#ptSightings li")).toContainText("By the canal");
+  await expect(page.locator("#ptSight")).toHaveCount(0);                     // the household gets reports, doesn't send them
+  await expect(page.locator("#ptShare")).toHaveCount(0);
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/pt-seen-out.png", fullPage: true });
+  await page.locator("#ptSeenMiss").click();
+  await expect(page.locator("#ptpg-about")).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#ptMissNote")).toBeFocused();
+  await expect(page.locator("#ptSeenMiss")).toHaveCount(0);                  // one red button at a time
+  await page.locator("#ptMissGo").click();
+  await expect(page.locator("#msg")).toHaveText("Pepper is now listed as missing. Share the alert below.");
+  await expect(page.locator("#ptAlarm")).toBeVisible();
+  await expect(page.locator("#ptSeenOut")).toHaveCount(0);
+  // my other pet, never reported: Sightings says what will land there
+  await page.goto("pets/?pet=" + XID("b2") + "&show=sightings");
+  await expect(page.locator("#ptSightings")).toHaveText("If neighbors see Tom out on their own, their reports show here. Only your household sees them.");
+  await expect(page.locator("#ptSeenOut")).toHaveCount(0);
 });
 
 test.describe("a sighting", () => {
@@ -184,14 +242,19 @@ test.describe("a sighting", () => {
     const { calls } = await open(page, b, { q: "?pet=" + ID(2) });
     await expect(page.locator("#ptAlarm")).toContainText("Luna has been missing since Tue 10 Nov · ⁦19:00⁩");
     await expect(page.locator("#ptAlarm")).toContainText("Last seen: Near the beach park");
-    await expect(page.locator("#ptSightings")).toHaveCount(0);           // owned + not mine: the server sends none
+    await expect(page.locator("#ptSightings")).toHaveText("No sightings yet.");   // R5b-2b-0: a missing pet's sightings reach neighbors too
     await expect(page.locator("#ptpg-sightings")).toHaveAttribute("aria-selected", "true");   // a missing pet opens on Sightings
     await expect(page.locator(".pthero .chip.miss")).toHaveCount(0);   // the alarm says it; no second "Missing" badge
     await page.locator("#ptSight").click();
     await expect(page.locator("#ptSightPrivacy")).toHaveText(/never shows who you are\. We delete the record of who sent it within 48 hours, and the sighting itself after 30 days\./);
     await page.locator("#ptSightNote").fill("Under a car on Marsa road");
     await page.locator("#ptPosAdd").click();
-    await expect(page.locator("#ptPos")).toContainText("Your current location is added.");
+    await expect(page.locator("#ptPick")).toBeVisible();
+    await expect(page.locator("#ptSightGo")).toHaveCount(0);                 // the pin map decides first
+    await expect(page.locator("#ptPickHelp")).toHaveText("Move the map so the ring is where you saw Luna.");   // found me
+    await page.locator("#ptPickOk").click();
+    await expect(page.locator("#ptPos")).toContainText("Location pin added.");
+    await expect(page.locator("#ptPosClear")).toBeFocused();
     await page.locator("#ptSightGo").click();
     await expect(page.locator("#msg")).toHaveText("Thanks. Your sighting was sent.");
     expect(lastCall(calls, "jc_pet_sighting_add").args).toEqual({ p_pet: ID(2), p_note: "Under a car on Marsa road", p_lat: 24.53123, p_lng: 54.43299 });
@@ -214,10 +277,19 @@ test.describe("a sighting", () => {
     await page.locator("#ptSightGo").click();
     await expect(page.locator("#msg")).toHaveText("Add a note or your location first.");
     expect(named(calls, "jc_pet_sighting_add")).toEqual([]);
-    await page.locator("#ptPosAdd").click();
+    const pin = async () => {
+      await page.locator("#ptPosAdd").click();
+      await expect(page.locator("#ptPickHelp")).toHaveText("Move the map so the ring is where you saw Ginger.");
+      await page.locator("#ptPickOk").click();
+    };
+    await pin();
     await page.locator("#ptPosClear").click();
     await expect(page.locator("#ptPosAdd")).toBeFocused();
-    await page.locator("#ptPosAdd").click();
+    await page.locator("#ptPosAdd").click();                                  // Cancel closes the pin map, nothing added
+    await page.locator("#ptPickCancel").click();
+    await expect(page.locator("#ptPosAdd")).toBeFocused();
+    await expect(page.locator("#ptPos")).toHaveCount(0);
+    await pin();
     await page.locator("#ptSightGo").click();
     await expect(page.locator("#msg")).toHaveText("Thanks. Your sighting was sent.");
     expect(lastCall(calls, "jc_pet_sighting_add").args).toEqual({ p_pet: ID(3), p_note: null, p_lat: 24.53123, p_lng: 54.43299 });
@@ -250,7 +322,7 @@ test("a stray: care record, territory, care log, sightings with no reporter (onl
   await expect(page.locator('[data-care="dewormed"] .st')).toHaveText("Not recorded");
   await expect(page.locator("#ptLog li")).toContainText("Fed · Tue 10 Nov · ⁦09:00⁩");
   // R5b-2b-1: About first (a stray that isn't missing); Sightings is its own tab, with the count
-  await expect(page.locator('[role="tab"]')).toHaveText(["About", "Sightings (3)"]);
+  await expect(page.locator('[role="tab"]')).toHaveText(["About", "Sightings (3)", "Map"]);
   await expect(page.locator("#ptpg-about")).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#ptSightings")).toHaveCount(0);
   await page.locator("#ptpg-sightings").click();
@@ -574,6 +646,117 @@ test("axe: list, a stray's page and the edit form have no violations", async ({ 
   await expect(page.locator("#ptForm")).toBeVisible();
   expect(await scan()).toEqual([]);
 });
+
+// ---- R5b-2b-2b: the Map tab, the small maps, the pin map's fallback ----
+const BOLT = XID("c1");
+const boltBackend = (extra = {}) => backend({ extra: [Object.assign({ id: BOLT, kind: "owned", species: "dog", name: "Bolt", home: V40, missing: true,
+  missing_since: "2026-11-07T10:00:00Z", sightings: [
+    { id: 61, note: "Running past the school", lat: 24.531, lng: 54.432, seen_at: "2026-11-11T06:10:00Z", by_me: false },   // 20 min ago
+    { id: 62, note: null, lat: null, lng: null, seen_at: "2026-11-10T20:00:00Z", by_me: false },                           // no location
+    { id: 63, note: "Near the marina", lat: 24.532, lng: 54.433, seen_at: "2026-11-10T08:00:00Z", by_me: false },          // within 48 h
+    { id: 64, note: "Old one", lat: 24.533, lng: 54.434, seen_at: "2026-11-08T08:00:00Z", by_me: false },                  // older: faded
+  ] }, extra)] });
+
+test("missing pet, Map tab: newest big with 'Latest · 20 min ago', within 48 h normal, older faded; no lines, no home pin; popups say when", async ({ page }) => {
+  await open(page, boltBackend(), { q: "?pet=" + BOLT });
+  await expect(page.locator('[role="tab"]')).toHaveText(["About", "Sightings (4)", "Map"]);
+  await page.locator("#ptpg-map").click();
+  expect(new URL(page.url()).search).toBe("?pet=" + BOLT + "&show=map");
+  await expect(page.locator("#ptpmap")).toHaveAttribute("aria-label", "Map of where Bolt was seen");
+  await expect(page.locator("#ptpmap path.leaflet-interactive")).toHaveCount(3);          // the 3 with a location; nothing else
+  await expect(page.locator("#ptpmap path.ptlatest")).toHaveCount(1);
+  await expect(page.locator("#ptpmap path.ptrecent")).toHaveCount(1);
+  await expect(page.locator("#ptpmap path.ptold")).toHaveCount(1);
+  await expect(page.locator("#ptpmap polyline, #ptpmap .ptterr")).toHaveCount(0);
+  expect(Number(await page.locator("#ptpmap path.ptold").getAttribute("fill-opacity"))).toBeLessThan(0.5);
+  await expect(page.locator("#ptpmap .bklabel")).toHaveText("Latest · 20 min ago");
+  await expect(page.locator("#ptMapKey")).toHaveText("The big dot is the latest sighting. Faded dots are older than 2 days.");
+  await expect(page.locator("#ptAlarm")).toBeVisible();                                   // the alarm stays on every tab
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/pt-map-missing.png", fullPage: true });
+  await tapWhenStill(page, page.locator("#ptpmap path.ptlatest"));
+  await expect(page.locator(".leaflet-popup")).toContainText("Running past the school");
+  await expect(page.locator(".leaflet-popup .popacts a")).toHaveAttribute("href", /destination=24\.531%2C54\.432/);
+  // Sightings: a small map on each one with a location, the Google link kept
+  await page.locator("#ptpg-sightings").click();
+  await expect(page.locator("#ptSightings .ptmini")).toHaveCount(3);
+  await expect(page.locator("#ptSightings .ptmini").first()).toHaveClass(/leaflet-container/);   // built once in view
+  await expect(page.locator("#ptSightings .ptmini").first()).toHaveAttribute("role", "img");
+  await expect(page.locator("#ptSightings li").nth(1).locator(".ptmini")).toHaveCount(0);       // no location, no map
+});
+
+test("Map tab with nothing to place says so; a stray's territory spot is a dashed ring; at most 10 small maps (the rest keep the link)", async ({ page }) => {
+  const many = Array.from({ length: 12 }, (_, i) => ({ id: 200 + i, note: "s" + i, lat: 24.53 + i / 1000, lng: 54.43, seen_at: new Date(NOW - (i + 1) * 3600e3).toISOString(), by_me: false }));
+  const b = backend({ extra: [
+    { id: XID("d1"), kind: "stray", species: "cat", name: "Smudge", care_state: "needs_help", territory: "The park", territory_lat: 24.535, territory_lng: 54.435 },
+    { id: XID("d2"), kind: "stray", species: "dog", name: "Lots", care_state: "under_care", sightings: many },
+  ] });
+  await open(page, b, { q: "?pet=" + ID(2) + "&show=map" });                 // Luna: missing, nothing with a location
+  await expect(page.locator("#ptMapNone")).toHaveText("No sightings of Luna with a location yet.");
+  await expect(page.locator("#ptpmap")).toHaveCount(0);
+  await page.goto("pets/?pet=" + XID("d1") + "&show=map");
+  await expect(page.locator("#ptpmap .ptterr")).toHaveCount(1);
+  await expect(page.locator("#ptMapKey")).toContainText("The dashed ring is its usual spot.");
+  await page.goto("pets/?pet=" + XID("d2") + "&show=sightings");
+  await expect(page.locator("#ptSightings li")).toHaveCount(12);
+  await expect(page.locator("#ptSightings .ptmini")).toHaveCount(10);
+  await expect(page.locator("#ptSightings li").nth(11).locator("a")).toHaveText("Open in Google Maps");
+  await expect(page.locator("#ptSightings li").nth(11).locator(".ptmini")).toHaveCount(0);
+});
+
+test("Add Location Pin: asks for a fresh fix; can't find me → the community's centre, said plainly; the pin sent is where the ring is", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__geo = [];
+    navigator.geolocation.getCurrentPosition = (ok, bad, o) => { window.__geo.push(o); setTimeout(() => bad({ code: 2 }), 0); };
+  });
+  const b = backend();
+  const { calls } = await open(page, b, { q: "?pet=" + ID(3) + "&show=sightings" });
+  await page.locator("#ptSight").click();
+  await page.locator("#ptPosAdd").click();
+  await expect(page.locator("#ptPickHelp")).toHaveText("Couldn't find where you are, so the map shows the community's centre. Move it so the ring is where you saw Ginger.");
+  expect((await page.evaluate(() => window.__geo))[0]).toMatchObject({ maximumAge: 0, enableHighAccuracy: true });   // never an old fix
+  await expect(page.locator("#msg")).toHaveText("");                       // not an error: the map is still usable
+  await page.evaluate(() => map.setView([24.5355555, 54.4344444], 18, { animate: false }));   // the person moves the map
+  await page.locator("#ptPickOk").click();
+  await page.locator("#ptSightGo").click();
+  await expect(page.locator("#msg")).toHaveText("Thanks. Your sighting was sent.");
+  expect(lastCall(calls, "jc_pet_sighting_add").args).toEqual({ p_pet: ID(3), p_note: null, p_lat: 24.53556, p_lng: 54.43444 });
+});
+
+test("Arabic: the pin map keeps its place and the half-typed note across a language switch", async ({ page }) => {
+  await page.addInitScript(() => { navigator.geolocation.getCurrentPosition = (ok, bad) => setTimeout(() => bad({ code: 1 }), 0); });
+  await open(page, backend(), { q: "?pet=" + ID(3) + "&show=sightings" });
+  await page.locator("#ptSight").click();
+  await page.locator("#ptSightNote").fill("draft");
+  await page.locator("#ptPosAdd").click();
+  await expect(page.locator("#ptPickHelp")).toContainText("community's centre");
+  await page.evaluate(() => map.setView([24.5355555, 54.4344444], 18, { animate: false }));
+  await page.locator("#langBtn").click();
+  await expect(page.locator("#ptPickOk")).toHaveText("استخدم هذا المكان");
+  await expect(page.locator("#ptSightNote")).toHaveValue("draft");
+  expect(await page.evaluate(() => [map.getCenter().lat, map.getCenter().lng].map((x) => Math.round(x * 1e5) / 1e5))).toEqual([24.53556, 54.43444]);
+});
+
+for (const lang of ["en", "ar"]) {
+  test(`axe ${lang}: the pet page — seen-out box, Sightings with the pin map open, small maps, the Map tab — no violations`, async ({ page }) => {
+    const b = boltBackend();
+    b.st.pets.push(Object.assign({}, b.st.pets[0], { id: XID("e1"), name: "Pepper", home: MINE_HOME, missing: false, missing_since: null,
+      last_seen_at: "2026-11-11T04:30:00Z", sightings: [{ id: 70, note: "By the canal", lat: 24.531, lng: 54.432, seen_at: "2026-11-11T04:30:00Z", by_me: false }] }));
+    await open(page, b, { lang, q: "?pet=" + XID("e1") });
+    const scan = async () => (await new AxeBuilder({ page }).disableRules(["region"]).analyze()).violations.map((v) => v.id + ": " + v.nodes.map((n) => n.target).join(" | "));
+    await expect(page.locator("#ptSeenOut")).toBeVisible();
+    expect(await scan()).toEqual([]);
+    await page.goto("pets/?pet=" + BOLT + "&show=sightings");
+    await expect(page.locator("#ptSightings .ptmini").first()).toHaveClass(/leaflet-container/);
+    await page.locator("#ptSight").click();
+    await page.locator("#ptPosAdd").click();
+    await expect(page.locator("#ptPick")).toBeVisible();
+    expect(await scan()).toEqual([]);
+    await page.locator("#ptPickCancel").click();
+    await page.locator("#ptpg-map").click();
+    await expect(page.locator("#ptpmap path.leaflet-interactive")).toHaveCount(3);
+    expect(await scan()).toEqual([]);
+  });
+}
 
 // ---- R5c: photos ----
 // a camera-sized JPEG made in the page (2000×1500): what a phone hands the file picker
