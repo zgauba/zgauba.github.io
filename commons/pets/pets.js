@@ -647,7 +647,9 @@ function keyHtml(){
   }).join("") + '</div><p class="help">' + esc(jcT("pt_key_note")) + '</p></div>';
 }
 function strayPop(p){
-  var pos = strayPos(p), seen = recent(p.last_seen_at, 30 * DAY) ? jcAgo(p.last_seen_at) : "";
+  /* the time of the sighting the pin stands on (last_seen), not a newer one without a location (review L3) */
+  var pos = strayPos(p), at = hObj(p.last_seen) && finite(p.last_seen.lat) ? p.last_seen.at : null;
+  var seen = recent(at, 30 * DAY) ? jcAgo(at) : "";
   return '<div class="pop"><b dir="auto">' + esc(p.name) + '</b>' +
     '<div class="meta">' + esc(speciesText(p) + " · " + jcT("pt_care_" + p.care_state)) + '</div>' +
     (seen ? '<div class="meta">' + esc(jcFmt("pt_seen_ago", { t: seen })) + '</div>'
@@ -669,7 +671,7 @@ function drawStrays(list){
       if (map !== m) return;
       me = jcMeDot(m, [lat, lng], me);
       m.setView([lat, lng], Math.max(m.getZoom(), LABEL_ZOOM));
-    }, function(code){ full.set(false); ptMsg(code); });  /* visible, not behind the full map */
+    }, function(code){ if (map !== m) return; full.set(false); ptMsg(code); });  /* visible, not behind the full map; never on another screen */
   });
   var col = jcMapColors(), pts = [];
   list.forEach(function(p){
@@ -680,13 +682,8 @@ function drawStrays(list){
       .bindTooltip('<span dir="auto">' + esc(p.name) + '</span>', { permanent: true, direction: "top", offset: [0, -12], className: "bklabel" })
       .bindPopup(strayPop(p), JC_POPUP);
   });
-  var wrap = document.querySelector(".evmapwrap"), box = el("ptmap");
-  m.on("popupopen", function(pe){
-    if (wrap) wrap.classList.add("popopen");
-    var b = pe.popup.getElement() && pe.popup.getElement().querySelector("[data-popopen]");
-    if (b) b.addEventListener("click", function(){ full.set(false); openPet(b.dataset.popopen); });
-  });
-  m.on("popupclose", function(){ if (wrap) wrap.classList.remove("popopen"); });
+  var box = el("ptmap");
+  jcMapPopups(m, function(id){ full.set(false); openPet(id); });   /* the kit */
   function labels(){ if (box && map === m) box.classList.toggle("nolabels", m.getZoom() < LABEL_ZOOM); }
   m.on("zoomend", labels);
   if (pts.length > 1) m.fitBounds(pts, { padding: [40, 40], maxZoom: 18 });

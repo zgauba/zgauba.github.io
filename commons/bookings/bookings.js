@@ -325,13 +325,7 @@ function drawMap(list){
       .bindTooltip('<span dir="auto">' + esc(courtName(f)) + '</span>', { permanent: true, direction: "top", offset: [0, -12], className: "bklabel" })
       .bindPopup(popHtml(f), JC_POPUP);
   });
-  var wrap = document.querySelector(".evmapwrap");
-  map.on("popupopen", function(pe){
-    if (wrap) wrap.classList.add("popopen");
-    var b = pe.popup.getElement() && pe.popup.getElement().querySelector("[data-popopen]");
-    if (b) b.addEventListener("click", function(){ var f = courtById(b.dataset.popopen); if (f) { full.set(false); openCourt(f); } });
-  });
-  map.on("popupclose", function(){ if (wrap) wrap.classList.remove("popopen"); });
+  jcMapPopups(map, function(id){ var f = courtById(id); if (f) { full.set(false); openCourt(f); } });   /* the kit */
   if (pts.length > 1) map.fitBounds(pts, { padding: [40, 40], maxZoom: 18 });
   else if (pts.length) map.setView(pts[0], 17);
 }

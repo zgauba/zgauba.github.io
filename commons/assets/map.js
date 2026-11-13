@@ -102,6 +102,18 @@ function jcMapFull(getMap, onExit){
   return ctl;
 }
 
+/* Popups on a full map (Courts, Strays): while one is open the map's buttons step aside (.popopen on the wrap);
+   a [data-popopen] button inside it calls onOpen(its value). Events wires its own (it adds report buttons). */
+function jcMapPopups(m, onOpen){
+  var wrap = document.querySelector(".evmapwrap");
+  m.on("popupopen", function(pe){
+    if (wrap) wrap.classList.add("popopen");
+    var b = pe.popup.getElement() && pe.popup.getElement().querySelector("[data-popopen]");
+    if (b) b.addEventListener("click", function(){ onOpen(b.dataset.popopen); });
+  });
+  m.on("popupclose", function(){ if (wrap) wrap.classList.remove("popopen"); });
+}
+
 /* "Map Labels" (Events, Pets): the map's key in a window, not under the map (Zee: "looks very messy").
    jcKeySheetHtml(id) goes next to the map; jcKeySheet(id, html) opens it — html is trusted markup (escaped by
    the caller). Close button, Escape (native <dialog>), and a tap on the dimmed backdrop all close it. */

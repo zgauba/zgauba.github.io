@@ -123,7 +123,7 @@ function loadPetAlerts(){
     if (!d || typeof d !== "object") return;
     petAlerts = d;
     if (mode === "hub") renderHub();
-  }, function(){ /* no lines */ });
+  }, function(){ petAlertsAsked = false; /* no lines; the next hub draw may ask again (no retry loop) */ });
 }
 function renderHub(){
   var cfg = cfgFor(hubCommunity), name = jcCommunityName(cfgs[hubCommunity], hubCommunity);
