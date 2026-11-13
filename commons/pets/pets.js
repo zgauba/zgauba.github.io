@@ -1,11 +1,15 @@
-/* Pets page (R5b-1) — residents' pet directory. Plan: docs/plans/R5-pets.md (Zee decisions 2026-11-10/11).
-   Views: list (tabs List · My Pets) · pet (?pet=<uuid>) · edit (add / edit one of my home's pets).
+/* Pets page (R5b-1) — residents' pet directory. Plan: docs/plans/R5-pets.md (Zee decisions 2026-11-10/11);
+   R5b-2b-2a tabs: docs/plans/R5b-2-pets-maps.md "Re-plan 2026-11-13".
+   Views: list (tabs Pets · Strays · My Pets) · pet (?pet=<uuid>) · edit (add / edit one of my home's pets).
+   Pets = owned pets in the server's order (missing → nearest my home pin → name); Strays = a map (one pin per
+   stray at its latest visible sighting, else its territory; rehomed off the map) + the stray cards.
    Server: jc_pets_list, jc_pet_get, jc_pet_save, jc_pet_archive, jc_pet_missing_set,
    jc_pet_sighting_add, jc_pets_group_get (S4 + R5a). The Map tab is R5b-2; photos are R5c; the admin side is R5d.
    PRIVACY — this page renders what the server sends and nothing else:
    - an owned pet's home arrives on its card (homes can't be hidden — HH, Zee 2026-11-11); shown only when it
      arrives;
-   - sightings arrive only for strays / community animals, my own pets, and Pets admins; never who reported one
+   - sightings (and a card's last_seen / last_seen_at) arrive only as the server's rule allows (jc_pet_sight_from):
+     strays, my own pets, Pets admins, and a missing pet's recent ones; never who reported one
      ("by_me" is the reporter's own flag, and disappears once the server erases the reporter within 48 h);
    - the WhatsApp group link is members-only (jc_pets_group_get, never the public config); it is set as an
      attribute after a strict format check, opened with rel="noopener noreferrer". */
@@ -15,14 +19,16 @@ var PET = params.get("pet");
 if (PET && !/^[0-9a-f-]{36}$/i.test(PET)) PET = null;
 
 var state = null, cfg = null, current = null;
+var map = null, layer = "sat";                         /* the Strays map; layer survives redraws */
+var full = jcMapFull(function(){ return map; }, null); /* the map, bigger (assets/map.js) */
 var pets = null, listErr = null, listLoading = false, listSeq = 0;
 var pet = null, petId = null, petErr = null, petLoading = false, petSeq = 0;   /* the open pet (jc_pet_get) */
-var TABS = ["list", "mine"];
+var TABS = ["pets", "strays", "mine"];
 /* the pet page's own tabs (R5b-2b-1): About · Sightings; ?show= keeps ?tab= for the list tab to return to */
 var PET_TABS = ["about", "sightings"];
 var petTab = PET_TABS.indexOf(params.get("show")) >= 0 ? params.get("show") : null;   /* null = the pet's default */
-var tab = TABS.indexOf(params.get("tab")) >= 0 ? params.get("tab") : "list";
-var FILTERS = ["all", "owned", "wanderers", "strays", "community"];
+var tab = params.get("tab") === "list" ? "pets" : TABS.indexOf(params.get("tab")) >= 0 ? params.get("tab") : "pets";   /* ?tab=list: old links */
+var FILTERS = ["all", "dogs", "cats", "other", "wanderers"];
 var filter = "all";
 var SPECIES = ["cat", "dog", "bird", "rabbit", "other"];
 var CARE = ["sterilized", "dewormed", "vaccination", "treatment"];
@@ -55,11 +61,22 @@ function hObj(x){ return x && typeof x === "object" && !Array.isArray(x) ? x : n
 function hasHome(){ return !!(state && state.me && state.me.home); }
 function moduleOn(){ var m = cfg && cfg.modules && cfg.modules.pets; return !!(m && m.enabled === true); }
 function setUrl(q){ try { history.replaceState(null, "", q ? "?" + q : location.pathname); } catch(e){} }
-function listUrl(){ return tab === "list" ? null : "tab=" + tab; }
+function listUrl(){ return tab === "pets" ? null : "tab=" + tab; }
 function isPet(p){ return hObj(p) && typeof p.id === "string" && typeof p.name === "string" && (p.kind === "owned" || p.kind === "stray"); }
 function speciesText(p){ return jcT("pt_sp_" + (SPECIES.indexOf(p.species) >= 0 ? p.species : "other")); }
-function community(p){ return p.kind === "stray" && p.care_state === "known_fine"; }
-function kindText(p){ return jcT(p.kind === "owned" ? "pt_kind_owned" : community(p) ? "pt_kind_community" : "pt_kind_stray"); }
+function kindText(p){ return jcT(p.kind === "owned" ? "pt_kind_owned" : "pt_kind_stray"); }   /* no "community animal": owned or stray (Zee 2026-11-13) */
+function hasPin(){ var h = state && state.me && state.me.home; return !!(h && h.pin_set_at); }
+var DAY = 864e5;
+function recent(iso, ms){ var t = Date.parse(iso); return isFinite(t) && Date.now() - t < ms && t - Date.now() < 3e5; }
+/* my pet, at home, reported out on its own in the last 24 h (the server sends last_seen_at only to the household) */
+function seenOut(p){ return p.mine === true && p.kind === "owned" && p.missing !== true && recent(p.last_seen_at, DAY) ? jcAgo(p.last_seen_at) : ""; }
+function finite(n){ return typeof n === "number" && isFinite(n); }
+/* where a stray goes on the map: its latest visible sighting with a location, else its territory spot */
+function strayPos(p){
+  var s = hObj(p.last_seen);
+  if (s && finite(s.lat) && finite(s.lng)) return [s.lat, s.lng];
+  return finite(p.territory_lat) && finite(p.territory_lng) ? [p.territory_lat, p.territory_lng] : null;
+}
 /* the card's home has no type (villa / townhouse / apartment), so a neutral label — never a guessed "Villa" */
 function homeText(h){
   if (!hObj(h) || h.number == null) return "";
@@ -73,18 +90,18 @@ function myHomeText(){
   return h ? [jcHomeLabel(h), jcVillageName(cfg, h.village)].filter(Boolean).join(" · ") : "";
 }
 function when(iso){ return typeof iso === "string" && !isNaN(Date.parse(iso)) ? jcDayText(jcDateOf(iso, cfg)) + " · ⁦" + jcClock(iso, cfg) + "⁩" : ""; }
-/* sightings are open for a missing pet, or a stray / community animal that isn't rehomed (server: SIGHTINGS_CLOSED) */
+/* sightings are open for a missing pet, or a stray that isn't rehomed (server: SIGHTINGS_CLOSED) */
 function sightOpen(p){ return p.missing === true || (p.kind === "stray" && p.care_state !== "rehomed"); }
 function petUrl(p){ return location.origin + location.pathname + "?pet=" + encodeURIComponent(p.id); }
 /* Sightings only where they exist or can be added; a missing pet opens on Sightings (that's where help comes in) */
 function petTabs(p){ return sightOpen(p) || (Array.isArray(p.sightings) && p.sightings.length) ? PET_TABS : ["about"]; }
-function petQuery(id){ return "pet=" + encodeURIComponent(id) + (tab === "list" ? "" : "&tab=" + tab) + (petTab ? "&show=" + petTab : ""); }
+function petQuery(id){ return "pet=" + encodeURIComponent(id) + (tab === "pets" ? "" : "&tab=" + tab) + (petTab ? "&show=" + petTab : ""); }
 function petById(id){ return (pets || []).filter(function(p){ return p.id === id; })[0]; }
 function matches(p){
-  if (filter === "owned") return p.kind === "owned";
+  if (filter === "dogs") return p.species === "dog";
+  if (filter === "cats") return p.species === "cat";
+  if (filter === "other") return p.species !== "dog" && p.species !== "cat";
   if (filter === "wanderers") return p.wanderer === true;
-  if (filter === "strays") return p.kind === "stray" && !community(p);
-  if (filter === "community") return community(p);
   return true;
 }
 
@@ -280,7 +297,9 @@ function backToList(code, okText){
 function draw(){ var r = jcFocusKeep(); VIEWS[current](); r(); fillPhotos(); }
 
 /* ---------- views ---------- */
+function dropMap(){ full.reset(); if (map) { var m = map; map = null; jcMapRemove(m); } }
 function show(name){
+  dropMap();
   current = name;
   var back = null;
   if (name === "pet") back = function(){ if (!ptBusy) backToList(); };
@@ -298,7 +317,7 @@ function chips(p, noState, noMissing){      /* noMissing: the pet page's alarm a
   var c = [];
   if (p.missing === true && !noMissing) c.push('<span class="chip miss">' + esc(jcT("pt_missing_chip")) + '</span>');
   /* colour only for real states: Missing = red, Needs help = amber; the rest neutral (brand: signals are semantics) */
-  if (!noState && p.kind === "stray" && p.care_state && !community(p))
+  if (!noState && p.kind === "stray" && p.care_state)
     c.push('<span class="chip' + (p.care_state === "needs_help" ? " warn" : "") + '">' + esc(jcT("pt_care_" + p.care_state)) + '</span>');
   if (p.wanderer === true) c.push('<span class="chip">' + esc(jcT("pt_wanderer_chip")) + '</span>');
   if (p.mine === true) c.push('<span class="chip">' + esc(jcT("pt_mine_chip")) + '</span>');
@@ -308,7 +327,8 @@ function chips(p, noState, noMissing){      /* noMissing: the pet page's alarm a
    the button. Missing pets: full-width cards on top (photo beside the text, the last-seen line). */
 function card(p){
   var where = p.kind === "owned" ? homeText(p.home) : (p.territory || "");
-  var miss = p.missing === true;
+  var miss = p.missing === true, out = seenOut(p);
+  var seen = p.kind === "stray" && p.care_state !== "rehomed" && recent(p.last_seen_at, 30 * DAY) ? jcAgo(p.last_seen_at) : "";
   return '<li class="' + (miss ? "missing" : "") + '" data-pet="' + esc(p.id) + '">' +
     '<button class="ptcard" type="button" data-open="' + esc(p.id) + '">' + photoHtml(p, 34, "tile") +
     '<span class="ptbody"><b dir="auto">' + esc(p.name) + '</b>' +
@@ -316,6 +336,9 @@ function card(p){
     (where ? '<span class="meta where" dir="auto">' + esc(where) + '</span>' : '') +
     (chips(p) ? '<span class="head">' + chips(p) + '</span>' : '') +
     (miss && p.last_seen_note ? '<span class="meta" dir="auto">' + esc(jcFmt("pt_last_seen", { t: p.last_seen_note })) + '</span>' : '') +
+    (seen ? '<span class="meta">' + esc(jcFmt("pt_seen_ago", { t: seen })) + '</span>' : '') +
+    /* amber, not red: a heads-up for the household, nothing has changed state (plan R5b-2b-2a) */
+    (out ? '<span class="meta seenout">' + esc(jcFmt("pt_seen_out", { t: out })) + '</span>' : '') +
     '</span></button></li>';
 }
 function noHomeHtml(){
@@ -329,6 +352,7 @@ var VIEWS = {
   },
 
   list: function(){
+    dropMap();                                         /* a redraw (language, filter) builds a fresh map */
     var html = '<h1 dir="auto">' + esc(jcModTitle("pets")) + '</h1>' +
       jcTabsHtml("pttab-", TABS, tab, function(t){ return jcT("pt_tab_" + t); }, jcModName("pets"), "ptBody") + msgBox();
     function wireTabs(){
@@ -346,7 +370,7 @@ var VIEWS = {
       if (!listLoading) loadList();
       return;
     }
-    var body;
+    var body, onMap = [];
     if (tab === "mine") {
       var mine = pets.filter(function(p){ return p.mine === true; });
       body = !hasHome() ? noHomeHtml() :
@@ -354,16 +378,35 @@ var VIEWS = {
                      : '<p class="help" id="ptMine">' + esc(jcT("pt_mine_none")) + '</p>') +
         (mine.length < 10 ? '<div class="row"><button class="btn" type="button" id="ptAdd">' + esc(jcT("cta_pets")) + '</button></div>'
                           : '<p class="help" id="ptCap">' + esc(jcT("pt_err_TOO_MANY_PETS")) + '</p>');
+    } else if (tab === "strays") {
+      var strays = pets.filter(function(p){ return p.kind === "stray"; });
+      /* Needs help first, then the server's order (nearest my home pin); rehomed last */
+      var rank = function(p){ return p.care_state === "needs_help" ? 0 : p.care_state === "rehomed" ? 2 : 1; };
+      strays = strays.map(function(p, i){ return [p, i]; })
+        .sort(function(a, b){ return rank(a[0]) - rank(b[0]) || a[1] - b[1]; }).map(function(x){ return x[0]; });
+      var active = strays.filter(function(p){ return p.care_state !== "rehomed"; });
+      onMap = active.filter(strayPos);
+      var unplaced = active.length - onMap.length;
+      body = !strays.length ? '<p class="help" id="ptStrays">' + esc(jcT("pt_strays_none")) + '</p>' :
+        (typeof L === "undefined" ? '<p class="help" id="ptNoMap">' + esc(jcT("err_NETWORK")) + '</p>' :   /* no dead buttons */
+         onMap.length ? jcMapHtml("ptmap", layer, { attrs: ' role="region" aria-label="' + esc(jcT("pt_strays_map")) + '"',
+           before: '<button type="button" class="lang" id="labelsBtn" aria-haspopup="dialog">' + esc(jcT("ev_labels")) + '</button>' }) +
+           jcKeySheetHtml("ptKey") : '') +
+        (unplaced ? '<p class="help" id="ptUnplaced">' + esc(jcFmt("pt_strays_unplaced", { n: unplaced })) + '</p>' : '') +
+        '<ul class="ptgrid" id="ptStrays">' + strays.map(card).join("") + '</ul>';
     } else {
-      var missing = pets.filter(function(p){ return p.missing === true; });
-      var rest = pets.filter(function(p){ return p.missing !== true && matches(p); });
+      /* Pets: owned only; missing pinned on top; the rest in the server's order */
+      var owned = pets.filter(function(p){ return p.kind === "owned"; });
+      var missing = owned.filter(function(p){ return p.missing === true; });
+      var rest = owned.filter(function(p){ return p.missing !== true && matches(p); });
       body = (missing.length ? '<h2 class="group" id="ptMissingHead">' + esc(jcT("pt_missing_now")) + '</h2>' +
                                '<ul class="ptgrid wide" id="ptMissing">' + missing.map(card).join("") + '</ul>' : '') +
         '<div class="filters" id="ptFilters" role="group" aria-label="' + esc(jcT("pt_filter")) + '">' + FILTERS.map(function(f){
           return '<button type="button" id="ptF-' + f + '" data-filter="' + f + '" aria-pressed="' + (f === filter) + '">' + esc(jcT("pt_f_" + f)) + '</button>';
         }).join("") + '</div>' +
+        '<p class="help" id="ptSorted">' + esc(jcT(hasPin() ? "pt_sorted_near" : "pt_sorted_name")) + '</p>' +
         (rest.length ? '<ul class="ptgrid" id="ptList">' + rest.map(card).join("") + '</ul>'
-                     : '<p class="help" id="ptList">' + esc(jcT(pets.length ? "pt_none_filter" : "pt_none")) + '</p>');
+                     : '<p class="help" id="ptList">' + esc(jcT(owned.length ? "pt_none_filter" : "pt_none")) + '</p>');
     }
     el("view").innerHTML = html + '<div ' + jcTabPanel("pttab-", tab, "ptBody") + '>' + body + '</div>';
     wireTabs();
@@ -373,6 +416,7 @@ var VIEWS = {
       filter = b.dataset.filter; show("list");
       var f = el("ptF-" + filter); if (f) f.focus();
     });
+    if (onMap.length) drawStrays(onMap);
     on("ptAdd", function(){ form = { id: null, species: "cat", name: "", description: "", wanderer: false, microchipped: false, photo_path: null, photo: null }; show("edit"); });
   },
 
@@ -592,6 +636,59 @@ function wirePet(){
       return false;
     });
   });
+}
+
+/* ---------- the Strays map (kit: assets/map.js) ---------- */
+/* colour only for real states (brand): Needs help amber · Under care the normal pin · Known and fine neutral */
+function pinColor(p, col){ return p.care_state === "needs_help" ? col.warn : p.care_state === "under_care" ? col.accent : col.muted; }
+function keyHtml(){
+  return '<div class="legend"><div class="row">' + ["needs_help", "under_care", "known_fine"].map(function(k){
+    return '<span class="chip"><i class="ptdot ' + k + '" aria-hidden="true"></i>' + esc(jcT("pt_care_" + k)) + '</span>';
+  }).join("") + '</div><p class="help">' + esc(jcT("pt_key_note")) + '</p></div>';
+}
+function strayPop(p){
+  /* the time of the sighting the pin stands on (last_seen), not a newer one without a location (review L3) */
+  var pos = strayPos(p), at = hObj(p.last_seen) && finite(p.last_seen.lat) ? p.last_seen.at : null;
+  var seen = recent(at, 30 * DAY) ? jcAgo(at) : "";
+  return '<div class="pop"><b dir="auto">' + esc(p.name) + '</b>' +
+    '<div class="meta">' + esc(speciesText(p) + " · " + jcT("pt_care_" + p.care_state)) + '</div>' +
+    (seen ? '<div class="meta">' + esc(jcFmt("pt_seen_ago", { t: seen })) + '</div>'
+          : p.territory ? '<div class="meta" dir="auto">' + esc(p.territory) + '</div>' : '') +
+    '<div class="popacts"><button class="mini" type="button" data-popopen="' + esc(p.id) + '">' + esc(jcT("pt_open")) + '</button>' +
+    '<a target="_blank" rel="noopener noreferrer" href="' + esc(jcDirectionsUrl(pos[0], pos[1])) + '">' + esc(jcT("ev_directions")) + '</a></div></div>';
+}
+var LABEL_ZOOM = 17;                                   /* names on the pins from here in; a tap opens the card at any zoom */
+function drawStrays(list){
+  if (typeof L === "undefined" || !el("ptmap")) return;
+  var c = (cfg && cfg.map) || {};
+  var m = map = L.map("ptmap", { zoomControl: true }).setView([c.lat || 24.53, c.lng || 54.43], c.zoom || 14);
+  jcMapLayers(m, "layerBtn", layer, function(l){ layer = l; });
+  on("fullBtn", function(){ full.set(!full.on); });
+  on("labelsBtn", function(){ jcKeySheet("ptKey", keyHtml()); });
+  var me = null;
+  on("locateBtn", function(){
+    jcLocate(function(lat, lng){
+      if (map !== m) return;
+      me = jcMeDot(m, [lat, lng], me);
+      m.setView([lat, lng], Math.max(m.getZoom(), LABEL_ZOOM));
+    }, function(code){ if (map !== m) return; full.set(false); ptMsg(code); });  /* visible, not behind the full map; never on another screen */
+  });
+  var col = jcMapColors(), pts = [];
+  list.forEach(function(p){
+    var pos = strayPos(p);
+    pts.push(pos);
+    /* Leaflet sets string content as HTML: names are escaped */
+    L.circleMarker(pos, { radius: 11, weight: 3, color: col.ink, fillColor: pinColor(p, col), fillOpacity: .95 }).addTo(m)
+      .bindTooltip('<span dir="auto">' + esc(p.name) + '</span>', { permanent: true, direction: "top", offset: [0, -12], className: "bklabel" })
+      .bindPopup(strayPop(p), JC_POPUP);
+  });
+  var box = el("ptmap");
+  jcMapPopups(m, function(id){ full.set(false); openPet(id); });   /* the kit */
+  function labels(){ if (box && map === m) box.classList.toggle("nolabels", m.getZoom() < LABEL_ZOOM); }
+  m.on("zoomend", labels);
+  if (pts.length > 1) m.fitBounds(pts, { padding: [40, 40], maxZoom: 18 });
+  else m.setView(pts[0], LABEL_ZOOM);
+  labels();
 }
 
 VIEWS.edit = function(){

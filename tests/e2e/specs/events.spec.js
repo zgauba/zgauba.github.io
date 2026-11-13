@@ -795,7 +795,7 @@ test("header never flashes another community's name while the config loads", asy
   const hold = () => { gate = new Promise((r) => { release = r; }); };
   hold();
   await stubBackend(page, { rpc: Object.assign({}, eb.rpc, { jc_config_get: () => gate.then(() => ok(E2E)) }) });
-  await signIn(page);
+  await signIn(page, { settle: false });                                          // the config is held: the hub can't settle
   await page.evaluate(() => localStorage.removeItem("jc_name"));
   hold();
   await page.goto("events/");

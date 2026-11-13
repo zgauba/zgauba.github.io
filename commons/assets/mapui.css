@@ -29,3 +29,17 @@ body.mapfull{overflow:hidden}
 .evmapwrap.full .mapfull, .evmapwrap.full .maplocate{bottom:calc(28px + env(safe-area-inset-bottom))}
 /* full screen: Close Map stays reachable while a pin's popup is open (the popopen rule hides the other overlays) */
 .evmapwrap.full.popopen .mapfull{visibility:visible}
+
+/* a name on its pin (Courts, the Strays map) — Leaflet permanent tooltips */
+.leaflet-tooltip.bklabel{background:var(--jc-surface); color:var(--jc-ink); border:1px solid var(--jc-line);
+  font:700 12.5px/1.3 var(--jc-font); padding:3px 8px; border-radius:8px; box-shadow:none}
+.leaflet-tooltip-top.bklabel::before{border-top-color:var(--jc-line)}
+/* names only when zoomed in (the Strays map: many pins) — the page toggles .nolabels on the map box */
+.nolabels .leaflet-tooltip.bklabel{display:none}
+/* the map key in the "Map Labels" window (Events, Strays): one wrapping row per kind of mark (5a.1) */
+.legend{display:flex; flex-direction:column; gap:5px}
+.legend .row{display:flex; flex-wrap:wrap; gap:5px}
+/* readable at arm's length on the night: ink text, 20px dots (Zee, 2026-11-05) */
+.legend .chip{flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; font-size:14px; color:var(--jc-ink);
+  background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius-pill); padding:4px 10px; white-space:nowrap}
+.legend h3{margin:10px 0 6px; font-size:13px; color:var(--jc-muted); font-weight:700}

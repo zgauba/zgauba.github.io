@@ -4,7 +4,7 @@
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const { stubBackend, ok, raise, CONFIG, MEMBER, MEMBER_NO_HOME } = require("./stub");
-const { signIn } = require("./backends");
+const { signIn, tapWhenStill } = require("./backends");
 
 test.use({ timezoneId: "Europe/London" });
 
@@ -104,17 +104,7 @@ const row = (page, h) => page.locator("#bkSlots li", { has: page.locator(".time"
 // Find Me pans the map, and a tap by screen position can land where the pin was, or on a button / the tab bar
 // now over it (CI WebKit flakes). Wait until the pin stops moving, then send the tap to the pin itself, once
 // (a second tap closes the popup again).
-async function tapWhenStill(page, loc) {
-  let last = null;
-  await expect.poll(async () => {
-    const b = await loc.boundingBox();
-    const k = b && Math.round(b.x) + "," + Math.round(b.y);
-    const still = k !== null && k === last;
-    last = k;
-    return still;
-  }, { intervals: [250], timeout: 10000 }).toBe(true);
-  await loc.dispatchEvent("click");
-}
+// tapWhenStill: shared, in backends.js
 
 test("tabs List · Map · My Bookings (List first); the precedence line; courts with hours; walk-on has no times", async ({ page }) => {
   const b = backend({ mine: [{ id: "m1", starts: at("2026-11-11", 18) }],
@@ -272,7 +262,9 @@ test("a failed Private switch puts the tick back and says why", async ({ page })
   const b = backend({ mine: [{ id: "m1", starts: at(D, 18) }] });
   b.rpc.jc_booking_privacy_set = () => raise("NETWORK_X");
   await open(page, b, { q: "?tab=mine" });
-  await page.locator('[data-bkpriv="m1"]').check();
+  // click(), not check(): the stub fails at once, so the page may untick the box before check() can confirm it
+  // changed ("did not change its state" — the WebKit flake, 2026-11-13). The end state is what's asserted.
+  await page.locator('[data-bkpriv="m1"]').click();
   await expect(page.locator("#msg")).toHaveClass(/err/);
   await expect(page.locator('[data-bkpriv="m1"]')).not.toBeChecked();
   await expect(page.locator('[data-bkpriv="m1"]')).toBeEnabled();

@@ -109,3 +109,10 @@ legend{font-size:13px; font-weight:700; color:var(--jc-muted); margin-bottom:6px
 .ptwho h1{margin:0; overflow-wrap:anywhere}
 /* dir="auto" keeps a Latin name's letters in order; in Arabic it still lines up with the rest of the card */
 html[dir="rtl"] .ptbody b, html[dir="rtl"] .ptwho h1{text-align:right}
+/* R5b-2b-2a — "seen out on their own" on my pet's card: amber (a heads-up), never red */
+.ptcard .meta.seenout{color:var(--jc-warn); font-weight:700}
+/* Strays map: the key's dots match the pins (colour only for real states) */
+.ptdot{display:inline-block; width:16px; height:16px; border-radius:50%; border:3px solid var(--jc-ink); box-sizing:border-box; background:var(--jc-muted)}
+.ptdot.needs_help{background:var(--jc-warn)}
+.ptdot.under_care{background:var(--jc-accent)}
+#ptUnplaced{margin:0}

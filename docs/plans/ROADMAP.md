@@ -145,6 +145,10 @@ install), length caps for the bar, AR required or falling back, who renames (com
 **Order (Zee 2026-11-11):** remove home hiding (`HH-remove-home-hiding.md`) → **R5c photos** (a photo matters more
 than a map for finding a missing pet) → R5b-2a shared map kit → R5b-2b Pets maps / tabs / badges
 (`R5b-2-pets-maps.md`) → R5d Organizer Tools. (`docs/plans/R5-pets.md`)
+**Re-plan 2026-11-13:** R5b-2b = R5b-2b-0 DB ✓ (#102, applied) → R5b-2b-2a Pets · Strays · My Pets → R5b-2b-2b pet
+page (Map tab, mini maps, Add Location Pin, out-alone reports + disclosure) → **scoped `/structural-audit`**
+(duplication + cross-module consistency, `commons/` client only, ~4–5 agents; Zee 2026-11-13: once all four modules
+are stable, so it compares settled code) → nearest-first for Events/Courts → R5d.
 Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas "Jubail Pets Concept" + PDF.
 - Directory: **owned** · **community "known & fine"** · **stray under care** (care record: sterilized,
   dewormed, vaccination, under treatment — kept by the carer group).
