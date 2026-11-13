@@ -49,7 +49,7 @@ function jcMapLayers(m, btnId, start, onChange){
 }
 
 /* The phone's position, for "Find Me". It only moves the map / sorts on the phone — never sent or stored.
-   ok(lat, lng); fail("LOCATE_DENIED" | "LOCATE_FAILED"). fresh: no cached fix — for the Pets sighting pin (R5b-2b-2, next); unused until then. */
+   ok(lat, lng); fail("LOCATE_DENIED" | "LOCATE_FAILED"). fresh: no cached fix — the Pets sighting pin ("where I am now", never an old fix). */
 function jcLocate(ok, fail, fresh){
   if (!navigator.geolocation) { fail("LOCATE_FAILED"); return; }
   navigator.geolocation.getCurrentPosition(function(p){ ok(p.coords.latitude, p.coords.longitude); },
@@ -134,6 +134,19 @@ function jcKeySheet(id, html){
     });
   }
   if (d.showModal) d.showModal(); else d.setAttribute("open", "");
+}
+
+/* A small still map with one dot (Pets sightings, R5b-2b-2b): no dragging, zoom or buttons — the link beside it opens
+   a real map. Not focusable and no links inside (no "Leaflet" credit link), so the box can be one role="img".
+   Returns the map; the page takes it down with jcMapRemove when it redraws. */
+function jcMiniMap(node, latlng){
+  var m = L.map(node, { zoomControl: false, dragging: false, touchZoom: false, scrollWheelZoom: false, doubleClickZoom: false,
+                        boxZoom: false, keyboard: false, tap: false }).setView(latlng, 17);
+  m.attributionControl.setPrefix(false);
+  L.tileLayer(jcTiles.sat.url, jcTiles.sat.opts).addTo(m);
+  var c = jcMapColors();
+  L.circleMarker(latlng, { radius: 8, weight: 3, color: c.ink, fillColor: c.accent, fillOpacity: .95, interactive: false }).addTo(m);
+  return m;
 }
 
 /* ---------- pin picker: the map pans under a fixed centre ring; the page reads map.getCenter() on Save ---------- */

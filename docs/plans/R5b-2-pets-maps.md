@@ -321,4 +321,8 @@ sighting at all (for "seen out · 2 h ago" when the report had no pin).
 - R5b-2b-2b must ship the disclosure before the out-alone button: privacy line, `help_pets_3`, manifest R5a note.
 - Dependency: nearest-first order is safe only because home pins are already visible to members (`jc_directory_list`).
   If home pins are ever hidden again, re-review the order (distance buckets, or drop it).
+- **R5b-2b-2b built 2026-11-13** (branch `feat/r5b2b2b-pet-page`): tabs by state; Map tab (latest big + label, > 48 h faded,
+  stray territory = dashed ring, no lines, no home pin); `jcMiniMap` in the kit (newest 10, lazy); Add Location Pin =
+  `jcPinPicker` + fresh `jcLocate`, community centre with a line when it can't locate; out-alone report with the
+  household-only privacy line + "Is this {name}?" share; the household's amber box with Report as missing. Disclosure shipped.
 - Backlog: household "dismiss this report" for out-alone sightings; clamp sighting lat/lng to the community area.

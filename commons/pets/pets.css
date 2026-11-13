@@ -116,3 +116,13 @@ html[dir="rtl"] .ptbody b, html[dir="rtl"] .ptwho h1{text-align:right}
 .ptdot.needs_help{background:var(--jc-warn)}
 .ptdot.under_care{background:var(--jc-accent)}
 #ptUnplaced{margin:0}
+/* R5b-2b-2b — the pet page: the household's "seen out" box (amber, a heads-up — never red); small sighting maps */
+.seenbox{border:2px solid var(--jc-warn); border-radius:var(--jc-radius); padding:12px 14px; background:var(--jc-surface)}
+.seenbox b{color:var(--jc-warn)}
+.seenbox p{margin:6px 0 0; font-size:14px}
+.seenbox .acts{margin-top:10px}
+.seenbox .btn{flex:1 1 auto}
+.ptmini{height:130px; border-radius:10px; overflow:hidden; border:1px solid var(--jc-line)}
+.ptmini .leaflet-control-attribution{font-size:9px}
+#ptMapKey, #ptMapNone{margin:0}
+#ptPickHelp:focus{outline:none}
