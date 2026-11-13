@@ -35,3 +35,10 @@ Extractions made in this PR (Prior Art "EXTRACT"):
 - **Map pin tap helper:** `tapWhenStill` in the test `backends.js`, used by the Courts and Pets specs.
 
 A map-height fitter was tried and dropped. The Strays map is a fixed 46vh, so a phone can still scroll down to the cards.
+
+## CI follow-up: WebKit Courts flake (pre-existing)
+`courts.spec.js` "a failed Private switch puts the tick back" failed once on `e2e-webkit`. It reproduced on a **clean
+`main`** worktree, so this PR did not cause it. **Root cause:** a race in the test. The stub fails instantly, so the page
+correctly unticks the box before Playwright's `check()` confirms the change ("did not change its state").
+**Fixed (test only):** `click()`, then the end state is asserted: unticked, error shown, box enabled. WebKit
+**30/30** on repeat; it failed within 5 repeats before. This closes the "WebKit courts flakes" carryover for this test.

@@ -262,7 +262,9 @@ test("a failed Private switch puts the tick back and says why", async ({ page })
   const b = backend({ mine: [{ id: "m1", starts: at(D, 18) }] });
   b.rpc.jc_booking_privacy_set = () => raise("NETWORK_X");
   await open(page, b, { q: "?tab=mine" });
-  await page.locator('[data-bkpriv="m1"]').check();
+  // click(), not check(): the stub fails at once, so the page may untick the box before check() can confirm it
+  // changed ("did not change its state" — the WebKit flake, 2026-11-13). The end state is what's asserted.
+  await page.locator('[data-bkpriv="m1"]').click();
   await expect(page.locator("#msg")).toHaveClass(/err/);
   await expect(page.locator('[data-bkpriv="m1"]')).not.toBeChecked();
   await expect(page.locator('[data-bkpriv="m1"]')).toBeEnabled();
