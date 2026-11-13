@@ -308,14 +308,7 @@ function hNum(x){ return typeof x === "number" && isFinite(x); }
    clock (generated_at) so a phone with the wrong time can't make it look fresh; "" if it isn't a
    time, or is more than 5 min in the future (review H7) */
 var hNow = 0;
-function hAgo(iso){
-  var t = Date.parse(iso);
-  if (!isFinite(t)) return "";
-  var m = Math.round(((hNow || Date.now()) - t) / 60000);
-  if (m < -5) return "";
-  m = Math.max(0, m);
-  return m < 60 ? jcFmt("adm_h_min", { n: m }) : m < 2880 ? jcFmt("adm_h_hours", { n: Math.round(m / 60) }) : jcFmt("adm_h_days", { n: Math.round(m / 1440) });
-}
+function hAgo(iso){ return jcAgo(iso, hNow); }   /* api.js */
 /* "3.2 MB": isolated left-to-right so Arabic text doesn't flip it into "MB 3.2" */
 function hDate(iso){ return isFinite(Date.parse(iso)) ? fmtDate(iso) : "?"; }   /* never "Invalid Date" (H11) */
 function hMB(b){ return "\u2066" + (b >= 1073741824 ? (b / 1073741824).toFixed(1).replace(/\.0$/, "") + " GB" : (b / 1048576).toFixed(1) + " MB") + "\u2069"; }

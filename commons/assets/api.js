@@ -224,6 +224,15 @@ function jcDayText(d, opts){
 /* Take a Leaflet map down safely. Leaflet 1.9.4 leaves a 250 ms "zoom finished" timer running after
    remove(); a tab switch inside that window threw "_leaflet_pos" of undefined (the flaky map tests,
    and a real phone tapping fast). Clearing the animating flag makes that late timer a no-op. */
+/* "12 min ago" / "3 h ago" / "2 days ago"; "" for a bad or future time. now: ms (a page's own clock), else Date.now() */
+function jcAgo(iso, now){
+  var t = Date.parse(iso);
+  if (!isFinite(t)) return "";
+  var m = Math.round(((now || Date.now()) - t) / 60000);
+  if (m < -5) return "";
+  m = Math.max(0, m);
+  return m < 60 ? jcFmt("adm_h_min", { n: m }) : m < 2880 ? jcFmt("adm_h_hours", { n: Math.round(m / 60) }) : jcFmt("adm_h_days", { n: Math.round(m / 1440) });
+}
 function jcMapRemove(m){
   if (!m) return;
   try { m.stop(); } catch(e){}

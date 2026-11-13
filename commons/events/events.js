@@ -170,16 +170,7 @@ function legendHtml(ev){
   }).join("") + '</div>' : '';
 }
 /* "Map Labels": the key in a popup window instead of under the map (Zee: "looks very messy") */
-function openLabels(){
-  var d = el("labels");
-  if (!d) return;
-  d.innerHTML = '<div class="sheethead"><h2>' + esc(jcT("ev_labels")) + '</h2>' +
-    '<button type="button" class="lang" id="labelsClose">' + esc(jcT("ev_labels_close")) + '</button></div>' + legendHtml(data.event);
-  on("labelsClose", function(){ closeLabels(d); });
-  if (d.showModal) d.showModal(); else d.setAttribute("open", "");
-}
-/* older browsers without <dialog>: it was opened with [open], so close the same way (review F1) */
-function closeLabels(d){ if (d.close) d.close(); else d.removeAttribute("open"); }
+function openLabels(){ jcKeySheet("labels", legendHtml(data.event)); }   /* the kit's key window (assets/map.js) */
 
 function show(name){
   /* state first: map.remove() fires popupclose, which must not draw onto a dying map (review R1) */
@@ -879,7 +870,7 @@ function renderMap(entries){
     /* top right, one row: Map Labels · Street; Find Me bottom right (Zee, 2026-11-06) */
     jcMapHtml("map", layer, { before: venue || !legendHtml(ev) ? '' :
       '<button type="button" class="lang" id="labelsBtn" aria-haspopup="dialog">' + esc(jcT("ev_labels")) + '</button>' }) +
-    '<dialog class="sheet" id="labels" aria-label="' + esc(jcT("ev_labels")) + '"></dialog>' +
+    jcKeySheetHtml("labels") +
     '<div id="mapAfter">' +
     (unpinned ? '<p class="help" style="margin-top:8px">' + esc(unpinned) + ' · ' + esc(jcT("ev_unpinned")) +
       ' — <a href="#" id="seeList">' + esc(jcT("ev_list")) + '</a></p>' : '') +
@@ -891,12 +882,6 @@ function renderMap(entries){
   on("labelsBtn", openLabels);
   on("fullBtn", function(){ full.set(!full.on); });
   var m0 = document.querySelector(".evmapwrap");
-  var dl = el("labels");   /* a tap on the dimmed backdrop closes it */
-  if (dl) dl.addEventListener("click", function(e2){
-    if (e2.target !== dl) return;
-    var r = dl.getBoundingClientRect();     /* the window's own padding also reports the dialog: outside only (F2) */
-    if (e2.clientX < r.left || e2.clientX > r.right || e2.clientY < r.top || e2.clientY > r.bottom) closeLabels(dl);
-  });
   document.body.classList.add("evfit");     /* the map screen doesn't scroll: no spare padding under it */
   fitMap();                                 /* before Leaflet measures the box… */
   requestAnimationFrame(fitSoon);           /* …and again once the page has settled (fonts, header) */

@@ -45,6 +45,7 @@ function hasStoredSession(){
 function moduleCard(key, enabled){
   return '<div class="card">' + jcIcon(key, 26) + '<h2 dir="auto">' + esc(jcModTitle(key)) + '</h2>' +
     '<p>' + esc(jcT("module_" + key + "_desc")) + '</p>' +
+    (key === "pets" && enabled ? petAlertsHtml() : '') +
     (enabled ? '<a class="go" href="' + esc(key) + '/">' + esc(jcT("cta_" + key)) + '</a>'
              : '<span class="pill">' + esc(jcT("coming_soon")) + '</span>') + '</div>';
 }
@@ -98,6 +99,32 @@ function renderPicker(){
 }
 
 var hubHome = null;      /* the member's home (jc_me_get) — for the greeting */
+/* R5b-2b-2a: the Pets card's lines — "1 missing pet" (red) and, for the household only, "Biscuit was seen out ·
+   2 h ago" (amber). One jc_pets_alerts read per hub visit, only while the pets flag is on (the kill switch: no pets
+   RPC otherwise). Unreadable → no lines, never an error on the hub. */
+var petAlerts = null, petAlertsAsked = false;
+function petAlertsHtml(){
+  var a = petAlerts;
+  if (!a) return '';
+  var miss = Array.isArray(a.missing) ? a.missing.length : 0;
+  var out = (Array.isArray(a.seen_out) ? a.seen_out : []).filter(function(x){
+    return x && typeof x.name === "string" && jcAgo(x.at);
+  }).slice(0, 2);
+  if (!miss && !out.length) return '';
+  return '<div class="hubalerts" id="hubPets">' +
+    (miss ? '<b class="hubmiss">' + esc(miss === 1 ? jcT("hub_pets_missing_1") : jcFmt("hub_pets_missing_n", { n: miss })) + '</b>' : '') +
+    out.map(function(x){ return '<b class="hubout" dir="auto">' + esc(jcFmt("hub_pets_seen_out", { n: x.name, t: jcAgo(x.at) })) + '</b>'; }).join("") +
+    '</div>';
+}
+function loadPetAlerts(){
+  if (petAlertsAsked) return;
+  petAlertsAsked = true;
+  rpc("jc_pets_alerts").then(function(d){
+    if (!d || typeof d !== "object") return;
+    petAlerts = d;
+    if (mode === "hub") renderHub();
+  }, function(){ /* no lines */ });
+}
 function renderHub(){
   var cfg = cfgFor(hubCommunity), name = jcCommunityName(cfgs[hubCommunity], hubCommunity);
   document.title = name;
@@ -108,6 +135,7 @@ function renderHub(){
   el("cards").innerHTML = ["events", "bookings", "pets", "community"].map(function(k){
     return moduleCard(k, !!(mods[k] && mods[k].enabled));
   }).join("");
+  if (mods.pets && mods.pets.enabled === true) loadPetAlerts();
   jcTabBar("", "commons", cfg);
   var b = (cfg.broadcast || "").trim();
   el("bcast").textContent = b ? "⚠️ " + b : "";

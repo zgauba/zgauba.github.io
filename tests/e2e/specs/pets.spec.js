@@ -1,13 +1,13 @@
 // R5b-1 — residents' Pets page (server S4 + R5a). Plan: docs/plans/R5-pets.md.
 // The stub mirrors the server's privacy rules (jc_pet_card / jc_pet_get): an owned pet's home is always sent (homes
 // can't be hidden — HH 2026-11-11; `noHome` fakes a server that sends none, to check the page renders only what
-// arrives); sightings only for strays / community animals, the own household and Pets admins; never a reporter.
+// arrives); sightings only as the server's rule sends them (jc_pet_sight_from); never a reporter.
 // The page must render exactly what arrives.
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const { stubBackend, ok, raise, CONFIG, MEMBER, MEMBER_NO_HOME } = require("./stub");
 const PNG_1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
-const { signIn, petsBackend: backend, PET_GROUP: GROUP, petId: ID, PET_MY_HOME: MY_HOME, PET_V40: V40, PET_MINE_HOME: MINE_HOME } = require("./backends");
+const { signIn, tapWhenStill, petsBackend: backend, PET_GROUP: GROUP, petId: ID, PET_MY_HOME: MY_HOME, PET_V40: V40, PET_MINE_HOME: MINE_HOME } = require("./backends");
 
 test.use({ timezoneId: "Europe/London" });
 
@@ -42,10 +42,11 @@ test("module off: the kill switch — a notice, no pets RPC, no Pets in the bar,
   await expect(page.locator("#toPets")).toHaveCount(0);
 });
 
-test("List: missing on top; filters split strays from community animals; homes only as sent (neutral label, never a guessed Villa)", async ({ page }) => {
-  const b = backend({ extra: [{ id: ID(7), kind: "owned", species: "bird", name: "Kiwi", home: { id: "h9", village: "ain-al-maha", building: "B2", number: "304", noHome: true } }] });
+test("Pets tab: owned pets only, missing on top, the server's (nearest-first) order kept, species / wanderer chips", async ({ page }) => {
+  const b = backend({ serverOrder: true, extra: [{ id: ID(7), kind: "owned", species: "bird", name: "Kiwi", home: { id: "h9", village: "ain-al-maha", building: "B2", number: "304", noHome: true } }] });
   const { calls } = await open(page, b);
-  await expect(page.locator('[role="tab"]')).toHaveText(["List", "My Pets"]);
+  await expect(page.locator('[role="tab"]')).toHaveText(["Pets", "Strays", "My Pets"]);
+  await expect(page.locator("#pttab-pets")).toHaveAttribute("aria-selected", "true");
   await expect(page.locator("#ptMissing li")).toHaveCount(1);
   const luna = page.locator(`#ptMissing [data-pet="${ID(2)}"]`);
   await expect(luna).toContainText("Cat · Pet");
@@ -53,24 +54,114 @@ test("List: missing on top; filters split strays from community animals; homes o
   await expect(luna).toContainText("Last seen: Near the beach park");
   await expect(luna.locator(".chip.miss")).toHaveText("Missing");
   expect(lastCall(calls, "jc_pets_list").args).toEqual({ p_filter: "all" });
-  // All: everyone except the missing one (it is already on top), A–Z as the server sorts
-  await expect(page.locator("#ptList b")).toHaveText(["Biscuit", "Ginger", "Kiwi", "Mochi", "Rex", "Sandy"]);
+  // owned only, in the order the server sent (nearest my home pin) — not re-sorted A–Z; no strays here
+  await expect(page.locator("#ptList b")).toHaveText(["Rex", "Mochi", "Kiwi"]);
+  await expect(page.locator("#ptSorted")).toHaveText("Sorted by: nearest your home");
+  await expect(page.locator("#view")).not.toContainText("Ginger");
+  await expect(page.locator("#view")).not.toContainText("Community animal");
   // the server sends no home (defensive: render only what arrives) → the card shows none
   expect((await page.locator(`[data-pet="${ID(7)}"]`).innerText()).replace(/\s+/g, " ").trim()).toBe("Kiwi Bird · Pet");
-  await page.locator("#ptF-strays").click();
-  await expect(page.locator("#ptF-strays")).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("#ptList b")).toHaveText(["Biscuit", "Ginger"]);
-  await expect(page.locator(`[data-pet="${ID(3)}"]`)).toContainText("Behind the mosque");
-  await expect(page.locator(`[data-pet="${ID(3)}"] .chip`)).toHaveText("Under care");
-  await page.locator("#ptF-community").click();
-  await expect(page.locator("#ptList b")).toHaveText(["Sandy"]);
-  await expect(page.locator(`[data-pet="${ID(4)}"]`)).toContainText("Dog · Community animal");
-  await page.locator("#ptF-wanderers").click();
-  await expect(page.locator("#ptList b")).toHaveText(["Mochi"]);
-  await expect(page.locator("#ptMissing li")).toHaveCount(1);              // missing stays on top under every filter
+  await expect(page.locator("#ptFilters button")).toHaveText(["All", "Dogs", "Cats", "Other", "Wanderers"]);
+  for (const [f, names] of [["dogs", ["Rex"]], ["cats", ["Mochi"]], ["other", ["Kiwi"]], ["wanderers", ["Mochi"]]]) {
+    await page.locator("#ptF-" + f).click();
+    await expect(page.locator("#ptF-" + f)).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#ptList b")).toHaveText(names);
+    await expect(page.locator("#ptMissing li")).toHaveCount(1);            // missing stays on top under every filter
+  }
   await expect(page.locator('#tabbar a[data-tab="pets"]')).toHaveAttribute("aria-current", "page");
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/pt-list.png", fullPage: true });
 });
+
+test("Pets tab: no home pin → name order said plainly; an old ?tab=list link opens Pets", async ({ page }) => {
+  const b = backend({ me: Object.assign({}, MEMBER, { home: Object.assign({}, MEMBER.home, { lat: null, lng: null, pin_set_at: null }) }) });
+  await open(page, b, { q: "?tab=list" });
+  await expect(page.locator("#pttab-pets")).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#ptSorted")).toHaveText("Sorted by: name. Pin your home on My Home to see the nearest first.");
+});
+
+const GINGER_SEEN = { lat: 24.5310, lng: 54.4320, at: "2026-11-11T04:30:00Z" };   // 2 h before NOW
+function straysBackend() {
+  return backend({ serverOrder: true, pets: [
+    { id: ID(3), kind: "stray", species: "cat", name: "Ginger", care_state: "under_care", territory: "Behind the mosque",
+      territory_lat: 24.60, territory_lng: 54.50, last_seen: GINGER_SEEN, last_seen_at: GINGER_SEEN.at },
+    { id: ID(4), kind: "stray", species: "dog", name: "Sandy", care_state: "known_fine", territory: "The marina", territory_lat: 24.50, territory_lng: 54.40 },
+    { id: ID(8), kind: "stray", species: "cat", name: "Pepper", care_state: "needs_help" },                       // no location yet
+    { id: ID(5), kind: "stray", species: "cat", name: "Biscuit", care_state: "rehomed", territory_lat: 24.52, territory_lng: 54.41 },
+    { id: ID(1), kind: "owned", species: "dog", name: "Rex", home: V40 },
+  ] });
+}
+
+test("Strays tab: one coloured pin per stray (latest sighting, else territory), rehomed off the map, cards below — Needs help first", async ({ page }) => {
+  await open(page, straysBackend(), { q: "?tab=strays" });
+  await expect(page.locator("#pttab-strays")).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#ptmap")).toHaveAttribute("aria-label", "Map of strays");
+  // Ginger (sighting) + Sandy (territory); Pepper has no location; Biscuit is rehomed
+  await expect(page.locator("#ptmap path.leaflet-interactive")).toHaveCount(2);
+  const fills = await page.locator("#ptmap path.leaflet-interactive").evaluateAll((ps) => ps.map((p) => p.getAttribute("fill")));
+  expect(fills).toEqual(["#3e9b76", "#a9a294"]);                          // Under care = the normal pin; Known and fine = neutral
+  await expect(page.locator("#ptUnplaced")).toHaveText("1 not on the map yet — see below");
+  await expect(page.locator("#ptStrays b")).toHaveText(["Pepper", "Ginger", "Sandy", "Biscuit"]);
+  await expect(page.locator(`#ptStrays [data-pet="${ID(4)}"]`)).toContainText("Dog · Stray");
+  await expect(page.locator(`#ptStrays [data-pet="${ID(4)}"] .chip`)).toHaveText("Known and fine");
+  await expect(page.locator(`#ptStrays [data-pet="${ID(8)}"] .chip.warn`)).toHaveText("Needs help");
+  await expect(page.locator(`#ptStrays [data-pet="${ID(3)}"]`)).toContainText("Last seen 2 h ago");
+  await expect(page.locator("#view")).not.toContainText("Rex");
+  // names only when zoomed in
+  await expect(page.locator("#ptmap")).toHaveClass(/nolabels/);
+  await page.clock.runFor(2000);                                             // the fake clock: let the fit-to-pins animation end
+  await page.evaluate(() => map.setView([24.531, 54.432], 18, { animate: false }));
+  await expect(page.locator("#ptmap")).not.toHaveClass(/nolabels/);
+  await expect(page.locator("#ptmap .bklabel")).toHaveText(["Ginger", "Sandy"]);
+  // the key
+  await page.locator("#labelsBtn").click();
+  await expect(page.locator("#ptKey .legend .chip")).toHaveText(["Needs help", "Under care", "Known and fine"]);
+  await page.locator("#ptKeyClose").click();
+  await expect(page.locator("#ptKey")).not.toBeVisible();
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/pt-strays.png", fullPage: true });
+  // a pin → its popup → Open → the stray's page
+  await tapWhenStill(page, page.locator("#ptmap path.leaflet-interactive").first());
+  await expect(page.locator(".leaflet-popup")).toContainText("Ginger");
+  await expect(page.locator(".leaflet-popup")).toContainText("Cat · Under care");
+  await page.locator(".leaflet-popup [data-popopen]").click();
+  await expect(page.locator("h1")).toHaveText("Ginger");
+  await page.locator("#jcBackBtn").click();
+  await expect(page.locator("#pttab-strays")).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#ptmap path.leaflet-interactive")).toHaveCount(2);           // a fresh map, not a dead one
+});
+
+test("My Pets: my pet seen out on its own in the last 24 h → an amber line; older → none; the hub card says it too", async ({ page }) => {
+  const out = "2026-11-11T04:30:00Z";
+  const b = backend({ alerts: { missing: [{ id: ID(2), name: "Luna" }], seen_out: [{ id: ID(6), name: "Mochi", at: out }] },
+    extra: [{ id: ID(9), kind: "owned", species: "dog", name: "Bruno", home: MINE_HOME, last_seen_at: "2026-11-10T04:00:00Z" }] });
+  b.st.pets.find((p) => p.name === "Mochi").last_seen_at = out;
+  const { calls } = await open(page, b, { q: "?tab=mine" });
+  const before = named(calls, "jc_pets_alerts").length;
+  await expect(page.locator(`#ptMine [data-pet="${ID(6)}"] .seenout`)).toHaveText("Seen out on their own · 2 h ago");
+  await expect(page.locator(`#ptMine [data-pet="${ID(9)}"] .seenout`)).toHaveCount(0);
+  await page.goto("./");
+  await expect(page.locator("#hubPets .hubmiss")).toHaveText("1 missing pet");
+  await expect(page.locator("#hubPets .hubout")).toHaveText("Mochi was seen out · 2 h ago");
+  await expect.poll(() => named(calls, "jc_pets_alerts").length).toBe(before + 1);   // one read per hub visit
+  if (process.env.SHOT_DIR) await page.locator("#hubPets").locator("xpath=..").screenshot({ path: process.env.SHOT_DIR + "/pt-hub.png" });
+});
+
+for (const lang of ["en", "ar"]) {
+  test(`axe ${lang}: Pets, Strays (map + key open) and My Pets have no violations`, async ({ page }) => {
+    await open(page, straysBackend(), { lang });
+    const scan = async () => (await new AxeBuilder({ page }).disableRules(["region"]).analyze()).violations.map((v) => v.id + ": " + v.nodes.map((n) => n.target).join(" | "));
+    await expect(page.locator("#ptSorted")).toBeVisible();
+    expect(await scan()).toEqual([]);
+    await page.locator("#pttab-strays").click();
+    await expect(page.locator("#ptmap path.leaflet-interactive")).toHaveCount(2);
+    expect(await scan()).toEqual([]);
+    await page.locator("#labelsBtn").click();
+    await expect(page.locator("#ptKey")).toBeVisible();
+    expect(await scan()).toEqual([]);
+    await page.locator("#ptKeyClose").click();
+    await page.locator("#pttab-mine").click();
+    expect(await scan()).toEqual([]);
+  });
+}
 
 test("someone else's pet that isn't missing: no sightings, no report button, no owner controls, no share", async ({ page }) => {
   const b = backend();
@@ -254,13 +345,13 @@ test("the Edit form says neighbors see my home — no hiding option offered (HH)
 
 test("review: a shared ?show= belongs to the shared pet only — after Back, the same pet opens on its own default (About)", async ({ page }) => {
   const b = backend();
-  await open(page, b, { q: "?pet=" + ID(3) + "&show=sightings" });
+  await open(page, b, { q: "?pet=" + ID(3) + "&tab=strays&show=sightings" });
   await expect(page.locator("#ptpg-sightings")).toHaveAttribute("aria-selected", "true");
   await page.locator("#jcBackBtn").click();
   await page.locator(`[data-open="${ID(3)}"]`).click();
   await expect(page.locator("#ptpg-about")).toHaveAttribute("aria-selected", "true");
   await page.locator("#ptpg-about").click();
-  expect(new URL(page.url()).search).toBe("?pet=" + ID(3) + "&show=about");     // a chosen tab is kept for a reload
+  expect(new URL(page.url()).search).toBe("?pet=" + ID(3) + "&tab=strays&show=about");   // a chosen tab (and the list tab to return to) kept for a reload
 });
 
 test("missing switch: one call (no show-home step — HH); the alarm is up; Found takes it down", async ({ page }) => {
@@ -474,6 +565,7 @@ test("axe: list, a stray's page and the edit form have no violations", async ({ 
   await expect(page.locator("#ptList")).toBeVisible();
   const scan = async () => (await new AxeBuilder({ page }).disableRules(["region"]).analyze()).violations.map((v) => v.id + ": " + v.nodes.map((n) => n.target).join(" | "));
   expect(await scan()).toEqual([]);
+  await page.locator("#pttab-strays").click();
   await page.locator(`[data-open="${ID(3)}"]`).click();
   await expect(page.locator("#ptCare")).toBeVisible();
   expect(await scan()).toEqual([]);
@@ -631,7 +723,7 @@ test("R5c review: a page left open past the hour re-signs its photos instead of 
   const { calls } = await open(page, b);
   await expect.poll(() => loaded(page.locator(`li[data-pet="${ID(1)}"] .ptph[data-photo]`))).toBe(true);
   expect(calls.filter((c) => c.name === "sign")).toHaveLength(1);
-  await page.locator("#ptF-owned").click();                                   // a redraw inside the hour: reuses it
+  await page.locator("#ptF-dogs").click();                                    // a redraw inside the hour: reuses it
   expect(calls.filter((c) => c.name === "sign")).toHaveLength(1);
   await page.clock.fastForward("56:00");                                      // past the hour, less the 5-minute margin
   await page.locator("#ptF-all").click();

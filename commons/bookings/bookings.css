@@ -32,10 +32,7 @@ h2.group{font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color
 #view > .subtabs + .msg{margin-top:-4px}
 [role="tabpanel"]{display:flex; flex-direction:column; gap:12px}
 /* the Map tab: the shared map look lives in assets/mapui.css (same classes as the event map) */
-/* the court name on its pin */
-.leaflet-tooltip.bklabel{background:var(--jc-surface); color:var(--jc-ink); border:1px solid var(--jc-line);
-  font:700 12.5px/1.3 var(--jc-font); padding:3px 8px; border-radius:8px; box-shadow:none}
-.leaflet-tooltip-top.bklabel::before{border-top-color:var(--jc-line)}
+/* the court name on its pin: .bklabel lives in assets/mapui.css (shared with the Strays map) */
 .pop{display:flex; flex-direction:column; gap:4px}
 .pop .popacts{margin-top:4px; align-items:center}
 .bkhead{display:flex; flex-direction:column; gap:4px}

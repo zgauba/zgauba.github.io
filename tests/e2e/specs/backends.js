@@ -462,6 +462,19 @@ const PET_MY_HOME = "h1";                                      // stub.js MEMBER
 const PET_V40 = { id: "h40", village: "seef-al-jubail", building: null, number: "40" };
 const PET_MINE_HOME = { id: PET_MY_HOME, village: "ain-al-maha", building: null, number: "12" };
 
+// a map pin moves while Leaflet animates: tap it once it has stood still (Courts, Strays maps)
+async function tapWhenStill(page, loc) {
+  let last = null;
+  await expect.poll(async () => {
+    const b = await loc.boundingBox();
+    const k = b && Math.round(b.x) + "," + Math.round(b.y);
+    const still = k !== null && k === last;
+    last = k;
+    return still;
+  }, { intervals: [250], timeout: 10000 }).toBe(true);
+  await loc.dispatchEvent("click");
+}
+
 function petsBackend(opts = {}) {
   const st = {
     enabled: opts.enabled !== false,
@@ -494,7 +507,9 @@ function petsBackend(opts = {}) {
       microchipped: p.microchipped, missing: p.missing, missing_since: p.missing_since, last_seen_note: p.last_seen_note,
       care_state: p.care_state, photo_path: p.photo_path, mine,
       home: h && !h.noHome ? { village: h.village, type: h.type, building: h.building, number: h.number } : null,   // type: R5b-1b server (absent = older server)
-      territory: p.territory, territory_lat: p.territory_lat, territory_lng: p.territory_lng, care: p.kind === "stray" ? p.care : null };
+      territory: p.territory, territory_lat: p.territory_lat, territory_lng: p.territory_lng, care: p.kind === "stray" ? p.care : null,
+      // R5b-2b-0: the server decides who gets these (jc_pet_sight_from); a test sets them per pet as that viewer would get them
+      last_seen: p.last_seen || null, last_seen_at: p.last_seen_at || null };
   };
   const find = (id) => st.pets.find((p) => p.id === id && p.status === "active");
   const off = () => (st.enabled ? null : raise("MODULE_OFF"));
@@ -507,7 +522,9 @@ function petsBackend(opts = {}) {
       modules: { events: { enabled: false }, bookings: { enabled: false }, pets: { enabled: st.enabled } } })),
     jc_me_get: (a, c) => (c.signedIn ? ok(st.me) : raise("NOT_SIGNED_IN")),
     jc_pets_list: (a) => off() || (a.p_filter !== "all" ? raise("BAD_FILTER")
-      : ok(st.pets.filter((p) => p.status === "active").sort((x, y) => (y.missing - x.missing) || x.name.localeCompare(y.name)).map(card))),
+      // the server orders missing → nearest the viewer's home pin → name; opts.serverOrder = keep the fixture order (as "nearest")
+      : ok(st.pets.filter((p) => p.status === "active").sort((x, y) => (y.missing - x.missing) || (opts.serverOrder ? 0 : x.name.localeCompare(y.name))).map(card))),
+    jc_pets_alerts: () => off() || ok(opts.alerts || { missing: st.pets.filter((p) => p.status === "active" && p.missing).map((p) => ({ id: p.id, name: p.name })), seen_out: [] }),
     jc_pet_get: (a) => {
       if (off()) return off();
       if (opts.getError) return raise(opts.getError);
@@ -598,6 +615,6 @@ function petsBackend(opts = {}) {
   };
   return { st, rpc, storage };
 }
-module.exports = { petsBackend, PET_GROUP, petId, PET_MY_HOME, PET_V40, PET_MINE_HOME, PET_PNG, eventsBackend, adminBackend, signIn, LIVE_ID, PAST_ID, SCHEMA, LIVE, PAST, ENTRIES, STATS,
+module.exports = { tapWhenStill, petsBackend, PET_GROUP, petId, PET_MY_HOME, PET_V40, PET_MINE_HOME, PET_PNG, eventsBackend, adminBackend, signIn, LIVE_ID, PAST_ID, SCHEMA, LIVE, PAST, ENTRIES, STATS,
   PIN_SCHEMA, home, pinEvent, PINS_ID, HAQ_ID, DAY_ID, LIGHTS_ID, LIGHTS_EVENT, LIGHTS_SAFETY, dayBackend, healthReport, NOTICES,
   ADMIN_DRAFT_ID, ADMIN_LIVE_ID, ADMIN_PAST_ID, ADMIN_MARKET_ID, ADMIN_MARKET };

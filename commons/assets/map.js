@@ -13,12 +13,15 @@ var jcTiles = {
 /* ---------- the map kit (R5b-2a): one copy of what Events, Courts, the home pin and the organizer pin
    each repeated. Load after leaflet.js; the jcT / getElementById calls run later, at draw time. ---------- */
 
-/* map colours from the tokens (pins take the accent; the "you are here" dot is --jc-me) */
+/* map colours from the tokens (pins take the accent; the "you are here" dot is --jc-me; warn / muted for
+   state-coloured pins such as the Strays map — colour only for real states) */
 function jcMapColors(){
   var s = getComputedStyle(document.documentElement);
   return { accent: s.getPropertyValue("--jc-accent").trim() || "#3e9b76",
            ink: s.getPropertyValue("--jc-ink").trim() || "#f6f2e9",
-           me: s.getPropertyValue("--jc-me").trim() || "#3a86ff" };
+           me: s.getPropertyValue("--jc-me").trim() || "#3a86ff",
+           warn: s.getPropertyValue("--jc-warn").trim() || "#f2b33c",
+           muted: s.getPropertyValue("--jc-muted").trim() || "#a9a294" };
 }
 
 /* a phone-sized popup the map pans clear of the edges: room for the zoom buttons on one side, and
@@ -97,6 +100,28 @@ function jcMapFull(getMap, onExit){
     if (e.key === "Escape" && ctl.on && !document.querySelector("dialog[open]")) ctl.set(false);
   });
   return ctl;
+}
+
+/* "Map Labels" (Events, Pets): the map's key in a window, not under the map (Zee: "looks very messy").
+   jcKeySheetHtml(id) goes next to the map; jcKeySheet(id, html) opens it — html is trusted markup (escaped by
+   the caller). Close button, Escape (native <dialog>), and a tap on the dimmed backdrop all close it. */
+function jcKeySheetHtml(id){ return '<dialog class="sheet" id="' + id + '" aria-label="' + esc(jcT("ev_labels")) + '"></dialog>'; }
+function jcKeySheetClose(d){ if (!d) return; if (d.close) d.close(); else d.removeAttribute("open"); }   /* no <dialog>: opened with [open] (review F1) */
+function jcKeySheet(id, html){
+  var d = document.getElementById(id);
+  if (!d) return;
+  d.innerHTML = '<div class="sheethead"><h2>' + esc(jcT("ev_labels")) + '</h2>' +
+    '<button type="button" class="lang" id="' + id + 'Close">' + esc(jcT("ev_labels_close")) + '</button></div>' + html;
+  document.getElementById(id + "Close").addEventListener("click", function(){ jcKeySheetClose(d); });
+  if (!d.dataset.wired) {
+    d.dataset.wired = "1";
+    d.addEventListener("click", function(e){
+      if (e.target !== d) return;
+      var r = d.getBoundingClientRect();   /* the window's own padding also reports the dialog: outside only (F2) */
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) jcKeySheetClose(d);
+    });
+  }
+  if (d.showModal) d.showModal(); else d.setAttribute("open", "");
 }
 
 /* ---------- pin picker: the map pans under a fixed centre ring; the page reads map.getCenter() on Save ---------- */

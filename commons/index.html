@@ -54,6 +54,10 @@ h1{font-size:26px; font-weight:800; letter-spacing:-.01em; margin:0}
   padding:18px 16px; display:flex; flex-direction:column; gap:8px}
 .card h2{font-size:17px; margin:0}
 .card p{margin:0; color:var(--jc-muted); font-size:13.5px; flex:1}
+/* the Pets card's lines (R5b-2b-2a): red = a missing pet; amber = your pet was seen out */
+.hubalerts{display:flex; flex-direction:column; gap:2px; font-size:13.5px}
+.hubalerts .hubmiss{color:var(--jc-danger)}
+.hubalerts .hubout{color:var(--jc-warn)}
 .pill{align-self:flex-start; font-size:11.5px; font-weight:800; letter-spacing:.04em;
   border-radius:var(--jc-radius-pill); padding:4px 10px; background:var(--jc-surface-2);
   color:var(--jc-muted); border:1px solid var(--jc-line); text-transform:uppercase}
