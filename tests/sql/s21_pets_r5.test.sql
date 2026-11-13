@@ -133,9 +133,10 @@ begin
   if jc_pet_get(v_dog) -> 'care' <> 'null'::jsonb then raise exception 'FAIL R04j owned card has care: %', jc_pet_get(v_dog) -> 'care'; end if;
   k := k + 10;
 
-  -- ---------- R05 sightings: only for a missing pet or a stray / community animal ----------
+  -- ---------- R05 sightings: strays, missing pets, and (R5b-2b-0) owned non-wanderers "out on their own" ----------
   msg := pg_temp.s21_err(format('select jc_pet_sighting_add(%L, %L, null, null)', v_dog, 'by the park'));
-  if msg is distinct from 'SIGHTINGS_CLOSED' then raise exception 'FAIL R05a sighting on a pet at home: %', msg; end if;
+  if msg is not null then raise exception 'FAIL R05a out-alone sighting on a pet at home refused: %', msg; end if;
+  if jc_pet_get(v_dog) -> 'sightings' <> 'null'::jsonb then raise exception 'FAIL R05a2 neighbour sees a household-only sighting'; end if;
   perform jc_pet_sighting_add(v_cat, 'near the fountain', 24.54, 54.44);
   perform jc_pet_sighting_add(v_fine, null, null, null);
   perform pg_temp.s21_as(o1);
@@ -144,13 +145,13 @@ begin
   perform jc_pet_sighting_add(v_dog, 'by the park', 24.55, 54.45);
   perform pg_temp.s21_as(o1);
   v := jc_pet_get(v_dog);
-  if jsonb_array_length(v -> 'sightings') <> 1 or v -> 'sightings' -> 0 ? 'reporter'
+  if jsonb_array_length(v -> 'sightings') <> 2 or v -> 'sightings' -> 0 ? 'reporter'
      or (v -> 'sightings' -> 0 ->> 'by_me')::boolean then raise exception 'FAIL R05b owner view of a sighting: %', v -> 'sightings'; end if;
-  -- found closes sightings again; a rehomed stray takes none (security L4)
+  -- found: the pet is back to household-only out-alone reports; a rehomed stray takes none (security L4)
   perform jc_pet_missing_set(v_dog, false, null);
   perform pg_temp.s21_as(o2);
   msg := pg_temp.s21_err(format('select jc_pet_sighting_add(%L, null, null, null)', v_dog));
-  if msg is distinct from 'SIGHTINGS_CLOSED' then raise exception 'FAIL R05c found pet still open: %', msg; end if;
+  if msg is not null then raise exception 'FAIL R05c found (non-wanderer) pet should take out-alone reports: %', msg; end if;
   perform pg_temp.s21_as(ad);
   v := jc_admin_stray_save(null, '{"species": "dog", "name": "Lucky", "care_state": "rehomed"}');
   perform pg_temp.s21_as(o2);
@@ -158,7 +159,7 @@ begin
   if msg is distinct from 'SIGHTINGS_CLOSED' then raise exception 'FAIL R05d rehomed stray open: %', msg; end if;
   perform pg_temp.s21_as(o1);
   perform jc_pet_missing_set(v_dog, true, null);
-  k := k + 4;
+  k := k + 5;
 
   -- ---------- R06 (HH 2026-11-11) no hidden homes: an owned pet's home is always on its card; no opt-in ----------
   perform pg_temp.s21_as(o2);

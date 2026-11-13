@@ -311,3 +311,14 @@ Protocol-specific:
   top). OK?
 - **Q3** The household's "seen out" line on the **Commons home** card too, or only in Pets? **Recommend both.**
 - **Q4** Stray colours: Needs help amber, Under care the normal green pin, Known and fine grey. OK?
+
+**Answers (Zee 2026-11-13, approved — "Proceed"):** Q1 yes (24 h before) · Q2 OK · Q3 yes, both · Q4 OK.
+R5b-2b-0 built as `20261113100000_r5b2b0_pets_visibility.sql` + `tests/sql/s24_pets_visibility.test.sql`. Card keys
+as built: `last_seen {lat, lng, at}` = newest visible sighting **with a location**; `last_seen_at` = newest visible
+sighting at all (for "seen out · 2 h ago" when the report had no pin).
+
+**R5b-2b-0 review follow-ups** (`docs/qa/r5b2b0-pets-visibility-review-2026-11-13.md`):
+- R5b-2b-2b must ship the disclosure before the out-alone button: privacy line, `help_pets_3`, manifest R5a note.
+- Dependency: nearest-first order is safe only because home pins are already visible to members (`jc_directory_list`).
+  If home pins are ever hidden again, re-review the order (distance buckets, or drop it).
+- Backlog: household "dismiss this report" for out-alone sightings; clamp sighting lat/lng to the community area.

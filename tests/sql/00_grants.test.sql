@@ -52,7 +52,9 @@ declare
     -- R5a (pets to spec)
     'jc_admin_pet_care_set', 'jc_pets_group_get', 'jc_admin_pets_group_set',
     -- RM-a (renamable modules)
-    'jc_admin_module_label_set'];
+    'jc_admin_module_label_set',
+    -- R5b-2b-0 (pets alerts for the hub)
+    'jc_pets_alerts'];
 begin
   -- Pre-launch suite: fixtures are written into 'jubail' and rolled back. Refuse to run
   -- once real residents exist — post-launch tests must move to a test community.

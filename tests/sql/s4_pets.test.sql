@@ -118,7 +118,8 @@ begin
 
   -- ---------- P06 sightings: anyone logs; an owned pet's trail goes to its household ----------
   perform jc_pet_sighting_add(v_simba, 'by the souk', 24.55, 54.49);
-  if jc_pet_get(v_simba) -> 'sightings' <> 'null'::jsonb then raise exception 'FAIL P06a neighbour sees owned trail'; end if;
+  -- R5b-2b-0: while missing, neighbours helping to search see the trail (rule A; full persona matrix in s24)
+  if jsonb_array_length(jc_pet_get(v_simba) -> 'sightings') <> 1 then raise exception 'FAIL P06a neighbour can''t see a missing pet''s trail'; end if;
   perform set_config('request.jwt.claims', json_build_object('sub', p1, 'role', 'authenticated')::text, true);
   if jsonb_array_length(jc_pet_get(v_simba) -> 'sightings') <> 1 then raise exception 'FAIL P06b owner can''t see sighting'; end if;
   v_err := null; begin perform jc_pet_sighting_add(v_simba, 'x', 24.55, null); exception when others then v_err := sqlerrm; end;
