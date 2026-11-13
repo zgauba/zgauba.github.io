@@ -44,26 +44,11 @@ var sent = null;      /* the note of the sighting just sent: the WhatsApp messag
 var group;            /* undefined = not read yet; null = none / unreadable; else the checked invite link */
 
 /* ---------- helpers ---------- */
-function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
-function say(cls, text){
-  var m = el("msg"); if (!m) return;
-  m.className = "msg " + cls; m.textContent = text;
-  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
-}
-function showOk(text){ say("ok", text); }
-function ptMsg(code){
-  var t = jcT("pt_err_" + code);
-  say("err", t === "pt_err_" + code ? jcErrText({ code: code }) : t);
-}
-function on(id, fn){ var n = el(id); if (n) n.addEventListener("click", fn); }
-function each(sel, fn, ev){
-  Array.prototype.forEach.call(document.querySelectorAll(sel), function(b){ b.addEventListener(ev || "click", function(){ fn(b); }); });
-}
-function ar(){ return jcLang() === "ar"; }
-function hObj(x){ return x && typeof x === "object" && !Array.isArray(x) ? x : null; }
+/* page helpers: the shared copies in assets/api.js (structural audit SA-1) */
+var msgBox = jcMsgBox, say = jcSay, showOk = jcShowOk, on = jcOn, each = jcEach, ar = jcIsAr, hObj = jcObj, setUrl = jcSetUrl, finite = jcFinite;
+function ptMsg(code){ jcShowErrFor("pt_err_", code); }
 function hasHome(){ return !!(state && state.me && state.me.home); }
-function moduleOn(){ var m = cfg && cfg.modules && cfg.modules.pets; return !!(m && m.enabled === true); }
-function setUrl(q){ try { history.replaceState(null, "", q ? "?" + q : location.pathname); } catch(e){} }
+function moduleOn(){ return jcModuleOn(cfg, "pets"); }
 function listUrl(){ return tab === "pets" ? null : "tab=" + tab; }
 function isPet(p){ return hObj(p) && typeof p.id === "string" && typeof p.name === "string" && (p.kind === "owned" || p.kind === "stray"); }
 function speciesText(p){ return jcT("pt_sp_" + (SPECIES.indexOf(p.species) >= 0 ? p.species : "other")); }
@@ -73,7 +58,6 @@ var DAY = 864e5;
 function recent(iso, ms){ var t = Date.parse(iso); return isFinite(t) && Date.now() - t < ms && t - Date.now() < 3e5; }
 /* my pet, at home, reported out on its own in the last 24 h (the server sends last_seen_at only to the household) */
 function seenOut(p){ return p.mine === true && p.kind === "owned" && p.missing !== true && recent(p.last_seen_at, DAY) ? jcAgo(p.last_seen_at) : ""; }
-function finite(n){ return typeof n === "number" && isFinite(n); }
 /* where a stray goes on the map: its latest visible sighting with a location, else its territory spot */
 function strayPos(p){
   var s = hObj(p.last_seen);
@@ -966,8 +950,7 @@ VIEWS.edit = function(){
       show("pet");
       loadPet(id, function(){
         if (!r.photoErr) return showOk(jcFmt(added ? "pt_added" : "pt_saved", { n: name }));
-        var t = jcT("pt_err_" + r.photoErr);
-        say("err", jcFmt("pt_photo_failed", { n: name, why: t === "pt_err_" + r.photoErr ? jcErrText({ code: r.photoErr }) : t }));
+        say("err", jcFmt("pt_photo_failed", { n: name, why: jcErrTextFor("pt_err_", r.photoErr) }));
       });
     }, function(code){
       if (code === "NOT_FOUND") { form = null; backToList("NOT_FOUND"); return true; }

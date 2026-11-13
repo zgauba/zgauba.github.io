@@ -23,16 +23,8 @@ var map = null;         /* live Leaflet map while the pin view is open */
 var claimSel = { village: null, type: null };
 
 /* ---------- small UI helpers ---------- */
-function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
-function showErr(code){ var m = el("msg"); if (!m) return; m.className = "msg err"; m.textContent = jcErrText({ code: code }); }
-function showOk(text){ var m = el("msg"); if (!m) return; m.className = "msg ok"; m.textContent = text; }
-function busy(id, onoff){
-  var b = el(id);
-  if (!b) return;
-  if (onoff) { b.dataset.label = b.textContent; b.textContent = jcT("working"); b.disabled = true; }
-  else { b.textContent = b.dataset.label || b.textContent; b.disabled = false; }
-}
-function on(id, fn){ var n = el(id); if (n) n.addEventListener("click", fn); }
+/* page helpers: the shared copies in assets/api.js (structural audit SA-1) */
+var msgBox = jcMsgBox, showErr = jcShowErr, showOk = jcShowOk, busy = jcBusy, on = jcOn;
 function me(){ return (state && state.me) || {}; }
 function home(){ return me().home; }
 function homeTitle(){ return jcHomeLabel(home()); }
@@ -167,7 +159,7 @@ var VIEWS = {
     jcTabsWire("mh-", MH_TABS, function(t){
       if (el("dname")) draftName = el("dname").value;   /* an unsaved name survives a tab switch */
       mhTab = t;
-      try { history.replaceState(null, "", t === "home" ? location.pathname : "?tab=" + t); } catch(e){}
+      jcSetUrl(t === "home" ? null : "tab=" + t);
       show("myhome");
     });
 
@@ -435,7 +427,7 @@ function wireFeedback(){
   });
   if (location.hash === "#feedback") {
     el("feedback").scrollIntoView(); t.focus();
-    try { history.replaceState(null, "", location.pathname + location.search); } catch(e){}   /* once, not on every redraw */
+    jcSetUrl(location.search.slice(1) || null);   /* drops the #fragment; once, not on every redraw */
   }
   f.addEventListener("submit", function(e){
     e.preventDefault();
@@ -479,7 +471,7 @@ function doInvite(){
 function acceptInvite(){
   var token = INVITE;
   INVITE = null;
-  try { history.replaceState(null, "", location.pathname); } catch(e){}  /* single use: drop it from the URL */
+  jcSetUrl(null);  /* single use: drop it from the URL */
   current = "invite";
   el("view").innerHTML =
     '<h1>' + esc(jcT("invite_title")) + '</h1>' +
@@ -495,7 +487,7 @@ function doAccept(token){
     if (r && r.status === "joined") {
       state.me = r.me;
       mhTab = "household";
-      try { history.replaceState(null, "", "?tab=household"); } catch(e){}
+      jcSetUrl("tab=household");
       show("myhome");
       showOk(jcFmt("invite_joined", { h: homeTitle() }));
     } else {

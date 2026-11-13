@@ -25,32 +25,13 @@ var tab = TABS.indexOf(params.get("tab")) >= 0 ? params.get("tab") : "list";
 var layer = "sat", userPos = null;      /* ?court= waiting for the list (kept for Try Again, review L2) */
 
 /* ---------- helpers ---------- */
-function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
-function showErr(code){ var m = el("msg"); if (!m) return; m.className = "msg err"; m.textContent = jcErrText({ code: code }); }
-function showOk(text){
-  var m = el("msg"); if (!m) return;
-  m.className = "msg ok"; m.textContent = text;
-  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });           /* a write far down the list (review M3) */
-}
-function bkMsg(code){
-  var t = jcT("bk_err_" + code);
-  if (t === "bk_err_" + code) return showErr(code);
-  var m = el("msg"); if (!m) return;
-  m.className = "msg err"; m.textContent = t;
-  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
-}
-function on(id, fn){ var n = el(id); if (n) n.addEventListener("click", fn); }
-function each(sel, fn, ev){
-  Array.prototype.forEach.call(document.querySelectorAll(sel), function(b){ b.addEventListener(ev || "click", function(){ fn(b); }); });
-}
-function ar(){ return jcLang() === "ar"; }
-function hObj(x){ return x && typeof x === "object" && !Array.isArray(x) ? x : null; }
+/* page helpers: the shared copies in assets/api.js (structural audit SA-1) */
+var msgBox = jcMsgBox, showErr = jcShowErr, showOk = jcShowOk, on = jcOn, each = jcEach, ar = jcIsAr, hObj = jcObj, hm = jcHM, hasPos = jcHasPos, setUrl = jcSetUrl;
+function bkMsg(code){ jcShowErrFor("bk_err_", code); }
 function hasHome(){ return !!(state && state.me && state.me.home); }
 function courtName(f){ return ar() && f.name_ar ? f.name_ar : (f.name_en || ""); }
-function hm(t){ return typeof t === "string" ? t.slice(0, 5) : ""; }
 function kindText(f){ return jcT("ct_kind_" + (f.kind === "basketball" ? "basketball" : "tennis")); }
-function hasPos(f){ return !!f && Number.isFinite(f.lat) && Number.isFinite(f.lng); }
-function moduleOn(){ var m = cfg && cfg.modules && cfg.modules.bookings; return !!(m && m.enabled === true); }
+function moduleOn(){ return jcModuleOn(cfg, "bookings"); }
 /* the household limits as the server reads them (jc_booking_quota / jc_booking_active_cap) */
 function rule(k, dflt){
   var v = cfg && cfg.modules && cfg.modules.bookings && cfg.modules.bookings[k];
@@ -64,7 +45,6 @@ function slotsOf(a){
 function over(s){ return Date.parse(s.ends_at) <= Date.now(); }
 function when(b){ return jcDayText(jcDateOf(b.starts_at, cfg)) + " · ⁦" + jcClock(b.starts_at, cfg) + "–" + jcClock(b.ends_at, cfg) + "⁩"; }
 function courtById(id){ return (courts || []).filter(function(f){ return f.id === id; })[0]; }
-function setUrl(q){ try { history.replaceState(null, "", q ? "?" + q : location.pathname); } catch(e){} }
 
 /* every write: one at a time; bkBusy always comes back down */
 function bkWrite(b, call, done, fail){
