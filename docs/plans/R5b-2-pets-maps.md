@@ -1,6 +1,9 @@
 # R5b-2 — Pets: maps, location pin, pet page tabs, badges — plan (`/plan-change`, 2026-11-11)
 
 > Status: **approved 2026-11-11 (#93); runs after home-hiding removal and R5c photos (Zee 2026-11-11).** Source: Zee's phone review of R5b-1 on `e2e` (2026-11-11):
+> **Re-planned 2026-11-13 (Zee):** the module gets **Pets · Strays · My Pets**, "Community animal" goes, and a database
+> step R5b-2b-0 comes first. **The section "Re-plan 2026-11-13" at the end supersedes "R5b-2b — Pets on the kit"
+> below.** R5b-2a (shared map kit) is done: #101, merged 2026-11-12.
 > "fun badges … pet vs Pet & Wanderer and Strays"; "'Add where I am now' → 'Add Location Pin' — a map in the modal with
 > the person's current location, adjustable before saving"; "sightings should show a mini map with pin"; "the pet
 > details page should have a sub-menu … learn the design language from previous module pages"; missing pets on the
@@ -140,3 +143,182 @@ Two client PRs, no database change. **2a** pulls the map pieces Events and Court
 Map tabs on the pet page, mini maps on sightings, an "Add Location Pin" sheet that opens on your location, a Pets Map
 tab, and a missing-pet line on the Commons Pets card until News exists. Biggest risk: a pet map that doubles as a list
 of homes with valuable animals — owned pets stay off the map unless missing. Confidence the scope is right: 0.8.
+
+
+---
+
+# Re-plan 2026-11-13 — Pets · Strays · My Pets (`/plan-change`; supersedes "R5b-2b — Pets on the kit")
+
+Zee 2026-11-13: "Instead of List and My Pets, we have Pets, Strays, My Pets… Pets sorted closest to your household,
+filter by type, wanderer… Strays: the map with last known location of each stray, colour coded… cards below."
+"Not sure what Community Animals are — either a person owns an animal (pet) or it's a stray." "A stray should not be
+marked missing." "While a pet is missing, show all members the sightings made since it went missing; hide them again
+when it's found." "Owned, not missing: maybe keep the Sightings tab — the owner may not know their pet is out."
+
+## Step 0 — Scope & freshness
+
+- **Tier: cross-layer** — RPC bodies, one new RPC, sighting visibility (who sees what = auth/PII), plus three screens.
+- Manifest LAST VERIFIED **2026-11-12** (1 day). The touched [live] layer was re-queried **2026-11-13** (below).
+
+## Step 1 — Inventory
+
+| Layer | Touched? | Check that ran |
+|---|---|---|
+| DB functions | **Yes** — `jc_pet_get`, `jc_pet_card`, `jc_pet_sighting_add`, `jc_pets_list` (bodies only); new `jc_pets_alerts`; new helper | `pg_get_functiondef` on live, 2026-11-13 |
+| DB tables / constraints | **No** — "strays can't be missing" **already enforced**: `jc_pets_check1` = `kind='owned' OR (NOT wanderer AND NOT missing)`; `jc_pet_missing_set` refuses non-owned (`NOT_FOUND`); live: 0 strays missing | `pg_constraint` on `jc_pets`; grep of function bodies writing `missing` (only `jc_pet_missing_set`, `jc_pet_retire`) |
+| DB indexes | No — `jc_pet_sightings_pet (pet_id, seen_at desc)` serves "latest since X" | `s4_pets.sql:107` |
+| Cron (sighting retention, reporter nulling) | No — reads `seen_at` / `reporter` only | `r5a_pets.sql:105-113` |
+| Storage (pet photos) | No | no photo RPC in the change list |
+| Edge function (1) | No | not pets-related (manifest) |
+| Frontend | **Yes** — `pets/pets.js` + `pets.css`, `assets/strings.js` (EN+AR), `assets/landing.js` (hub Pets card), `assets/map.js` (kit, reuse) | grep `rpc("jc_pet` call sites; `landing.js:108` module cards |
+| Hosting (Pages + Cloudflare Pages `commons`) | Deploy only | — |
+
+Live facts this plan rests on (2026-11-13):
+- `jc_pet_get` sightings: `kind='stray' OR home_id = viewer home OR jc_admin_has('pets')`, newest **30**; neighbours get
+  **none** for a missing owned pet today.
+- `jc_pet_sighting_add` open only when `(stray AND not rehomed) OR missing` → `SIGHTINGS_CLOSED`; caps 30/day per
+  reporter, 5/day per reporter per pet; reporter nulled within 48 h; sightings deleted after 30 days.
+- `jc_pets_list(p_filter)` returns **all** cards (client splits), order `missing desc, name`. Card has home village +
+  number, **no home coordinates**; strays carry `territory_lat/lng`.
+- Hub (`landing.js`) reads nothing from Pets today; the "1 missing pet" bridge from the earlier plan was never built.
+
+## Step 1b — Prior art
+
+| Building block | Existing version | Decision |
+|---|---|---|
+| Module sub-tabs + `?tab=` | `jcTabsHtml/jcTabsWire` (nav.js); Events map·list·mine, Courts list·map·mine | **REUSE** |
+| Full map (Street/Sat, Find Me, Full Screen, popups, Directions) | `assets/map.js` kit (#101) | **REUSE** |
+| Pin labels on a map | Courts' permanent tooltips (`bookings.js` `.bklabel`) | **REUSE** the pattern, plus show-when-zoomed-in (**NEW**: a zoom threshold) |
+| Map key / legend | Events "Map Labels" sheet | **REUSE** for the stray colours |
+| "N without a pin — see list" line | Events `ev_unpinned` | **REUSE** for strays with no location |
+| Pin picker sheet (Add Location Pin) | `jcPinPicker` (kit) | **REUSE** |
+| Mini map | none (grep `jcMiniMap` = 0) | **NEW**, in the kit (`jcMiniMap`) |
+| Filter chips | Pets `#ptFilters` (`pets.js:362`) | **REUSE**, new values |
+| Nearest-first sort | Events List "sort by distance" (phone-side, needs coordinates) | **DEPART**: owned pets sorted **on the server** — sending pet-home coordinates would rebuild the map of homes with pets |
+| Alert box | Pets missing `.alarm` | **REUSE** for "seen out" (amber, not red) |
+| Hub module card line | none on the Pets card | **NEW**, the same text style as other hub cards |
+| WhatsApp share | Pets `drawShare` (missing alert) | **REUSE** for "Is this {name}?" |
+| Colours | tokens: `--jc-warn` amber, `--jc-accent` (every map pin today), `--jc-muted`; red = danger | Needs help **amber** · Under care **accent** (the normal pin) · Known and fine **neutral** — no new colours, nothing reserved reused |
+
+## Step 2 — Impact map
+
+| Change | Who else reads it | What could break | Assumption → how verified |
+|---|---|---|---|
+| A. One visibility rule `jc_pet_sight_from(pet, viewer)` → the time from which a viewer may see a pet's sightings: all for stray / household / Pets admin; `missing_since − 24 h` for anyone else while missing (see Q1); none otherwise | `jc_pet_get` (pet page), `jc_pet_card` (every list + every write's return) | Neighbours see household-only sightings | SQL tests per persona × state (s24) |
+| B. `jc_pet_sighting_add`: also open for **owned, not missing, not wanderer** | Pet page Sightings form | Wanderer owners get noise; spam on one household | Caps already 5/pet/day per reporter; admin hide exists (`s4_pets.sql:605`) |
+| C. Card gains `last_seen {lat, lng, at}` — the newest sighting **this viewer may see** (rule A) | Lists, Strays map, My Pets alert, pet header | A neighbour learns a household-only sighting via the card | Same helper as A; test the card per persona |
+| D. `jc_pets_list` order: missing first → nearest to the viewer's home pin (owned: their home pin; strays: last_seen else territory) → name | Pets / Strays lists | Viewer without a pin → today's name order (no error) | Test both |
+| E. New `jc_pets_alerts()` → `{missing: [{id,name}], seen_out: [{id,name,at}]}` (seen_out = **your** not-missing pets seen in the last 24 h) | Hub Pets card only | One more read per hub visit | Called only when the pets flag is on |
+| F. Client: Pets · Strays · My Pets; Strays map + cards; "Community animal" label gone; pet Map tab; Add Location Pin; mini maps; "seen out" alert; hub line | Shared links `?tab=list`, `?pet=` | Old links | `?tab=list` → Pets; `?pet=` unchanged |
+
+Signatures: **none change** (frozen-signature rule). Old cached pages ignore the new card keys and still send
+`p_filter='all'`; `'community'` stays accepted by the server.
+
+## Step 3 — Regression surface
+
+Pet page About / Sightings (R5b-2b-1), report missing → Sightings tab + WhatsApp share, "is back home", photos and Remove
+Photo, My Pets add / edit / archive, strays' care record + care log, the sighting form's privacy line, 5-decimal
+rounding, kill switch (no pets RPC anywhere while the flag is off, hub included), RTL + Arabic, 360 px two-column
+cards, `/shot pets/`, Events + Courts maps (kit shared), CSP (no new hosts).
+
+## Step 4 — Proposal: three PRs
+
+### R5b-2b-0 — database (tier 3, `/db-rehearse`, ≈ 150 SQL + test slice `s24`)
+A–E above. Body changes + one helper + one RPC, no table change. The migration header carries the "down" (the previous
+bodies) as earlier R5 migrations do. Copy is disclosed in R5b-2b-2b, before any "out alone" button exists.
+
+### R5b-2b-2a — the module's three tabs (tier 2, ≈ 250 LOC)
+
+```
+Pets of Jubail
+[ Pets ] [ Strays ] [ My Pets ]
+┌─ MISSING ───────────────────────────┐   ← always on top, full width, red
+│ [photo] Biscuit · Dog · Villa 210   │
+└─────────────────────────────────────┘
+(All)(Dogs)(Cats)(Other)(Wanderers)        ← one chip row
+Sorted by: nearest your home
+┌──────────┐ ┌──────────┐
+│ photo    │ │ photo    │                  ← today's two-column cards
+│ Rex      │ │ Luna     │
+│ Dog      │ │ Cat · W  │
+└──────────┘ └──────────┘
+```
+- **Pets**: owned only. Missing pinned top. Chips **All · Dogs · Cats · Other · Wanderers** (no "Missing" chip — missing
+  pets are always on top; see Q2). "Sorted by: nearest your home" (or "by name" without a home pin).
+- **Strays**: the map (kit), **one pin per stray** at its latest sighting (≤ 30 days) else its territory; **names as
+  labels from zoom 17 in** (tap a pin for the card at any zoom). Colours: Needs help amber · Under care accent · Known
+  and fine neutral; Rehomed **off the map** (card stays, at the bottom). A "Map Labels" key. "N strays have no location
+  yet — see below". Below the map: the stray cards, Needs help first, then nearest.
+- **My Pets**: unchanged, plus the amber "Seen out on their own · 2 h ago" line on a card (24 h).
+- "Community animal" label, filter and strings removed → "Stray · Known and fine".
+- Hub Pets card: "1 missing pet" (red) and, for the household, "Biscuit was seen out · 2 h ago" (one `jc_pets_alerts`
+  read, only when the flag is on).
+
+### R5b-2b-2b — the pet page (tier 2, ≈ 300 LOC)
+
+| Pet | Tabs |
+|---|---|
+| Owned, not missing, not wanderer | About · Sightings (neighbours: "Seen {name} out on their own?"; the household: the reports) |
+| Owned wanderer, not missing | About only (+ Sightings for the household if any exist) |
+| Owned, missing | About · Sightings · **Map** |
+| Stray (not rehomed) | About · Sightings · **Map** |
+
+- **Map tab**: missing pet → sightings it may show (rule A), newest big with "Latest · 20 min ago", the rest small,
+  older than 48 h faded; stray → territory spot (ring) + sightings of the last 30 days, same styling. No lines between
+  dots. No home pin (the server sends no home coordinates).
+- **Sightings tab**: mini maps on the newest 10 sightings that have a location, built when scrolled into view; older →
+  "Open in map". **Add Location Pin** sheet (kit picker; opens on the phone's location, or the community centre with a
+  line saying so).
+- **"Out on their own" report** (owned, not missing): privacy line "Only {name}'s household sees this. If they report
+  {name} missing, neighbours helping to search see it too." Then **Share on WhatsApp**: "Is this {name}? Seen … ".
+- **Household**: amber box on the pet page "{name} was seen out on their own · 2 h ago — by the canal" with **Report as
+  missing** right there; "If {name} is home, you can ignore this."
+
+**Cost**: none (no paid layer). Tiles: mini maps capped at 10 and lazy; Strays map = one map.
+**Diff budget**: three PRs each near or above 200 LOC — split by layer and by screen; further splitting would ship
+half a tab.
+
+## Step 5 — Premortem
+
+| # | Mode | Exposed? | Mitigation |
+|---|---|---|---|
+| 1 | Silent corruption | Card `last_seen` computed with a different rule than the page | One helper used by both; tests compare them |
+| 2 | Silent zero-output | Strays map empty because no stray has a location; nearest sort silently name-ordered | Visible "no location yet" line; "Sorted by:" line names the real order |
+| 2b | Config drift | Cached old pages | No signature change; old filter values accepted; new keys ignored by old pages |
+| 3 | Cost | Mini-map tiles | ≤ 10, lazy |
+| 4 | Contract drift | Card shape grows | Additive keys only |
+| 5 | Race | Owner marks found / wanderer while someone writes a sighting | Server re-checks → `SIGHTINGS_CLOSED` (existing message) |
+| 6 | **Auth / PII** | Household-only sightings leak to neighbours; pre-missing reports made public | Rule A in one helper; s24 tests for neighbour / household / admin × not missing / missing / found / found-then-missing-again; disclosure copy before the button exists |
+| 7 | Rollback | — | Client: revert. DB: migration restoring previous bodies (in the header); drop helper + `jc_pets_alerts` |
+
+Protocol-specific:
+- **A sightings channel for harassment** (fake "seen out" reports against one household) → existing caps (5/pet/day
+  per reporter), admin hide, the owner's "ignore this" line. Reporter never shown.
+- **False alarm** (a look-alike seen out while the pet is home) → copy says so; nothing changes state without the owner.
+- **The owner never opens the app** → the WhatsApp share is the fast path; the hub line is the slow path. Push
+  notifications are out of scope (iOS needs the app installed). Watch whether people share.
+- **Users notice it differs from Events / Courts**: Strays labels appear only when zoomed in (Courts shows them always —
+  Courts has few pins); a tab named "Pets" inside the Pets module.
+- **Nearest-first leaks distance**: the order hints which pets live near you. Every card already shows village + number,
+  so it adds nothing a walk wouldn't.
+
+## Questions for Zee
+
+- **Q1** A neighbour reports "Biscuit is out" at 10:00; the owner reports Biscuit missing at 11:00. Should neighbours
+  searching see the 10:00 report? **Recommend yes**: show sightings from **24 h before** the pet went missing, and say so
+  in the report's privacy line (above).
+- **Q2** Pets filter chips **All · Dogs · Cats · Other · Wanderers**, with no Missing chip (missing pets are always on
+  top). OK?
+- **Q3** The household's "seen out" line on the **Commons home** card too, or only in Pets? **Recommend both.**
+- **Q4** Stray colours: Needs help amber, Under care the normal green pin, Known and fine grey. OK?
+
+**Answers (Zee 2026-11-13, approved — "Proceed"):** Q1 yes (24 h before) · Q2 OK · Q3 yes, both · Q4 OK.
+R5b-2b-0 built as `20261113100000_r5b2b0_pets_visibility.sql` + `tests/sql/s24_pets_visibility.test.sql`. Card keys
+as built: `last_seen {lat, lng, at}` = newest visible sighting **with a location**; `last_seen_at` = newest visible
+sighting at all (for "seen out · 2 h ago" when the report had no pin).
+
+**R5b-2b-0 review follow-ups** (`docs/qa/r5b2b0-pets-visibility-review-2026-11-13.md`):
+- R5b-2b-2b must ship the disclosure before the out-alone button: privacy line, `help_pets_3`, manifest R5a note.
+- Dependency: nearest-first order is safe only because home pins are already visible to members (`jc_directory_list`).
+  If home pins are ever hidden again, re-review the order (distance buckets, or drop it).
+- Backlog: household "dismiss this report" for out-alone sightings; clamp sighting lat/lng to the community area.
