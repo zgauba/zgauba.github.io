@@ -234,11 +234,20 @@ function canAdmin(){
   return sc.indexOf("community") >= 0 || sc.indexOf("bookings") >= 0;
 }
 function adminHref(f){ return "../admin/?tab=courts&court=" + encodeURIComponent(f.id); }
+/* where a court is (NF-1): its village, or Whole community — never who may book it */
+function courtVillage(f){ return f.village_key ? jcVillageName(cfg, f.village_key) : jcT("ct_village_all"); }
+/* NF-2: nearest first from the origin (household pin, or this visit's phone position); no pin last; no origin: by name */
+function sortedCourts(){
+  var org = jcOrigin();
+  if (org) return jcNear(courts, org, function(f){ return f; });
+  return courts.slice().sort(function(a, b){ return courtName(a).localeCompare(courtName(b), jcLang()); });
+}
 function courtCard(f){
-  var meta = [kindText(f), "⁦" + hm(f.open_time) + "–" + hm(f.close_time) + "⁩"];
+  var meta = [kindText(f), "⁦" + hm(f.open_time) + "–" + hm(f.close_time) + "⁩"], d = jcDistOf(jcOrigin(), f);
   return '<li data-court="' + esc(f.id) + '"><div class="evtop"><b dir="auto">' + esc(courtName(f)) + '</b>' +
     (canAdmin() ? '<a class="badge" href="' + adminHref(f) + '" aria-label="' + esc(jcT("ev_admin") + ": " + courtName(f)) + '">' + esc(jcT("ev_admin")) + '</a>' : '') + '</div>' +
     '<div class="meta">' + esc(meta.join(" · ")) + '</div>' +
+    '<div class="meta bkwhere">' + esc(courtVillage(f)) + (d !== null ? ' · <bdi dir="ltr">' + esc(jcFmt("sort_dist", { d: jcFmtDist(d) })) + '</bdi>' : '') + '</div>' +
     (f.location_note ? '<div class="meta" dir="auto">' + esc(f.location_note) + '</div>' : '') +
     (f.walk_on ? '<div class="meta">' + esc(jcT("bk_walk_on")) + '</div>'
       : '<div class="acts"><button class="btn small" type="button" data-open="' + esc(f.id) + '">' + esc(jcT("bk_see_times")) + '</button></div>') +
@@ -314,11 +323,14 @@ var VIEWS = {
     else if (tab === "mine") body = '<div id="bkMineBox">' + mineHtml() + '</div>' + (hasHome() ? '<section id="bkPastBox" aria-live="polite">' + pastHtml() + '</section>' : '');
     else body = (hasHome() ? '' : '<p class="notice" id="bkNoHome">' + esc(jcT("bk_no_home")) + '</p>' +
                    '<div class="row"><a class="btn ghost" href="../home/">' + esc(jcT("bk_go_home")) + '</a></div>') +
-                (courts.length ? '<ul class="bklist" id="bkCourts">' + courts.map(courtCard).join("") + '</ul>'
+                (courts.length ? jcSortedHtml({ id: "bkSorted", fallback: "sort_name" }) +
+                                 '<ul class="bklist" id="bkCourts">' + sortedCourts().map(courtCard).join("") + '</ul>'
                                : '<p class="help" id="bkCourts">' + esc(jcT("bk_none")) + '</p>');
     el("view").innerHTML = html + '<div ' + jcTabPanel("bktab-", tab, "bkBody") + '>' + body + '</div>';
     wireTabs();
     if (tab === "map") drawMap(pinned);
+    if (tab === "list") jcSortedWire({ onChange: function(){ show("list"); }, onError: showErr,
+                                       alive: function(){ return current === "list" && tab === "list"; } });
     each("[data-open]", function(b){ var f = courtById(b.dataset.open); if (f) openCourt(f); });
     if (tab === "mine") { wireMine(); if (hasHome() && !past && !pastLoading && !pastErr) loadPast(); else drawPast(); }
   },

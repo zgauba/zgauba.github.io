@@ -45,3 +45,7 @@ body.mapfull{overflow:hidden}
 .legend .chip{flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; font-size:14px; color:var(--jc-ink);
   background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius-pill); padding:4px 10px; white-space:nowrap}
 .legend h3{margin:10px 0 6px; font-size:13px; color:var(--jc-muted); font-weight:700}
+/* NF-2: the "Sorted by" line on every resident list — the words, then Use Where I Am / Use My Home beside them */
+.sortedby{display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; margin:8px 0 10px}
+.sortedby .help{margin:0; flex:1 1 12em}
+.sortedby .lang{flex:0 0 auto}

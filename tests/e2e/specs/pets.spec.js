@@ -1052,3 +1052,46 @@ test("R5c-2: a just-picked photo can be dropped before Save; no Remove on a pet 
   await expect(page.locator("#msg")).toHaveText("Saved.");
   expect(calls.filter((c) => c.kind === "storage" || /photo/.test(c.name))).toEqual([]);
 });
+
+// ── NF-2: nearest first (docs/plans/nearest-first.md) ──
+test("NF-2 Strays: server order from my home pin; Use Where I Am re-sorts the cards (Needs help still first), ≈ distance on each", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 24.5000, longitude: 54.4000 });   // at Sandy's marina
+  await open(page, straysBackend(), { q: "?tab=strays" });
+  await expect(page.locator("#ptStraysSorted")).toHaveText("Sorted by: nearest your home");
+  await expect(page.locator("#ptStrays b")).toHaveText(["Pepper", "Ginger", "Sandy", "Biscuit"]);
+  await expect(page.locator(`#ptStrays [data-pet="${ID(3)}"]`)).toContainText("≈ 90 m");          // Ginger's last spot from Villa 12 (≈ 91 m)
+  await expect(page.locator(`#ptStrays [data-pet="${ID(8)}"]`)).not.toContainText("≈");           // Pepper: no spot
+  await page.locator("#sortHereBtn").click();
+  await expect(page.locator("#ptStraysSorted")).toHaveText("Sorted by: nearest where you are now");
+  await expect(page.locator("#ptStrays b")).toHaveText(["Pepper", "Sandy", "Ginger", "Biscuit"]);
+  await expect(page.locator(`#ptStrays [data-pet="${ID(4)}"]`)).toContainText("≈ 0 m");
+  await page.locator("#sortHereBtn").click();                                                       // Use My Home
+  await expect(page.locator("#ptStrays b")).toHaveText(["Pepper", "Ginger", "Sandy", "Biscuit"]);
+});
+
+test("NF-2 Strays: Find Me on the map re-sorts the cards under it; the map stays (same zoom, the blue dot)", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 24.5000, longitude: 54.4000 });
+  await open(page, straysBackend(), { q: "?tab=strays" });
+  await expect(page.locator("#ptmap path.leaflet-interactive")).toHaveCount(2);
+  const box = await page.locator("#ptmap").evaluate((n) => (n.dataset.mark = "same", "ok"));
+  expect(box).toBe("ok");
+  await page.locator("#locateBtn").click();
+  await expect(page.locator("#ptStraysSorted")).toHaveText("Sorted by: nearest where you are now");
+  await expect(page.locator("#ptStrays b")).toHaveText(["Pepper", "Sandy", "Ginger", "Biscuit"]);
+  await expect(page.locator("#ptmap")).toHaveAttribute("data-mark", "same");                     // not redrawn
+  await expect(page.locator("#ptmap path.leaflet-interactive")).toHaveCount(3);                  // + the blue dot
+  // the re-drawn cards still open their pet
+  await page.locator(`#ptStrays [data-open="${ID(4)}"]`).click();
+  await expect(page).toHaveURL(new RegExp("pet=" + ID(4)));
+});
+
+test("NF-2 Pets tab: the owned pets' line is the shared one, with no button (their homes never reach the phone)", async ({ page }) => {
+  await open(page, backend(), { q: "?tab=pets" });
+  await expect(page.locator("#ptSorted")).toHaveText("Sorted by: nearest your home");
+  await expect(page.locator("#sortHereBtn")).toHaveCount(0);
+  await page.locator("#jcHelpBtn").click();
+  await expect(page.locator("#jcHelp li")).toHaveCount(4);
+  await expect(page.locator("#jcHelp")).toContainText("Your location stays on your phone");
+});

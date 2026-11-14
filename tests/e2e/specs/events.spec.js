@@ -250,7 +250,7 @@ test("tap a pin: answers, note, walking directions + view pin; distance after Fi
   await expect(pop).toContainText("Villa 3");
   await expect(pop).toContainText("Candy · Door");
   await expect(pop).toContainText("Ring twice");
-  await expect(pop).toContainText(/≈ \d+ m from you/);
+  await expect(pop).toContainText(/≈ \u2066\d+ m\u2069 from you/);
   await expect(pop.getByRole("link", { name: "Directions" })).toHaveAttribute("href",
     "https://www.google.com/maps/dir/?api=1&destination=24.531%2C54.431&travelmode=walking");
   await expect(pop.getByRole("link", { name: "Google Maps" })).toHaveAttribute("href", /maps\/search\/\?api=1&query=24\.531%2C54\.431/);
@@ -281,7 +281,7 @@ test("Find Me answering late, after leaving the map: no message, no dot on the n
   await expect(page.locator("#map path.leaflet-interactive")).toHaveCount(0);   // no "you are here" circle
 });
 
-test("list: house numbers in natural order (9 before 10); nearest-first after locating", async ({ page, context }) => {
+test("list (NF-2): opens on Nearest First from my home pin, my village first; By House Number in natural order (9 before 10); Use Where I Am", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 24.5400, longitude: 54.4400 });
   ENTRIES.push(
@@ -294,12 +294,58 @@ test("list: house numbers in natural order (9 before 10); nearest-first after lo
     await page.goto("events/?id=" + LIVE_ID);
     await page.locator("#tab-list").click();
     const seef = page.locator("h2.group:has-text('Seef') + ul.entries li b");
-    await expect(seef).toHaveText(["Villa 3", "Villa 9", "Villa 10"]);
-    await page.locator("#sortDist").click();
+    // Nearest First by default, from Villa 12's pin: my village (Ain Al Maha) first even with no pinned home in it
     await expect(page.locator("#sortDist")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator("h2.group").first()).toContainText("Seef");               // nearest village first
-    await expect(page.locator("h2.group:has-text('Seef') + ul.entries li b").first()).toHaveText("Villa 10");  // ~15 m away
+    await expect(page.locator("#evSorted")).toHaveText("Sorted by: nearest your home");
+    await expect(page.locator("h2.group").first()).toContainText("Ain Al Maha");
+    await expect(seef).toHaveText(["Villa 3", "Villa 10", "Villa 9"]);                  // ~150 m, ~1.3 km, ~1.7 km
+    await expect(page.locator(".entries li").filter({ hasText: "Villa 3" })).toContainText("≈ 150 m");
+    // By House Number: natural order, no distances, no "Sorted by" line
+    await page.locator("#sortNum").click();
+    await expect(seef).toHaveText(["Villa 3", "Villa 9", "Villa 10"]);
+    await expect(page.locator("#evSorted")).toHaveCount(0);
+    await expect(page.locator("#groups")).not.toContainText("≈");
+    // back to Nearest First, then from the phone: strictly nearest where I am — Seef first, Villa 10 (~15 m) on top
+    await page.locator("#sortDist").click();
+    await page.locator("#sortHereBtn").click();
+    await expect(page.locator("#evSorted")).toHaveText("Sorted by: nearest where you are now");
+    await expect(page.locator("h2.group").first()).toContainText("Seef");
+    await expect(seef.first()).toHaveText("Villa 10");
+    await expect(page.locator("#sortHereBtn")).toHaveText("Use My Home");
+    // the map's popups say where the distance is from
+    await page.locator("#tab-map").click();
+    await expect(page.locator("#map .leaflet-marker-icon").first()).toBeVisible();
+    await page.evaluate(() => document.querySelector("#map .leaflet-marker-icon").click());
+    await expect(page.locator(".leaflet-popup")).toContainText("from you");
   } finally { ENTRIES.splice(-2, 2); }
+});
+
+test("list (NF-2): Find Me on the Map sorts the List from the phone; the popup says the distance is from you", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 24.5310, longitude: 54.4310 });   // on Villa 3
+  await stubBackend(page, { rpc: eventsBackend().rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await expect(page.locator("#map .leaflet-marker-icon").first()).toBeVisible();
+  await page.locator("#locateBtn").click();
+  await expect(page.locator("#map path.leaflet-interactive")).toHaveCount(1);          // the blue dot
+  await page.evaluate(() => document.querySelector("#map .leaflet-marker-icon").click());
+  await expect(page.locator(".leaflet-popup")).toContainText("≈ \u20660 m\u2069 from you")   // the distance bidi-isolated (review L);
+  await page.locator("#tab-list").click();
+  await expect(page.locator("#evSorted")).toHaveText("Sorted by: nearest where you are now");
+  await expect(page.locator("h2.group").first()).toContainText("Seef");               // strictly nearest: not my village first
+});
+
+test("list (NF-2): no home pin → my village first, house-number order, said plainly", async ({ page }) => {
+  await stubBackend(page, { rpc: Object.assign({}, eventsBackend().rpc, {
+    jc_me_get: (a, c) => c.signedIn ? ok(MEMBER_NO_PIN) : raise("NOT_SIGNED_IN") }) });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await page.locator("#tab-list").click();
+  await expect(page.locator("#evSorted")).toHaveText("Sorted by: house number. Pin your home on My Home to see the nearest first.");
+  await expect(page.locator("h2.group").first()).toContainText("Ain Al Maha");
+  await expect(page.locator("#sortHereBtn")).toHaveText("Use Where I Am");
+  await expect(page.locator("#groups")).not.toContainText("≈");
 });
 
 test("event map: satellite / streets toggle", async ({ page }) => {

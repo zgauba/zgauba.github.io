@@ -193,8 +193,8 @@ Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas 
   "≈ 300 m" on rows. Courts list, Events List (your village first; By House Number kept), Strays cards. Owned pets:
   server order from your home pin, no phone re-sort (their homes never reach the phone).
 - Organizer Tools never by distance: A–Z by village, then name (events stay by date).
-- PRs: **NF-1** courts get an optional village (where it is, not who may book; none = Whole community) → **NF-2** the
-  shared control on Courts / Events / Strays → **NF-3** Organizer A–Z.
+- PRs: **NF-1** courts get an optional village (where it is, not who may book; none = Whole community) ✓ #107 → **NF-2** the
+  shared control on Courts / Events / Strays (in review) → **NF-3** Organizer A–Z.
 
 ### Bookings (long term, Zee 2026-11-14)
 - Courts grow into general **Bookings** for any community's shared spaces (rooms, BBQ areas, halls). The code is
