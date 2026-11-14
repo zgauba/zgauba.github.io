@@ -33,8 +33,6 @@ h2.group{font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color
 [role="tabpanel"]{display:flex; flex-direction:column; gap:12px}
 /* the Map tab: the shared map look lives in assets/mapui.css (same classes as the event map) */
 /* the court name on its pin: .bklabel lives in assets/mapui.css (shared with the Strays map) */
-.pop{display:flex; flex-direction:column; gap:4px}
-.pop .popacts{margin-top:4px; align-items:center}
 .bkhead{display:flex; flex-direction:column; gap:4px}
 .bkhead h1, .bkhead p{margin:0}
 .bkhead .meta{color:var(--jc-muted); font-size:14px}

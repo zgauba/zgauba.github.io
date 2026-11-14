@@ -730,33 +730,18 @@ function strayPop(p){
   /* the time of the sighting the pin stands on (last_seen), not a newer one without a location (review L3) */
   var pos = strayPos(p), at = hObj(p.last_seen) && finite(p.last_seen.lat) ? p.last_seen.at : null;
   var seen = recent(at, 30 * DAY) ? jcAgo(at) : "";
-  return '<div class="pop"><b dir="auto">' + esc(p.name) + '</b>' +
-    '<div class="meta">' + esc(speciesText(p) + " · " + jcT("pt_care_" + p.care_state)) + '</div>' +
-    (seen ? '<div class="meta">' + esc(jcFmt("pt_seen_ago", { t: seen })) + '</div>'
-          : p.territory ? '<div class="meta" dir="auto">' + esc(p.territory) + '</div>' : '') +
-    '<div class="popacts"><button class="mini" type="button" data-popopen="' + esc(p.id) + '">' + esc(jcT("pt_open")) + '</button>' +
-    '<a target="_blank" rel="noopener noreferrer" href="' + esc(jcDirectionsUrl(pos[0], pos[1])) + '">' + esc(jcT("ev_directions")) + '</a></div></div>';
+  return jcPopHtml({ head: esc(p.name), headAuto: true,
+    body: '<div class="meta">' + esc(speciesText(p) + " · " + jcT("pt_care_" + p.care_state)) + '</div>' +
+      (seen ? '<div class="meta">' + esc(jcFmt("pt_seen_ago", { t: seen })) + '</div>'
+            : p.territory ? '<div class="meta" dir="auto">' + esc(p.territory) + '</div>' : ''),
+    open: { id: p.id, label: jcT("pt_open") }, lat: pos[0], lng: pos[1] });
 }
-var LABEL_ZOOM = 17;                                   /* names on the pins from here in; a tap opens the card at any zoom */
-/* a full map in mapId (kit buttons: Street / Satellite, Full Screen, Find Me) — the Strays map and a pet's Map tab */
+/* a full map in mapId (the kit: Street / Satellite, Full Screen, Find Me) — the Strays map and a pet's Map tab */
 function bigMap(mapId){
-  var c = (cfg && cfg.map) || {};
-  var m = map = L.map(mapId, { zoomControl: true }).setView([c.lat || 24.53, c.lng || 54.43], c.zoom || 14);
-  jcMapLayers(m, "layerBtn", layer, function(l){ layer = l; });
-  on("fullBtn", function(){ full.set(!full.on); });
-  var me = null;
-  on("locateBtn", function(){
-    jcLocate(function(lat, lng){
-      if (map !== m) return;
-      me = jcMeDot(m, [lat, lng], me);
-      m.setView([lat, lng], Math.max(m.getZoom(), LABEL_ZOOM));
-    }, function(code){ if (map !== m) return; full.set(false); ptMsg(code); });  /* visible, not behind the full map; never on another screen */
-  });
+  var m = map = jcBigMap(mapId, { cfg: cfg, layer: layer, onLayer: function(l){ layer = l; }, full: full });
+  jcFindMe(m, { alive: function(){ return map === m; },
+    onError: function(code){ full.set(false); ptMsg(code); } });   /* visible, not behind the full map; never on another screen */
   return m;
-}
-function fitTo(m, pts){
-  if (pts.length > 1) m.fitBounds(pts, { padding: [40, 40], maxZoom: 18 });
-  else m.setView(pts[0], LABEL_ZOOM);
 }
 function drawStrays(list){
   if (typeof L === "undefined" || !el("ptmap")) return;
@@ -773,9 +758,10 @@ function drawStrays(list){
   });
   var box = el("ptmap");
   jcMapPopups(m, function(id){ full.set(false); openPet(id); });   /* the kit */
-  function labels(){ if (box && map === m) box.classList.toggle("nolabels", m.getZoom() < LABEL_ZOOM); }
+  /* names on the pins from JC_LABEL_ZOOM in (many pins); a tap opens the card at any zoom */
+  function labels(){ if (box && map === m) box.classList.toggle("nolabels", m.getZoom() < JC_LABEL_ZOOM); }
   m.on("zoomend", labels);
-  fitTo(m, pts);
+  jcFitPins(m, pts);
   labels();
 }
 
@@ -798,8 +784,7 @@ function mapTabHtml(p){
     '<p class="help" id="ptMapKey">' + esc(jcT(t ? "pt_map_key_terr" : "pt_map_key")) + '</p>';
 }
 function sightPop(s){
-  return '<div class="pop"><b>' + esc(when(s.seen_at)) + '</b>' + (s.note ? '<div dir="auto">' + esc(s.note) + '</div>' : '') +
-    '<div class="popacts"><a target="_blank" rel="noopener noreferrer" href="' + esc(jcDirectionsUrl(s.lat, s.lng)) + '">' + esc(jcT("ev_directions")) + '</a></div></div>';
+  return jcPopHtml({ head: esc(when(s.seen_at)), body: s.note ? '<div dir="auto">' + esc(s.note) + '</div>' : '', lat: s.lat, lng: s.lng });
 }
 /* the newest big with "Latest · 20 min ago", the rest small, older than 48 h faded; a stray's territory spot as a ring.
    No lines between dots (they'd suggest a route nobody saw). */
@@ -808,7 +793,7 @@ function drawPetMap(p){
   var m = bigMap("ptpmap"), col = jcMapColors(), list = located(p), t = terrPos(p), pts = [];
   if (t) {
     L.circleMarker(t, { radius: 16, weight: 2, color: col.ink, dashArray: "4 4", fill: false, className: "ptterr" }).addTo(m)
-      .bindPopup('<div class="pop"><b>' + esc(jcT("pt_territory")) + '</b>' + (p.territory ? '<div dir="auto">' + esc(p.territory) + '</div>' : '') + '</div>', JC_POPUP);
+      .bindPopup(jcPopHtml({ head: esc(jcT("pt_territory")), body: p.territory ? '<div dir="auto">' + esc(p.territory) + '</div>' : '' }), JC_POPUP);
     pts.push(t);
   }
   for (var i = list.length - 1; i >= 0; i--) {         /* oldest first: the latest is drawn on top */
@@ -818,8 +803,8 @@ function drawPetMap(p){
     if (latest) mk.bindTooltip(esc(jcFmt("pt_map_latest", { t: jcAgo(s.seen_at) })), { permanent: true, direction: "top", offset: [0, -13], className: "bklabel" });
     pts.push([s.lat, s.lng]);
   }
-  jcMapPopups(m, function(){});                        /* the map's buttons step aside while a popup is open */
-  fitTo(m, pts);
+  jcMapPopups(m, null);                                /* the map's buttons step aside while a popup is open */
+  jcFitPins(m, pts);
 }
 /* small still maps on the Sightings tab, built only once scrolled into view (tiles cost a request each) */
 function drawMinis(){

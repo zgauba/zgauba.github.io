@@ -754,9 +754,6 @@ function byNumber(a, b){
   if (ba !== bb) return ba.localeCompare(bb, "en", { numeric: true });
   return String(a.number).localeCompare(String(b.number), "en", { numeric: true, sensitivity: "base" });
 }
-function directionsUrl(e){
-  return jcDirectionsUrl(e.lat, e.lng);
-}
 function pinUrl(e){ return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(e.lat + "," + e.lng); }
 function answers(e){
   var bits = [];
@@ -775,14 +772,14 @@ function stateLine(e){
 /* Popup = HTML, so EVERYTHING resident-typed is escaped (numbers, buildings, notes). */
 function popupHtml(e){
   var d = dist(e), gf = pinField(data.event, "glyph");
-  return '<div class="pop"><b>' + (gf ? glyphHtml(gf.spec, e.payload && e.payload[gf.key]) + ' ' : '') + esc(jcHomeLabel(e)) + '</b>' +
-    '<div class="meta">' + esc(jcVillageName(cfg, e.village)) + '</div>' + stateLine(e) +
-    (answers(e).length ? '<div>' + esc(answers(e).join(" · ")) + '</div>' : '') +
-    (e.note ? '<div class="note">' + esc(e.note) + '</div>' : '') +
-    (d !== null ? '<div class="meta">' + esc(jcFmt("ev_dist_from_you", { d: fmtDist(d) })) + '</div>' : '') +
-    '<div class="popacts"><a target="_blank" rel="noopener" href="' + esc(directionsUrl(e)) + '">' + esc(jcT("ev_directions")) + '</a>' +
-    '<a target="_blank" rel="noopener" href="' + esc(pinUrl(e)) + '">' + esc(jcT("ev_view_pin")) + '</a>' +
-    reportLink(e) + '</div>' + reportedLine(e) + '</div>';
+  return jcPopHtml({ head: (gf ? glyphHtml(gf.spec, e.payload && e.payload[gf.key]) + ' ' : '') + esc(jcHomeLabel(e)),
+    body: '<div class="meta">' + esc(jcVillageName(cfg, e.village)) + '</div>' + stateLine(e) +
+      (answers(e).length ? '<div>' + esc(answers(e).join(" · ")) + '</div>' : '') +
+      (e.note ? '<div class="note">' + esc(e.note) + '</div>' : '') +
+      (d !== null ? '<div class="meta">' + esc(jcFmt("ev_dist_from_you", { d: fmtDist(d) })) + '</div>' : ''),
+    lat: e.lat, lng: e.lng,
+    acts: '<a target="_blank" rel="noopener noreferrer" href="' + esc(pinUrl(e)) + '">' + esc(jcT("ev_view_pin")) + '</a>' + reportLink(e),
+    after: reportedLine(e) });
 }
 
 /* R2b-2: the event's safety box — the community's security line (a tel: link) and the lost-child meeting point.
@@ -819,33 +816,13 @@ function measureDesc(){
   if (d && b) b.hidden = !descOpen && d.scrollHeight <= d.clientHeight + 1;
 }
 
-/* The map fills what's left of the screen between the tabs and the tab bar, so it's all
-   visible without scrolling (Zee, 2026-11-04). Never below 260px; recomputed on resize,
-   rotation and Safari's toolbar growing / shrinking. */
-function fitMap(){
-  var m = el("map");
-  if (!m) return;
-  if (full.on) { if (map) map.invalidateSize(); return; }   /* full screen: CSS sizes it */
-  /* innerHeight follows Safari's toolbar; visualViewport would also shrink on pinch-zoom (review) */
-  var vh = window.innerHeight;
-  var bar = el("tabbar") ? el("tabbar").getBoundingClientRect().height : 0;
-  var ah = el("mapAfter") ? el("mapAfter").getBoundingClientRect().height : 0;   /* the key, venue line… (may be empty) */
-  var after = ah ? ah + 8 : 0;
-  var top = m.getBoundingClientRect().top + window.scrollY;
-  var want = Math.floor(vh - top - bar - after - 12);
-  var h = Math.max(260, want);
-  /* too tall to fit (a long header + a three-row key on a small phone): let the page scroll, with
-     room under the key for the tab bar, instead of hiding the key behind it (5a.1) */
-  document.body.classList.toggle("evfit", want >= 260);
-  if (Math.abs(m.offsetHeight - h) < 2) return;
-  m.style.height = h + "px";
-  if (map) map.invalidateSize();
-}
-
-var fitTimer = null;
-function fitSoon(){ clearTimeout(fitTimer); fitTimer = setTimeout(function(){ measureDesc(); fitMap(); }, 120); }
-window.addEventListener("resize", fitSoon);
-window.addEventListener("orientationchange", fitSoon);
+/* the kit's fit (Zee, 2026-11-04: the whole map visible without scrolling), with the key under it counted; too tall to
+   fit (a long header + a three-row key on a small phone): the page scrolls, with room under the key for the tab bar,
+   instead of hiding the key behind it (5a.1) */
+var fitter = jcMapFit({ box: "map", afterId: "mapAfter", getMap: function(){ return map; }, isFull: function(){ return full.on; },
+  onFit: function(fits){ document.body.classList.toggle("evfit", fits); }, before: measureDesc });
+function fitMap(){ fitter.fit(); }
+function fitSoon(){ fitter.soon(); }
 
 function renderMap(entries){
   var ev = data.event, venue = isVenue(ev);
@@ -866,52 +843,45 @@ function renderMap(entries){
       ' — <a href="#" id="seeList">' + esc(jcT("ev_list")) + '</a></p>' : '') +
     (venue && !entries.length && ev.coming_soon ? '<p class="help venueline">📍 ' + esc(jcT("ev_place_tba")) + '</p>' :
      venue ? '<p class="help venueline" dir="auto">📍 <b>' + esc(placeName(ev) || jcT("ev_the_place")) + '</b>' +
-      (entries.length ? ' — <a target="_blank" rel="noopener" href="' + esc(directionsUrl(entries[0])) + '">' + esc(jcT("ev_directions")) + '</a>' : '') +
+      (entries.length ? ' — ' + jcDirLink(entries[0].lat, entries[0].lng) : '') +
       '</p>' : '') + '</div>';
   on("seeList", function(e){ e.preventDefault(); el("tab-list").click(); });
   on("labelsBtn", openLabels);
-  on("fullBtn", function(){ full.set(!full.on); });
-  var m0 = document.querySelector(".evmapwrap");
   document.body.classList.add("evfit");     /* the map screen doesn't scroll: no spare padding under it */
   fitMap();                                 /* before Leaflet measures the box… */
   requestAnimationFrame(fitSoon);           /* …and again once the page has settled (fonts, header) */
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitSoon);
-  var c = (cfg && cfg.map) || {};
-  map = L.map("map", { zoomControl: true }).setView([c.lat || 24.53, c.lng || 54.43], c.zoom || 14);
-  jcMapLayers(map, "layerBtn", layer, function(l){ layer = l; });
+  var m = map = jcBigMap("map", { cfg: cfg, layer: layer, onLayer: function(l){ layer = l; }, full: full });
   var col = jcMapColors(), accent = col.accent, ink = col.ink;
-  var pts = [], me = null;
+  var pts = [];
   entries.forEach(function(e){ if (hasPos(e)) pts.push([e.lat, e.lng]); });
   if (venue && pts.length) {
-    L.circleMarker(pts[0], { radius: 12, weight: 3, color: ink, fillColor: accent, fillOpacity: .9 })
+    /* the pin and its name look as on Courts (the kit's bklabel follows the theme) */
+    L.circleMarker(pts[0], { radius: 11, weight: 3, color: ink, fillColor: accent, fillOpacity: .95 })
       /* Leaflet sets string tooltip content as HTML: the organizer-typed name is escaped (review: XSS) */
       .addTo(map).bindTooltip('<span dir="auto">' + esc(placeName(ev) || jcT("ev_the_place")) + '</span>',
-                              { permanent: true, direction: "top", offset: [0, -12] });
+                              { permanent: true, direction: "top", offset: [0, -12], className: "bklabel" });
   } else if (!venue) {
     drawHomes(entries);
   }
   /* a neighbor's "They're Out" button lives in the popup; a refresh waits for the popup to close */
-  map.on("popupopen", function(pe){
-    popupOpen = true;
-    m0.classList.add("popopen");            /* Street / Map Labels / Find Me step aside while a popup is open */
-    var node = pe.popup.getElement(), b = node && node.querySelector("[data-report]");
-    var e = b && (data.entries || []).filter(function(x){ return x.id === b.dataset.report; })[0];
-    if (e) b.addEventListener("click", function(){ report(e, pe.popup, b); });
+  jcMapPopups(m, null, {
+    open: function(pe){
+      popupOpen = true;
+      var node = pe.popup.getElement(), b = node && node.querySelector("[data-report]");
+      var e = b && (data.entries || []).filter(function(x){ return x.id === b.dataset.report; })[0];
+      if (e) b.addEventListener("click", function(){ report(e, pe.popup, b); });
+    },
+    close: function(){
+      popupOpen = false;
+      if (pendingRepaint) { pendingRepaint = false; drawHomes(data.entries || []); }
+    }
   });
-  map.on("popupclose", function(){
-    popupOpen = false;
-    m0.classList.remove("popopen");
-    if (pendingRepaint) { pendingRepaint = false; drawHomes(data.entries || []); }
-  });
-  on("locateBtn", function(){
-    locate(function(){
-      if (!map) return;
-      me = jcMeDot(map, userPos, me);
-      map.setView(userPos, Math.max(map.getZoom(), 17));
-    });
-  });
-  if (pts.length > 1) map.fitBounds(pts, { padding: [30, 30], maxZoom: 18 });
-  else if (pts.length === 1) map.setView(pts[0], 18);
+  /* Find Me also keeps the position for "≈ 120 m from you" (held in memory only) */
+  jcFindMe(m, { alive: function(){ return map === m; },
+    onPos: function(lat, lng){ userPos = L.latLng(lat, lng); },
+    onError: function(code){ full.set(false); showErr(code); } });
+  jcFitPins(m, pts, 18);                    /* the one place: closer in */
 }
 
 /* the homes' pins, in their own layer so a refresh redraws them without moving the map */
@@ -964,8 +934,7 @@ function renderList(entries, q){
           (d !== null ? ' <span class="meta">· ' + esc(fmtDist(d)) + '</span>' : '') +
           (bits.length ? '<div class="meta">' + esc(bits.join(" · ")) + '</div>' : '') + stateLine(e) +
           (e.note ? '<div class="note">' + esc(e.note) + '</div>' : '') +
-          (hasPos(e) ? '<div class="popacts"><a target="_blank" rel="noopener" href="' + esc(directionsUrl(e)) + '">' +
-            esc(jcT("ev_directions")) + '</a></div>' : '') + '</li>';
+          (hasPos(e) ? '<div class="popacts">' + jcDirLink(e.lat, e.lng) + '</div>' : '') + '</li>';
       }).join("") + '</ul>';
     }).join("");
   }

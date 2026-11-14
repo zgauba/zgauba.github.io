@@ -22,7 +22,7 @@ var deepLink = null;
 /* Zee 2026-11-09: sub-tabs List · Map · My bookings (?tab=), the map like the event map (full screen, Find Me) */
 var TABS = ["list", "map", "mine"];
 var tab = TABS.indexOf(params.get("tab")) >= 0 ? params.get("tab") : "list";
-var layer = "sat", userPos = null;      /* ?court= waiting for the list (kept for Try Again, review L2) */
+var layer = "sat";      /* ?court= waiting for the list (kept for Try Again, review L2) */
 
 /* ---------- helpers ---------- */
 /* page helpers: the shared copies in assets/api.js (structural audit SA-1) */
@@ -246,34 +246,16 @@ function courtCard(f){
 }
 /* ---------- the Map tab: the event map's kit (assets/map.js) ---------- */
 function popHtml(f){
-  return '<div class="pop"><b dir="auto">' + esc(courtName(f)) + '</b>' +
-    '<div class="meta">' + esc(kindText(f) + " · ⁦" + hm(f.open_time) + "–" + hm(f.close_time) + "⁩") + '</div>' +
-    (f.location_note ? '<div class="meta" dir="auto">' + esc(f.location_note) + '</div>' : '') +
-    (f.walk_on ? '<div class="meta">' + esc(jcT("bk_walk_on")) + '</div>' : '') +
-    '<div class="popacts">' + (f.walk_on ? '' : '<button class="mini" type="button" data-popopen="' + esc(f.id) + '">' + esc(jcT("bk_see_times")) + '</button>') +
-    /* as on the event map */
-    '<a target="_blank" rel="noopener" href="' + esc(jcDirectionsUrl(f.lat, f.lng)) + '">' +
-    esc(jcT("ev_directions")) + '</a></div></div>';
+  return jcPopHtml({ head: esc(courtName(f)), headAuto: true,
+    body: '<div class="meta">' + esc(kindText(f) + " · ⁦" + hm(f.open_time) + "–" + hm(f.close_time) + "⁩") + '</div>' +
+      (f.location_note ? '<div class="meta" dir="auto">' + esc(f.location_note) + '</div>' : '') +
+      (f.walk_on ? '<div class="meta">' + esc(jcT("bk_walk_on")) + '</div>' : ''),
+    open: f.walk_on ? null : { id: f.id, label: jcT("bk_see_times") }, lat: f.lat, lng: f.lng });
 }
-function fitMap(){
-  var m = el("bkmap");
-  if (!m) return;
-  if (full.on) { if (map) map.invalidateSize(); return; }
-  var bar = el("tabbar") ? el("tabbar").getBoundingClientRect().height : 0;
-  var top = m.getBoundingClientRect().top + window.scrollY;
-  var h = Math.max(260, Math.floor(window.innerHeight - top - bar - 12));
-  if (Math.abs(m.offsetHeight - h) < 2) return;
-  m.style.height = h + "px";
-  if (map) map.invalidateSize();
-}
-var fitTimer = null;
-function fitSoon(){ clearTimeout(fitTimer); fitTimer = setTimeout(fitMap, 120); }
-window.addEventListener("resize", fitSoon);
-window.addEventListener("orientationchange", fitSoon);
-function locate(done){
-  jcLocate(function(lat, lng){ userPos = [lat, lng]; done(); },
-    function(code){ full.set(false); showErr(code); });   /* visible, not behind the full map */
-}
+/* the map fills the screen above the tab bar (kit) */
+var fitter = jcMapFit({ box: "bkmap", getMap: function(){ return map; }, isFull: function(){ return full.on; } });
+function fitMap(){ fitter.fit(); }
+function fitSoon(){ fitter.soon(); }
 function mapHtml(pinned){
   if (typeof L === "undefined") return '<p class="help" id="bkNoPins">' + esc(jcT("err_NETWORK")) + '</p>';   /* no dead buttons (review L) */
   if (!pinned.length) return '<p class="help" id="bkNoPins">' + esc(jcT("bk_no_pins")) + '</p>';
@@ -284,18 +266,9 @@ function drawMap(list){
   if (typeof L === "undefined" || !el("bkmap")) return;
   fitMap();
   requestAnimationFrame(fitSoon);
-  var c = (cfg && cfg.map) || {};
-  map = L.map("bkmap", { zoomControl: true }).setView([c.lat || 24.53, c.lng || 54.43], c.zoom || 14);
-  jcMapLayers(map, "layerBtn", layer, function(l){ layer = l; });
-  on("fullBtn", function(){ full.set(!full.on); });
-  var me = null;
-  on("locateBtn", function(){
-    locate(function(){
-      if (!map) return;
-      me = jcMeDot(map, userPos, me);
-      map.setView(userPos, Math.max(map.getZoom(), 17));
-    });
-  });
+  var m = map = jcBigMap("bkmap", { cfg: cfg, layer: layer, onLayer: function(l){ layer = l; }, full: full });
+  jcFindMe(m, { alive: function(){ return map === m; },
+    onError: function(code){ full.set(false); showErr(code); } });   /* visible, not behind the full map */
   var col = jcMapColors(), accent = col.accent, ink = col.ink;
   var pts = [];
   list.forEach(function(f){
@@ -306,8 +279,7 @@ function drawMap(list){
       .bindPopup(popHtml(f), JC_POPUP);
   });
   jcMapPopups(map, function(id){ var f = courtById(id); if (f) { full.set(false); openCourt(f); } });   /* the kit */
-  if (pts.length > 1) map.fitBounds(pts, { padding: [40, 40], maxZoom: 18 });
-  else if (pts.length) map.setView(pts[0], 17);
+  jcFitPins(map, pts);
 }
 
 var VIEWS = {

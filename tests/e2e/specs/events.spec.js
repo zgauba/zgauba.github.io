@@ -254,6 +254,31 @@ test("tap a pin: answers, note, walking directions + view pin; distance after Fi
   await expect(pop.getByRole("link", { name: "Directions" })).toHaveAttribute("href",
     "https://www.google.com/maps/dir/?api=1&destination=24.531%2C54.431&travelmode=walking");
   await expect(pop.getByRole("link", { name: "Google Maps" })).toHaveAttribute("href", /maps\/search\/\?api=1&query=24\.531%2C54\.431/);
+  for (const n of ["Directions", "Google Maps"]) await expect(pop.getByRole("link", { name: n })).toHaveAttribute("rel", "noopener noreferrer");   // SA-2
+  expect(await page.evaluate(() => map.getZoom())).toBeGreaterThanOrEqual(17);   // Find Me zooms in as on Courts and Pets (kit)
+});
+
+test("Find Me answering late, after leaving the map: no message, no dot on the next screen (kit jcFindMe, SA-2)", async ({ page }) => {
+  const eb = eventsBackend();
+  await stubBackend(page, { rpc: eb.rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await expect(page.locator("#map .leaflet-marker-icon").first()).toBeVisible();
+  await page.evaluate(() => { navigator.geolocation.getCurrentPosition = (ok, bad) => { window.late = { ok, bad }; }; });
+  await page.locator("#locateBtn").click();
+  await page.locator("#tab-list").click();
+  await page.evaluate(() => window.late.bad({ code: 1 }));
+  await expect(page.locator("#q")).toBeVisible();
+  await expect(page.locator("#msg")).toHaveText("");
+  // the same with a fix: back on a new map, the old map's late answer adds no blue dot
+  await page.locator("#tab-map").click();
+  await expect(page.locator("#map .leaflet-marker-icon").first()).toBeVisible();
+  await page.locator("#locateBtn").click();
+  await page.locator("#tab-list").click();
+  await page.locator("#tab-map").click();
+  await expect(page.locator("#map .leaflet-marker-icon").first()).toBeVisible();
+  await page.evaluate(() => window.late.ok({ coords: { latitude: 24.53, longitude: 54.43 } }));
+  await expect(page.locator("#map path.leaflet-interactive")).toHaveCount(0);   // no "you are here" circle
 });
 
 test("list: house numbers in natural order (9 before 10); nearest-first after locating", async ({ page, context }) => {
@@ -562,6 +587,8 @@ test("one-place: list says households coming + where; map is the place with Dire
   await expect(page.locator(".venueline")).toContainText("Central Park");
   await expect(page.locator(".venueline a")).toHaveAttribute("href", /destination=24\.531%2C54\.432/);
   await expect(page.locator(".leaflet-tooltip")).toHaveText("Central Park");
+  await expect(page.locator(".leaflet-tooltip")).toHaveClass(/bklabel/);          // the themed name label, as on Courts (SA-2)
+  await expect(page.locator(".venueline a")).toHaveAttribute("rel", "noopener noreferrer");
   await expect(page.locator("path.leaflet-interactive")).toHaveCount(1);          // one pin: the place
 });
 
