@@ -532,3 +532,33 @@ test("publish state review M1: after saving from the bottom of the long form the
   await expect(page.locator("#msg")).toHaveText("Published — residents can see it now.");
   await expect(page.locator("#msg")).toBeInViewport();
 });
+
+test("NF-3: Whole community first, then villages A–Z, then name — never the manual sort number; retired apart in the same order", async ({ page }) => {
+  const b = backend({ courts: [
+    COURT({ id: "z", name_en: "Zed Court", village_key: "seef-al-jubail", sort: 1 }),
+    COURT({ id: "b", name_en: "Beta Court", village_key: "ain-al-maha", sort: 2 }),
+    COURT({ id: "w2", name_en: "Pool Court", village_key: null, sort: 3 }),
+    COURT({ id: "a", name_en: "Alpha Court", village_key: "ain-al-maha", sort: 4 }),
+    COURT({ id: "w1", name_en: "Beach Court", village_key: null, sort: 5 }),
+    COURT({ id: "r2", name_en: "Old B", village_key: "seef-al-jubail", status: "retired" }),
+    COURT({ id: "r1", name_en: "Old A", village_key: null, status: "retired" }),
+  ] });
+  await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openCourts(page);
+  const ids = await page.locator("[data-court]").evaluateAll((ls) => ls.map((l) => l.dataset.court));
+  expect(ids).toEqual(["w1", "w2", "a", "b", "z", "r1", "r2"]);
+});
+
+test("NF-3 in Arabic: names compared in Arabic order (Arabic script before Latin), Arabic names where set", async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem("jc_lang", "ar"); } catch (e) {} });
+  const b = backend({ courts: [
+    COURT({ id: "lat", name_en: "Alpha Court", name_ar: null, village_key: "ain-al-maha" }),
+    COURT({ id: "arb", name_en: "Zulu Court", name_ar: "ملعب الشاطئ", village_key: "ain-al-maha" }),
+  ] });
+  await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openCourts(page);
+  const ids = await page.locator("[data-court]").evaluateAll((ls) => ls.map((l) => l.dataset.court));
+  expect(ids).toEqual(["arb", "lat"]);      // in English order (or by name_en) it would be Alpha first
+});

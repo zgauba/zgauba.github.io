@@ -28,7 +28,7 @@ const LOG = [
 ];
 
 function hhBackend(opts = {}) {
-  const st = { homes: homes(), pending: PENDING.map((p) => Object.assign({}, p)), log: opts.log || LOG };
+  const st = { homes: opts.homes || homes(), pending: PENDING.map((p) => Object.assign({}, p)), log: opts.log || LOG };
   const list = () => ok({ homes: st.homes, pending: st.pending });
   const home = (id) => st.homes.find((h) => h.id === id);
   const rpc = {
@@ -398,4 +398,19 @@ test("Arabic: the pin fix in Arabic, right to left", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   await expect(page.locator("h1")).toHaveText("تصحيح الدبوس");
   await expect(page.locator("#hhPinGo")).toHaveText("احفظ الدبوس هنا");
+});
+
+test("NF-3: villages A–Z (one the config doesn't list still shows, in its place), homes by building then number (9 before 10)", async ({ page }) => {
+  const H = (id, village, number, building) => ({ id, village, type: building ? "apartment" : "villa", building: building || null, number,
+    lat: 24.53, lng: 54.43, pin_set_at: "2026-11-03T10:00:00Z", flags: {}, created_at: "2026-11-03T09:00:00Z", members: [] });
+  // the server's order is deliberately wrong for the page's rule
+  await openHouseholds(page, { homes: [
+    H("s1", "seef-al-jubail", "304", "B2"), H("s2", "seef-al-jubail", "12", "B10"), H("s3", "seef-al-jubail", "5", "B2"),
+    H("a10", "ain-al-maha", "10"), H("a9", "ain-al-maha", "9"),
+    H("x1", "al-bahar", "1"),                                     // not in the config: shown by its key
+  ] });
+  // A–Z by shown name: "al-bahar" between Ain and Seef (config order would put the unlisted one last)
+  await expect(page.locator("h2.group")).toHaveText(["Waiting for you (1)", "Ain Al Maha", "al-bahar", "Seef Al Jubail"]);
+  const ids = await page.locator("[data-home]").evaluateAll((ls) => ls.map((l) => l.dataset.home));
+  expect(ids).toEqual(["a9", "a10", "x1", "s3", "s1", "s2"]);    // B2 5, B2 304, B10 12
 });
