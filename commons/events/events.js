@@ -742,12 +742,6 @@ var layer = "sat";
    By House Number stays one tap away. */
 var listSort = "distance";   /* distance | number */
 function dist(e){ return jcDistOf(jcOrigin(), e); }
-/* house-number order: building, then the number's digits numerically (9 before 10), then the rest */
-function byNumber(a, b){
-  var ba = String(a.building || ""), bb = String(b.building || "");
-  if (ba !== bb) return ba.localeCompare(bb, "en", { numeric: true });
-  return String(a.number).localeCompare(String(b.number), "en", { numeric: true, sensitivity: "base" });
-}
 function pinUrl(e){ return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(e.lat + "," + e.lng); }
 function answers(e){
   var bits = [];
@@ -919,12 +913,11 @@ function renderList(entries, q){
     var own = listSort === "distance" && myHome() && !(org && org.from === "here") ? myHome().village : null;
     function nearest(v){ return Math.min.apply(null, groups[v].map(function(e){ var d = dist(e); return d === null ? Infinity : d; })); }
     var villages = Object.keys(groups).sort(function(a, b){
-      return (b === own) - (a === own) || (org ? nearest(a) - nearest(b) : 0) ||
-             jcVillageName(cfg, a).localeCompare(jcVillageName(cfg, b), jcLang());
+      return (b === own) - (a === own) || (org ? nearest(a) - nearest(b) : 0) || jcVillageCmp(cfg)(a, b);
     });
     el("groups").innerHTML = villages.map(function(v){
       /* number order first, so homes with no pin (last) and equal distances keep it */
-      var list = groups[v].slice().sort(byNumber);
+      var list = groups[v].slice().sort(jcHomeNumCmp);
       if (org) list = jcNear(list, org, function(e){ return e; });
       return '<h2 class="group">' + esc(jcVillageName(cfg, v)) + ' · ' + esc(list.length) + '</h2><ul class="entries">' + list.map(function(e){
         var bits = answers(e);

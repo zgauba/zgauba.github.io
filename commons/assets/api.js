@@ -287,6 +287,20 @@ function jcVillageName(cfg, key){
   if (!v) return key || "";
   return (jcLang() === "ar" && v.ar) ? v.ar : v.en;
 }
+/* NF-3: villages A–Z by their shown name, in the page's language (Arabic order in Arabic); null / "" (Whole community)
+   first. A compare for .sort on village keys. */
+function jcVillageCmp(cfg){
+  return function(a, b){
+    if (!a || !b) return (!!a) - (!!b);
+    return jcVillageName(cfg, a).localeCompare(jcVillageName(cfg, b), jcLang());
+  };
+}
+/* house-number order: building, then the number's digits numerically (9 before 10), then the rest */
+function jcHomeNumCmp(a, b){
+  var ba = String(a.building || ""), bb = String(b.building || "");
+  if (ba !== bb) return ba.localeCompare(bb, "en", { numeric: true });
+  return String(a.number).localeCompare(String(b.number), "en", { numeric: true, sensitivity: "base" });
+}
 
 /* Anon-only RPCs (jc_config_get, jc_hit) skip the auth client on purpose: a broken
    stored session must never take down the public landing or silence the counter. */

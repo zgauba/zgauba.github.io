@@ -685,7 +685,7 @@ var VIEWS = {
                 hidden ? jcFmt("adm_su_hidden_n", { n: hidden }) : null].filter(Boolean).join(" · ");
     var groups = {};
     ins.forEach(function(x){ (groups[x.village] = groups[x.village] || []).push(x); });   /* server order: building, number */
-    var villages = Object.keys(groups).sort(function(a, b){ return jcVillageName(cfg, a).localeCompare(jcVillageName(cfg, b), jcLang()); });
+    var villages = Object.keys(groups).sort(jcVillageCmp(cfg));
     el("view").innerHTML = head + '<p class="sub">' + esc(line) + '</p>' +
       (ro ? '<p class="notice">' + esc(jcT("adm_su_readonly")) + '</p>' : '') +
       msgBox() +
@@ -983,11 +983,13 @@ var VIEWS = {
           '<div class="acts"><button class="mini" type="button" data-inv="' + esc(p.invite_id) + '" data-yes="1">' + esc(jcT("adm_hh_approve")) + '</button>' +
           '<button class="mini danger" type="button" data-inv="' + esc(p.invite_id) + '" data-yes="0">' + esc(jcT("adm_hh_decline")) + '</button></div></li>';
       }).join("") + '</ul>';
-    /* villages in the community's order; a home in a village the config doesn't list still shows */
-    var keys = ((cfg && cfg.villages) || []).map(function(v){ return v.key; });
+    /* NF-3: villages A–Z (Arabic order in Arabic), then building and house number; only villages with homes, so a
+       home in a village the config doesn't list still shows */
+    var keys = [];
     d.homes.forEach(function(h){ if (keys.indexOf(h.village) < 0) keys.push(h.village); });
+    keys.sort(jcVillageCmp(cfg));
     html += keys.map(function(k){
-      var hs = d.homes.filter(function(h){ return h.village === k; });
+      var hs = d.homes.filter(function(h){ return h.village === k; }).sort(jcHomeNumCmp);
       if (!hs.length) return '';
       var pinned = hs.filter(function(h){ return h.lat != null; }).length;
       var people = hs.reduce(function(n, h){ return n + h.members.length; }, 0);
@@ -1588,12 +1590,18 @@ function courtRow(f){
         esc(jcT(a[1])) + '</button>';
     }).join("") + '</div>' : '') + '</li>';
 }
+/* NF-3: Whole community first, then villages A–Z, then the court's name (in the page's language) — not the manual sort number */
+function courtOrder(list){
+  var vc = jcVillageCmp(cfg);
+  function nm(f){ return (ar() && f.name_ar ? f.name_ar : f.name_en) || ""; }
+  return list.slice().sort(function(a, b){ return vc(a.village_key || null, b.village_key || null) || nm(a).localeCompare(nm(b), jcLang()); });
+}
 function admCourtsHtml(){
   if (!ct) { loadCourts(); return '<p class="help">' + esc(jcT("working")) + '</p>'; }
   if (ct.err) return '<div class="row"><button class="btn ghost" type="button" id="ctRetry">' + esc(jcT("adm_ad_retry")) + '</button></div>';
   var r = ct.rules;
-  var live = ct.list.filter(function(f){ return courtStatus(f) !== "retired"; });
-  var gone = ct.list.filter(function(f){ return courtStatus(f) === "retired"; });
+  var live = courtOrder(ct.list.filter(function(f){ return courtStatus(f) !== "retired"; }));
+  var gone = courtOrder(ct.list.filter(function(f){ return courtStatus(f) === "retired"; }));
   return (r.enabled === true ? '' : '<p class="notice" id="ctOff">' + esc(jcT("ct_module_off")) + '</p>') +
     '<p class="help" id="ctRules">' + esc(jcFmt("ct_rules", { d: r.per_home_per_day, a: r.per_home_active, k: r.retention_days || 90 })) + '</p>' +
     '<div class="row"><button class="btn" type="button" id="ctNew">' + esc(jcT("ct_new")) + '</button></div>' +
