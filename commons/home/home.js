@@ -104,9 +104,9 @@ var VIEWS = {
     } else if (mhTab === "account") {
       /* organizers: their own button above the account box; anyone else: a quiet link at the
          bottom, so a newly given code still has a way in (Zee, 2026-11-06) */
-      /* the same rule as Organizer Tools' own door (admin.js canEnter): a pets-only code doesn't open it (review R1) */
-      var sc = m.admin_scopes || [];
-      var organizer = sc.indexOf("events") >= 0 || sc.indexOf("community") >= 0 || (m.admin_events || []).length > 0 || m.is_owner === true;
+      /* the same rule as Organizer Tools' own door (admin.js canEnter): since R5d-1 every level has a tab there
+         (pets now; Courts admins were missing this button before), so any admin role (nav.js jcIsAdmin) */
+      var organizer = jcIsAdmin(m);
       body =
         (organizer ? '<a class="btn" id="toAdmin" href="../admin/">' + esc(jcT("mh_organizer")) + '</a>' : '') +
         '<div class="panel">' +

@@ -148,7 +148,7 @@ than a map for finding a missing pet) → R5b-2a shared map kit → R5b-2b Pets 
 **Re-plan 2026-11-13:** R5b-2b = R5b-2b-0 DB ✓ (#102, applied) → R5b-2b-2a Pets · Strays · My Pets → R5b-2b-2b pet
 page (Map tab, mini maps, Add Location Pin, out-alone reports + disclosure) → **scoped `/structural-audit`**
 (duplication + cross-module consistency, `commons/` client only, ~4–5 agents; Zee 2026-11-13: once all four modules
-are stable, so it compares settled code) ✓ SA-1 #105, SA-2 #106, NF-1 #107, NF-2 #108 → NF-3 → R5d; SA-3–SA-5 slot in between.
+are stable, so it compares settled code) ✓ SA-1 #105, SA-2 #106, NF-1 #107, NF-2 #108, NF-3 #109 → R5d; SA-3–SA-5 slot in between.
 Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas "Jubail Pets Concept" + PDF.
 - Directory: **owned** · **community "known & fine"** · **stray under care** (care record: sterilized,
   dewormed, vaccination, under treatment — kept by the carer group).
@@ -194,7 +194,7 @@ Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas 
   server order from your home pin, no phone re-sort (their homes never reach the phone).
 - Organizer Tools never by distance: A–Z by village, then name (events stay by date).
 - PRs: **NF-1** courts get an optional village (where it is, not who may book; none = Whole community) ✓ #107 → **NF-2** the
-  shared control on Courts / Events / Strays ✓ #108 → **NF-3** Organizer A–Z (in review; Pets organizer lists come with R5d).
+  shared control on Courts / Events / Strays ✓ #108 → **NF-3** Organizer A–Z ✓ #109 (Pets organizer lists come with R5d).
 
 ### Bookings (long term, Zee 2026-11-14)
 - Courts grow into general **Bookings** for any community's shared spaces (rooms, BBQ areas, halls). The code is

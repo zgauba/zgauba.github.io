@@ -1095,3 +1095,13 @@ test("NF-2 Pets tab: the owned pets' line is the shared one, with no button (the
   await expect(page.locator("#jcHelp li")).toHaveCount(4);
   await expect(page.locator("#jcHelp")).toContainText("Your location stays on your phone");
 });
+
+// ── R5d-1: the way into Organizer Tools → Pets, as on a court's page ──
+for (const [scopes, shown] of [[[], false], [["events"], false], [["pets"], true], [["community"], true]]) {
+  test(`R5d-1 pet page: Admin ${shown ? "shown" : "hidden"} for admin_scopes [${scopes}] (into Organizer Tools → Pets, that animal)`, async ({ page }) => {
+    await open(page, backend({ me: Object.assign({}, MEMBER, { admin_scopes: scopes }) }), { q: "?pet=" + ID(3) });
+    await expect(page.locator("h1")).toHaveText("Ginger");
+    await expect(page.locator("#ptAdmin")).toHaveCount(shown ? 1 : 0);
+    if (shown) await expect(page.locator("#ptAdmin")).toHaveAttribute("href", "../admin/?tab=pets&pet=" + ID(3));
+  });
+}

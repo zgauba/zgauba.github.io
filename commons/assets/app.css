@@ -113,3 +113,9 @@ a.badge:visited{color:var(--jc-accent)}
 .evtitle{display:flex; align-items:flex-start; gap:10px}
 .evtitle h1{flex:1 1 auto; min-width:0; overflow-wrap:anywhere}
 .evtitle .adminbtn, .evtitle .adminbtn:visited{flex:0 0 auto; margin-top:2px; text-decoration:none; color:var(--jc-ink)}
+
+/* chips (Pets, Organizer Tools; R5d-1 moved here from pets.css + admin.css): colour only for real states —
+   Missing = red, Needs help = amber, the rest neutral */
+.chip{display:inline-block; font-size:11.5px; line-height:1.5; border:1px solid var(--jc-line); border-radius:999px; padding:0 8px; color:var(--jc-muted)}
+.chip.miss{background:var(--jc-danger); border-color:var(--jc-danger); color:#2d0808; font-weight:700}
+.chip.warn{border-color:var(--jc-warn); color:var(--jc-warn); font-weight:700}

@@ -14,6 +14,7 @@ var state = null, cfg = null, current = null;
 /* ?event=<id> — the events list's Admin badge: open that event's editor once loaded */
 var OPEN_EVENT = new URLSearchParams(location.search).get("event");
 var OPEN_COURT = new URLSearchParams(location.search).get("court");   /* from a court's Admin button on Courts */
+var OPEN_PET = new URLSearchParams(location.search).get("pet");       /* R5d-1: from an animal's Admin button on Pets */
 /* ?eventadmin=<token> — a community admin's grant link (T5.2 PR B): asked, never auto-accepted */
 var GRANT = new URLSearchParams(location.search).get("eventadmin");
 if (GRANT && !/^[A-Za-z0-9_-]{16,64}$/.test(GRANT)) GRANT = null;
@@ -41,8 +42,8 @@ var INVITE = (function(){
   return v;
 })();
 function inviteForget(){ try { sessionStorage.removeItem(INVITE_KEY); } catch(e){} }
-/* the levels on the Admins screen; pets stays off until pets has admin screens (R4b-1 plan Q1) */
-var AD_SCOPES = ["community", "events", "bookings"];
+/* the levels on the Admins screen (pets since R5d-1: it has its own tab now) */
+var AD_SCOPES = ["community", "events", "bookings", "pets"];
 var ad = null;            /* R4b-1a: { <scope>: { admins, links } } from jc_module_admins_list | null */
 var adLinks = {};         /* scope → url: new invite links, shown until the person leaves the Admins screen
                              (code review M1: another level's Remove / Make never wipes one) */
@@ -53,6 +54,11 @@ var ct = null;            /* { list (jc_admin_facilities_list), rules (jc_admin_
 var ctLoading = false;
 var ctNote = null;        /* an error code to show once the re-read list is drawn (a stale change) */
 var ctBusy = false;       /* a status change is in flight */
+var pa = null;            /* R5d-1 Pets tab: { list (jc_admin_pets_list), link (jc_pets_group_get; undefined = couldn't read) } | { err } | null */
+var paLoading = false;
+var paSeq = 0;            /* bumped when a right ends: an answer from before is dropped (security review L2) */
+var paBusy = false;       /* the group link is being saved */
+var paFocus = null;       /* an animal to show once, from its Admin button on Pets */
 var cd = null;            /* R4b-2 court day view: { f (court row), date "YYYY-MM-DD" (community time), slots [] | null, err, loading,
                              form null | {kind:"block"} | {kind:"cancel", id}, draft (form values across a language switch) } */
 var cdBusy = false, cdSeq = 0;
@@ -83,10 +89,12 @@ var bannerDraft = null;   /* the banner text being typed when the person switche
    A new tab (R4b-1 Courts) is one more entry here + its adm_tab_ strings. */
 var ADM_TABS = [
   { key: "events",    show: function(){ return isOrganizer() || isEventAdmin(); }, html: admEventsHtml },
-  { key: "banner",    show: function(){ return isOrganizer() || events.some(function(e){ return e.status === "live"; }); },
-    html: admBannerHtml },
   { key: "courts",    show: isCourtsAdmin, html: admCourtsHtml },
-  { key: "community", show: function(){ return true; }, html: admCommunityHtml }
+  { key: "pets",      show: isPetsAdmin, html: admPetsHtml },
+  { key: "community", show: function(){ return true; }, html: admCommunityHtml },
+  /* the Banner is the last tab (Zee 2026-11-14) */
+  { key: "banner",    show: function(){ return isOrganizer() || events.some(function(e){ return e.status === "live"; }); },
+    html: admBannerHtml }
 ];
 function adminTabs(){
   return ADM_TABS.filter(function(t){ return t.show(); }).map(function(t){ return t.key; });
@@ -188,8 +196,9 @@ function has(s){ return scopes.indexOf(s) >= 0; }
 function isOrganizer(){ return has("events") || has("community"); }
 function isEventAdmin(){ return adminEvents.length > 0; }
 function isCourtsAdmin(){ return has("bookings") || has("community"); }
+function isPetsAdmin(){ return has("pets") || has("community"); }
 /* R4b-1a: a courts (bookings) admin gets in too — Community tab now, the Courts tab in R4b-1b */
-function canEnter(){ return isOrganizer() || isEventAdmin() || owner || has("bookings"); }
+function canEnter(){ return isOrganizer() || isEventAdmin() || owner || has("bookings") || has("pets"); }
 function byId(id){ return events.filter(function(e){ return e.id === id; })[0]; }
 function fmtDate(iso){
   if (!iso) return "";
@@ -224,6 +233,7 @@ function fail(e){
      re-read who this is, then land wherever they still belong */
   admining = null; adminsData = null; closing = null; su = null; pm = null; ad = null; adBusy = false;
   hh = null; hlog = null; health = null; ct = null; ctEd = null; ctBusy = false; cd = null; cdBusy = false;   /* a right that ended must not leave its data cached (security L5) */
+  pa = null; paBusy = false; paSeq++;
   rpc("jc_me_get").then(function(me){
     scopes = me.admin_scopes || []; adminEvents = me.admin_events || []; owner = !!me.is_owner;
     if (!canEnter()) { show("lock"); return showErr("NOT_ADMIN"); }
@@ -470,7 +480,7 @@ var VIEWS = {
   },
 
   home: function(){
-    /* T5.2 (Zee, 2026-11-06): a sub-menu like My Home — Events · Banner · Community */
+    /* T5.2 (Zee, 2026-11-06): a sub-menu like My Home — Events · Courts · Pets · Community · Banner (Banner last, Zee 2026-11-14) */
     var tabs = adminTabs();
     if (tabs.indexOf(admTab) < 0) admTab = tabs[0];
     var html =
@@ -511,7 +521,7 @@ var VIEWS = {
     on("exit", function(){
       busy("exit", true);
       rpc("jc_admin_exit").then(function(){
-        scopes = []; admining = null; adminsData = null; ct = null; ctEd = null; cd = null;   /* nothing of the code's stays cached */
+        scopes = []; admining = null; adminsData = null; ct = null; ctEd = null; cd = null; pa = null;   /* nothing of the code's stays cached */
         if (isEventAdmin() || owner) return loadHome();   /* still runs their own events / reads feedback */
         events = []; show("lock");
       }, function(e){ busy("exit", false); fail(e); });
@@ -519,6 +529,7 @@ var VIEWS = {
     wireAdmins();
     wireBanner();
     wireCourts();
+    wirePets();
     var closeForm = el("closeForm");
     if (closeForm) closeForm.addEventListener("submit", function(e2){ e2.preventDefault(); closeEvent(); });
   },
@@ -1088,7 +1099,7 @@ var VIEWS = {
    Not 'community' — there it means the community-admin role, not The Community section. */
 function scopeName(s){ return s === "events" || s === "bookings" || s === "pets" ? jcModName(s) : jcT("scope_" + s); }   /* RM-ok */
 function adScopeName(s){ return s === "bookings" || s === "pets" ? jcFmt("adm_ad_scope_mod", { m: jcModName(s) }) : jcT("adm_ad_scope_" + s); }   /* RM-ok */
-function admTabLabel(t){ return t === "events" ? jcModName("events") : t === "courts" ? jcModName("bookings") : jcT("adm_tab_" + t); }   /* RM-ok */
+function admTabLabel(t){ return t === "events" ? jcModName("events") : t === "courts" ? jcModName("bookings") : t === "pets" ? jcModName("pets") : jcT("adm_tab_" + t); }   /* RM-ok */
 var MN_KEYS = ["events", "bookings", "pets", "community"];
 var MN_FIELDS = [{ k: "name_en", max: 14, dir: "ltr" }, { k: "name_ar", max: 18, dir: "rtl" },
                  { k: "title_en", max: 40, dir: "ltr" }, { k: "title_ar", max: 40, dir: "rtl" }];
@@ -1146,7 +1157,9 @@ var LOG_KEYS = { home_edit: "y", home_pin_set: "y", home_suppress: "y" /* old ro
   facility_save: "y", facility_status: "y", block_create: "y", block_remove: "y", booking_cancel: "y",
   module_admin_link: "y", module_admin_accept: "y", module_admin_revoke: "y",
   /* RM */
-  module_label_set: "y" };
+  module_label_set: "y",
+  /* R5d-1: Pets (S4 + R5a) */
+  stray_save: "y", pet_care_set: "y", pet_care_add: "y", pet_archive: "y", sighting_hide: "y", pets_group_set: "y" };
 /* the homes list, well-formed rows only (a null row would throw while drawing) */
 function hhShape(d){
   if (!hObj(d) || !Array.isArray(d.homes) || !Array.isArray(d.pending)) return null;
@@ -1533,6 +1546,122 @@ function wireAdmins(){
         .then(function(d){ if (admining !== id) return; adminsData = d; show("home"); showOk(jcT("adm_admins_removed")); },
               function(err){ b.disabled = false; fail(err); });
     });
+  });
+}
+
+/* ---------- Pets (R5d-1; server S4 + R5a): the community's animals, A–Z; the pets WhatsApp group link ---------- */
+function loadPets(){
+  if (paLoading) return;
+  paLoading = true;
+  var seq = paSeq;
+  /* the link is read the way residents read it (members only, never the public config). Unreadable (Pets off →
+     MODULE_OFF; a code-only admin with no home; the network): link undefined + why, and Save never clears it blind */
+  var linkErr = null;
+  Promise.all([rpc("jc_admin_pets_list"), rpc("jc_pets_group_get").then(function(d){ return hObj(d) ? (d.link || null) : null; },
+                                                                       function(e){ linkErr = (e && e.code) || "UNKNOWN"; return undefined; })]).then(function(r){
+    paLoading = false;
+    if (seq !== paSeq || !isPetsAdmin()) return;         /* the right ended while it was on its way (as Courts) */
+    pa = { list: Array.isArray(r[0]) ? r[0].filter(function(p){ return hObj(p) && typeof p.id === "string"; }) : [], link: r[1], linkErr: linkErr };
+    if (OPEN_PET) { paFocus = OPEN_PET; OPEN_PET = null; jcSetUrl("tab=pets"); }   /* once: never a jump later */
+    if (current === "home" && admTab === "pets") {
+      /* the list lands after the page: a message already on screen ("Done…") survives the redraw (as Courts) */
+      var m = el("msg"), keep = m && m.textContent ? { c: m.className, t: m.textContent } : null;
+      show("home");
+      if (keep && el("msg") && !el("msg").textContent) { el("msg").className = keep.c; el("msg").textContent = keep.t; }
+    }
+  }, function(e){
+    paLoading = false;
+    if (seq !== paSeq) return;
+    if (e.code === "NOT_ADMIN") return fail(e);
+    pa = { err: e.code || "UNKNOWN" };
+    if (current === "home" && admTab === "pets") { show("home"); showErr(pa.err); }
+  });
+}
+function petName(p){ return typeof p.name === "string" ? p.name : ""; }
+/* NF-3 order: strays and community animals first (no village), then the owners' villages A–Z, then name */
+function petGroups(list){
+  var vc = jcVillageCmp(cfg), groups = {}, keys = [];
+  list.forEach(function(p){
+    var k = p.kind === "owned" && hObj(p.home) && p.home.village ? p.home.village : "";
+    if (!groups[k]) { groups[k] = []; keys.push(k); }
+    groups[k].push(p);
+  });
+  keys.sort(vc);
+  return keys.map(function(k){
+    return { key: k, list: groups[k].slice().sort(function(a, b){ return petName(a).localeCompare(petName(b), jcLang()); }) };
+  });
+}
+function petRow(p){
+  var sp = ["cat", "dog", "bird", "rabbit", "other"].indexOf(p.species) >= 0 ? p.species : "other";
+  var where = p.kind === "owned" ? (hObj(p.home) && p.home.number != null ? jcHomeLabel(p.home) : "") : (p.territory || "");
+  var chips = (p.missing === true ? '<span class="chip miss">' + esc(jcT("pt_missing_chip")) + '</span>' : '') +
+    (p.kind === "stray" && ["needs_help", "under_care", "known_fine", "rehomed"].indexOf(p.care_state) >= 0
+      ? '<span class="chip' + (p.care_state === "needs_help" ? " warn" : "") + '">' + esc(jcT("pt_care_" + p.care_state)) + '</span>' : '') +
+    (!p.photo_path ? '<span class="chip">' + esc(jcT("pa_no_photo")) + '</span>' : '') +
+    (p.sightings_7d > 0 ? '<span class="chip">' + esc(jcFmt("pa_sightings_7d", { n: p.sightings_7d })) + '</span>' : '');
+  return '<li data-pet="' + esc(p.id) + '"><b dir="auto">' + esc(petName(p)) + '</b>' +
+    (chips ? '<div class="ctchips">' + chips + '</div>' : '') +
+    '<div class="meta">' + esc(jcT("pt_sp_" + sp) + " · " + jcT(p.kind === "owned" ? "pt_kind_owned" : "pt_kind_stray")) + '</div>' +
+    (where ? '<div class="meta" dir="auto">' + esc(where) + '</div>' : '') +
+    '<div class="acts"><a class="btn ghost small" href="../pets/?pet=' + encodeURIComponent(p.id) + '">' + esc(jcT("pa_view")) + '</a></div></li>';
+}
+function admPetsHtml(){
+  if (!pa) { loadPets(); return '<p class="help">' + esc(jcT("working")) + '</p>'; }
+  if (pa.err) return '<div class="row"><button class="btn ghost" type="button" id="paRetry">' + esc(jcT("adm_ad_retry")) + '</button></div>';
+  var live = pa.list.filter(function(p){ return p.status === "active"; });
+  var gone = pa.list.filter(function(p){ return p.status !== "active"; }).sort(function(a, b){ return petName(a).localeCompare(petName(b), jcLang()); });
+  var link = typeof pa.link === "string" ? pa.link : "";
+  return (jcModuleOn(cfg, "pets") ? '' : '<p class="notice" id="paOff">' + esc(jcT("pa_module_off")) + '</p>') +
+    /* the pets WhatsApp group: members-only (never the public config) — R5a W1 */
+    '<h2 class="group">' + esc(jcT("pa_group")) + '</h2><div class="panel" id="paGroup">' +
+      '<label class="field"><span>' + esc(jcT("pa_group_link")) + '</span><input type="text" id="paLink" inputmode="url" autocomplete="off" ' +
+        'maxlength="200" dir="ltr" placeholder="https://chat.whatsapp.com/…" value="' + esc(link) + '"></label>' +
+      '<p class="help">' + esc(jcT(pa.link !== undefined ? "pa_group_help" : pa.linkErr === "MODULE_OFF" ? "pa_group_unknown" : "pa_group_unread")) + '</p>' +
+      '<div class="row"><button class="btn" type="button" id="paLinkSave">' + esc(jcT("pa_group_save")) + '</button>' +
+        (link ? '<button class="btn ghost" type="button" id="paLinkClear">' + esc(jcT("pa_group_clear")) + '</button>' : '') + '</div></div>' +
+    (live.length ? petGroups(live).map(function(g){
+      return '<h2 class="group">' + esc(g.key ? jcVillageName(cfg, g.key) : jcT("pa_strays")) + ' · ' + esc(g.list.length) + '</h2>' +
+        '<ul class="sulist" id="paList-' + esc(g.key || "strays") + '">' + g.list.map(petRow).join("") + '</ul>';
+    }).join("") : '<p class="help" id="paNone">' + esc(jcT("pa_none")) + '</p>') +
+    /* no restore on the server; the reason is in the admin log (Zee Q3, 2026-11-14) */
+    (gone.length ? '<h2 class="group">' + esc(jcFmt("pa_archived", { n: gone.length })) + '</h2>' +
+      '<ul class="sulist" id="paArchived">' + gone.map(function(p){ return '<li><span dir="auto">' + esc(petName(p)) + '</span></li>'; }).join("") + '</ul>' : '');
+}
+function wirePets(){
+  on("paRetry", function(){ pa = null; show("home"); });
+  on("paLinkSave", function(){ petsLinkSave(el("paLink").value, "paLinkSave"); });
+  on("paLinkClear", function(){ if (window.confirm(jcT("pa_group_clear_q"))) petsLinkSave("", "paLinkClear"); });
+  if (paFocus && current === "home" && admTab === "pets" && pa && pa.list) {   /* from an animal's Admin button: that animal, once */
+    var id = paFocus; paFocus = null;
+    var li = document.querySelector('#view [data-pet="' + CSS.escape(id) + '"]');
+    if (li) {
+      li.classList.add("focus"); li.setAttribute("tabindex", "-1");
+      if (li.scrollIntoView) li.scrollIntoView({ block: "center" });
+      li.focus({ preventScroll: true });                 /* keyboard / screen reader land on it too (review L) */
+    }
+    else jcShowErrFor("pa_err_", "NOT_FOUND");
+  }
+}
+function petsLinkSave(v, btn){
+  if (paBusy) return;
+  v = String(v || "").trim();
+  /* an empty Save never clears blind (both reviews M1): the link unreadable or none set → ask for one; a link set →
+     the same question as Remove */
+  if (!v && btn === "paLinkSave") {
+    if (!pa || pa.err || !pa.link) return jcShowErrFor("pa_err_", "NEED_LINK");
+    if (!window.confirm(jcT("pa_group_clear_q"))) return;
+  }
+  /* the server's rule, said before sending; BAD_LINK has its own words here (the shared one means an invite link) */
+  if (v && !/^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]{16,40}$/.test(v)) return jcShowErrFor("pa_err_", "BAD_LINK");
+  paBusy = true; busy(btn, true);
+  rpc("jc_admin_pets_group_set", { p_link: v }).then(function(r){
+    paBusy = false;
+    if (pa && !pa.err) pa.link = hObj(r) && typeof r.link === "string" ? r.link : null;
+    if (current === "home" && admTab === "pets") { show("home"); showOk(jcT(v ? "pa_group_saved" : "pa_group_cleared")); }
+  }, function(e){
+    paBusy = false; busy(btn, false);
+    if (e.code === "NOT_ADMIN") return fail(e);
+    jcShowErrFor("pa_err_", e.code);
   });
 }
 
@@ -2162,7 +2291,7 @@ function inviteView(){
       return rpc("jc_me_get").then(function(me){
         scopes = me.admin_scopes || []; adminEvents = me.admin_events || []; owner = !!me.is_owner;
         if (canEnter()) return loadHome().then(function(){ showOk(done); });
-        /* a level with no screens here yet (pets): say it worked, and the way out (review L3) */
+        /* a level with no screens here (none since R5d-1 gave pets its tab; kept as the safety net): say it worked, and the way out (review L3) */
         current = "invited";
         el("view").innerHTML = '<h1>' + esc(jcT("inv_title")) + '</h1>' + msgBox() +
           '<p><a class="btn ghost" href="../">' + esc(jcT("acct_back")) + '</a></p>';
@@ -2932,8 +3061,8 @@ function loadHome(){
     if (ev) openEditor(ev); else show("home");
   },
     function(e){
-      /* owner without an organizer code; a courts-only admin (R4b-1a) — no events list for either */
-      if (e.code === "NOT_ADMIN" && (owner || has("bookings"))) { events = []; return show("home"); }
+      /* owner without an organizer code; a courts-only (R4b-1a) or pets-only (R5d-1) admin — no events list for any */
+      if (e.code === "NOT_ADMIN" && (owner || has("bookings") || has("pets"))) { events = []; return show("home"); }
       if (e.code === "NOT_ADMIN") { scopes = []; adminEvents = []; show("lock"); showErr(e.code); } else { show("lock"); showErr(e.code); } });
 }
 

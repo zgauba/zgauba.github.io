@@ -65,7 +65,7 @@ const ROWS = [
     url: (k) => new RegExp("\\?id=" + LIVE_ID + "&tab=" + k + "$") },
   { name: "My Home", persona: "member", path: "home/", prefix: "mh-", keys: ["home", "household", "account"],
     url: (k) => (k === "home" ? /\/home\/$/ : new RegExp("\\?tab=" + k + "$")) },
-  { name: "Organizer Tools", persona: "community-admin", path: "admin/?tab=events", prefix: "atab-", keys: ["events", "banner", "courts", "community"],
+  { name: "Organizer Tools", persona: "community-admin", path: "admin/?tab=events", prefix: "atab-", keys: ["events", "courts", "pets", "community", "banner"],
     url: (k) => new RegExp("\\?tab=" + k + "$") },
 ];
 
@@ -119,16 +119,17 @@ test("a one-place event (two tabs) still wires every key; Organizer Tools tab fo
   await page.goto("admin/?tab=community");
   await page.locator("#atab-community").focus();
   await page.keyboard.press("ArrowLeft");
-  await expect(page.locator("#atab-courts")).toBeFocused();              // R4b-1b: Courts sits before Community
-  await page.keyboard.press("ArrowLeft");
-  await expect(page.locator("#atab-banner")).toBeFocused();
+  await expect(page.locator("#atab-pets")).toBeFocused();                // R5d-1: … Courts · Pets · Community · Banner
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator("#atab-banner")).toBeFocused();              // the Banner is the last tab (Zee 2026-11-14)
   await expect(page.locator("#bannerText")).toBeVisible();
   // a half-typed banner survives switching away and back by keyboard
   await page.locator("#bannerText").fill("Road closed");
   await page.locator("#atab-banner").focus();
-  await page.keyboard.press("ArrowRight");
-  await expect(page.locator("#atab-courts")).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("ArrowLeft");
+  await expect(page.locator("#atab-community")).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("ArrowRight");
   await expect(page.locator("#bannerText")).toHaveValue("Road closed");
   // a modified arrow (e.g. Alt/Cmd+← = browser Back) is left to the browser
   await page.keyboard.press("Shift+ArrowLeft");

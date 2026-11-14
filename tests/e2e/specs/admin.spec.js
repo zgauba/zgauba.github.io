@@ -27,14 +27,15 @@ test("lock: a wrong code says so; an events code opens the list (drafts included
   expect(calls.filter((c) => c.name === "jc_hit").map((c) => c.args.p_page)).toContain("admin");
 });
 
-test("a code for another module (pets) doesn't open the event tools", async ({ page }) => {
+test("a Pets code opens Organizer Tools on Pets only — never the event tools (R5d-1)", async ({ page }) => {
   const ab = adminBackend();
   await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await page.goto("admin/");
   await unlock(page, "PETS-1");
-  await expect(page.locator("#msg")).toHaveText("That code doesn't open the event tools.");
+  await expect(page.locator('[role="tab"]')).toHaveText(["Pets", "Community"]);
   await expect(page.locator("#newEv")).toHaveCount(0);
+  await expect(page.locator("#paNone")).toHaveText("No animals yet.");
 });
 
 test("new event from the Halloween template: short name follows the title; questions + pin hints + switch saved", async ({ page }) => {
@@ -895,23 +896,29 @@ test("My Home → Account: a resident sees 'Have an organizer code?' at the bott
   await expect(page.locator("a#toAdmin.btn")).toHaveCount(0);
 });
 
-test("My Home → Account: a pets-only code doesn't get the Organizer Tools button; the platform owner does", async ({ page }) => {
+test("My Home → Account: every admin role gets the Organizer Tools button (pets and courts since R5d-1); a resident gets the code link", async ({ page }) => {
   const ab = adminBackend({ scopes: ["pets"] });
   await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await page.goto("home/?tab=account");
+  await expect(page.locator("a#toAdmin.btn")).toHaveText("Organizer Tools");
+  ab.st.scopes = ["bookings"];
+  await page.reload();
+  await expect(page.locator("a#toAdmin.btn")).toHaveText("Organizer Tools");
+  ab.st.scopes = [];
+  await page.reload();
   await expect(page.locator("#toAdmin")).toHaveText("Have an organizer code?");
-  ab.st.scopes = []; ab.st.owner = true;
+  ab.st.owner = true;
   await page.reload();
   await expect(page.locator("a#toAdmin.btn")).toHaveText("Organizer Tools");
 });
 
-test("Organizer Tools sub-menu: Events · Banner · Courts · Community, each with its own part; ?tab= remembered", async ({ page }) => {
+test("Organizer Tools sub-menu: Events · Courts · Pets · Community · Banner (Banner last), each with its own part; ?tab= remembered", async ({ page }) => {
   const ab = adminBackend({ scopes: ["community"], owner: true });
   await stubBackend(page, { rpc: ab.rpc });
   await signIn(page);
   await page.goto("admin/");
-  await expect(page.locator(".subtabs [role=tab]")).toHaveText(["Events", "Banner", "Courts", "Community"]);
+  await expect(page.locator(".subtabs [role=tab]")).toHaveText(["Events", "Courts", "Pets", "Community", "Banner"]);
   await expect(page.locator("#newEv")).toBeVisible();
   await expect(page.locator("#bannerForm, [data-rotate], #healthOpen")).toHaveCount(0);
   await page.locator("#atab-banner").click();

@@ -227,7 +227,7 @@ test("admin log: actions in words, a scheduled job shows as Automatic, only home
   await expect(rows.nth(1)).toContainText("Changed directory visibility");
   await expect(rows.nth(1).locator(".fbbody")).toHaveText("Alice · Townhouse 40 · Ain Al Maha");
   await expect(rows.nth(2).locator(".fbbody")).toHaveText("Alice · Apt 304, B2 · Seef Al Jubail");
-  await expect(rows.nth(3)).toContainText("stray_save");             // not yet in words (R5 pets): its own name
+  await expect(rows.nth(3)).toContainText("Saved a stray or community animal");   // in words since R5d-1
   expect(await page.content()).not.toContain("u-secret");
   expect(await page.content()).not.toContain("ev-1");
 });
