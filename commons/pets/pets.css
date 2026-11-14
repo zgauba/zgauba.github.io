@@ -122,7 +122,7 @@ html[dir="rtl"] .ptbody b, html[dir="rtl"] .ptwho h1{text-align:right}
 .seenbox p{margin:6px 0 0; font-size:14px}
 .seenbox .acts{margin-top:10px}
 .seenbox .btn{flex:1 1 auto}
-.ptmini{height:130px; border-radius:10px; overflow:hidden; border:1px solid var(--jc-line)}
+.ptmini{height:130px; border-radius:var(--jc-radius); overflow:hidden; border:1px solid var(--jc-line)}
 .ptmini .leaflet-control-attribution{font-size:9px}
 #ptMapKey, #ptMapNone{margin:0}
 #ptPickHelp:focus{outline:none}

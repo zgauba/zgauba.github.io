@@ -12,9 +12,11 @@
 .leaflet-popup-content-wrapper, .leaflet-popup-tip{background:var(--jc-surface); color:var(--jc-ink);
   border:1px solid var(--jc-line)}
 .leaflet-container a.leaflet-popup-close-button{color:var(--jc-muted)}
-.pop{font:13px/1.45 var(--jc-font); min-width:170px}
+/* one rhythm for every module's popup (SA-2: was Courts' own; Events and Pets used block spacing) */
+.pop{font:13px/1.45 var(--jc-font); min-width:170px; display:flex; flex-direction:column; gap:4px}
 .pop .meta{color:var(--jc-muted)}
-.pop .note{margin-top:3px; white-space:pre-wrap; overflow-wrap:anywhere}
+.pop .note{white-space:pre-wrap; overflow-wrap:anywhere}
+.pop .popacts{margin-top:4px; align-items:center}
 /* a pin's popup open: the overlay buttons and their (invisible) row wrapper — which sit above Leaflet's panes — step aside so they can't
    cover the popup or its close button; the zoom buttons too (5b.2) */
 .evmapwrap.popopen .lang, .evmapwrap.popopen .mapbtns, .evmapwrap.popopen .leaflet-control-zoom{visibility:hidden}

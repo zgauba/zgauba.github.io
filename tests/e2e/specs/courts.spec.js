@@ -345,6 +345,17 @@ test("Find Me refused in Full Screen: the map steps out so the message shows", a
   await expect(page.locator("#msg")).toContainText("Location is off for this site");
 });
 
+test("Find Me failing late, after leaving the Map tab: no message on the List (kit jcFindMe, SA-2)", async ({ page }) => {
+  await open(page, backend(), { q: "?tab=map" });
+  await page.evaluate(() => { navigator.geolocation.getCurrentPosition = (ok, bad) => { window.lateFail = () => bad({ code: 1 }); }; });
+  await page.locator("#locateBtn").click();
+  await page.locator("#bktab-list").click();
+  await page.evaluate(() => window.lateFail());
+  await expect(page.locator("#bktab-list")).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("[data-open]").first()).toBeVisible();
+  await expect(page.locator("#msg")).toHaveText("");
+});
+
 test("a deep link to a court that's gone says so and drops the link", async ({ page }) => {
   await open(page, backend(), { q: "?court=99999999-aaaa-4aaa-8aaa-000000000009" });
   await expect(page.locator("#msg")).toHaveText("That court isn't available any more.");
@@ -374,6 +385,7 @@ test("Map tab: like the event map — names on the pins, Streets / Full Screen /
   await expect(page.locator(".leaflet-popup")).toContainText("Tennis · ⁦07:00–22:00⁩");
   await expect(page.locator(".leaflet-popup .popacts a")).toHaveText("Directions");                // as on the event map
   await expect(page.locator(".leaflet-popup .popacts a")).toHaveAttribute("href", /google\.com\/maps\/dir\/.*destination=24\.5301%2C54\.4312/);
+  await expect(page.locator(".leaflet-popup .popacts a")).toHaveAttribute("rel", "noopener noreferrer");   // the kit's link (SA-2)
   await page.locator("[data-popopen]").click();
   await expect(page.locator("#bkSlots")).toBeVisible();
   await page.locator("#jcBackBtn").click();

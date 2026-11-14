@@ -102,16 +102,101 @@ function jcMapFull(getMap, onExit){
   return ctl;
 }
 
-/* Popups on a full map (Courts, Strays): while one is open the map's buttons step aside (.popopen on the wrap);
-   a [data-popopen] button inside it calls onOpen(its value). Events wires its own (it adds report buttons). */
-function jcMapPopups(m, onOpen){
+/* Popups on a full map (Events, Courts, Pets): while one is open the map's buttons step aside (.popopen on the wrap);
+   a [data-popopen] button inside it calls onOpen(its value). hooks: { open(pe), close() } — a page's own extras
+   (Events: the "They're Out" button, the repaint held back while a popup is open). */
+function jcMapPopups(m, onOpen, hooks){
   var wrap = document.querySelector(".evmapwrap");
+  hooks = hooks || {};
   m.on("popupopen", function(pe){
     if (wrap) wrap.classList.add("popopen");
     var b = pe.popup.getElement() && pe.popup.getElement().querySelector("[data-popopen]");
-    if (b) b.addEventListener("click", function(){ onOpen(b.dataset.popopen); });
+    if (b && onOpen) b.addEventListener("click", function(){ onOpen(b.dataset.popopen); });
+    if (hooks.open) hooks.open(pe);
   });
-  m.on("popupclose", function(){ if (wrap) wrap.classList.remove("popopen"); });
+  m.on("popupclose", function(){ if (wrap) wrap.classList.remove("popopen"); if (hooks.close) hooks.close(); });
+}
+
+/* ---------- the full map (SA-2): one copy of what Events, Courts and Pets each set up ---------- */
+var JC_LABEL_ZOOM = 17;                    /* Find Me zooms in to here; pin names show from here in (the Strays map); one pin sits here */
+var JC_MAP_HOME = { lat: 24.53, lng: 54.43, zoom: 14 };   /* when the community has no map centre set */
+
+/* The map in jcMapHtml's box: community centre, Street / Satellite, the Full Screen button.
+   o: { cfg, layer, onLayer(layer), full — the page's jcMapFull }. Returns the map. */
+function jcBigMap(mapId, o){
+  var c = (o.cfg && o.cfg.map) || {};
+  var m = L.map(mapId, { zoomControl: true }).setView([c.lat || JC_MAP_HOME.lat, c.lng || JC_MAP_HOME.lng], c.zoom || JC_MAP_HOME.zoom);
+  jcMapLayers(m, "layerBtn", o.layer, o.onLayer);
+  var fb = document.getElementById("fullBtn");
+  if (fb && o.full) fb.addEventListener("click", function(){ o.full.set(!o.full.on); });
+  return m;
+}
+
+/* Find Me on a full map: the blue dot, and the map zooms in to JC_LABEL_ZOOM (never out).
+   o: { alive() — false once the page has drawn another map or left; onPos(lat, lng) — the page keeps the position
+   (Events: distances); onError(code) }. Neither the dot nor an error lands on a map that has gone. */
+function jcFindMe(m, o){
+  var b = document.getElementById("locateBtn"), dot = null;
+  if (!b) return;
+  b.addEventListener("click", function(){
+    jcLocate(function(lat, lng){
+      if (o.onPos) o.onPos(lat, lng);
+      if (o.alive && !o.alive()) return;
+      dot = jcMeDot(m, [lat, lng], dot);
+      m.setView([lat, lng], Math.max(m.getZoom(), JC_LABEL_ZOOM));
+    }, function(code){
+      if (o.alive && !o.alive()) return;
+      if (o.onError) o.onError(code);
+    });
+  });
+}
+
+/* All the pins in view; one pin at oneZoom (default JC_LABEL_ZOOM); no pins: the map stays where it is. */
+function jcFitPins(m, pts, oneZoom){
+  if (pts.length > 1) m.fitBounds(pts, { padding: [40, 40], maxZoom: 18 });
+  else if (pts.length === 1) m.setView(pts[0], oneZoom || JC_LABEL_ZOOM);
+}
+
+/* Walking directions as a link — always opener- and referrer-free (the page's URL can carry tokens) */
+function jcDirLink(lat, lng){
+  return '<a target="_blank" rel="noopener noreferrer" href="' + esc(jcDirectionsUrl(lat, lng)) + '">' + esc(jcT("ev_directions")) + '</a>';
+}
+
+/* A pin's popup. o: { head — the bold first line, body — the lines under it, acts — extra actions after Directions,
+   after — under the actions (all trusted HTML: the caller escapes), headAuto — dir="auto" on the head (typed names),
+   open: { id, label } — the button that opens the item (jcMapPopups' onOpen), lat/lng — the Directions link }. */
+function jcPopHtml(o){
+  var acts = (o.open ? '<button class="mini" type="button" data-popopen="' + esc(o.open.id) + '">' + esc(o.open.label) + '</button>' : '') +
+    (o.lat != null && o.lng != null ? jcDirLink(o.lat, o.lng) : '') + (o.acts || '');
+  return '<div class="pop"><b' + (o.headAuto ? ' dir="auto"' : '') + '>' + o.head + '</b>' + (o.body || '') +
+    (acts ? '<div class="popacts">' + acts + '</div>' : '') + (o.after || '') + '</div>';
+}
+
+/* The full map fills what's left of the screen above the tab bar, so it's all visible without scrolling (Zee,
+   2026-11-04); never below 260px; recomputed on resize, rotation and Safari's toolbar growing / shrinking.
+   o: { box — the map box id, getMap(), isFull(), afterId — what sits under the map (Events: the key), onFit(fits),
+   before() — run first on a delayed fit }. Returns { fit, soon }. Call once per page. */
+function jcMapFit(o){
+  var timer = null;
+  function fit(){
+    var box = document.getElementById(o.box), m = o.getMap();
+    if (!box) return;
+    if (o.isFull()) { if (m) m.invalidateSize(); return; }   /* full screen: CSS sizes it */
+    /* innerHeight follows Safari's toolbar; visualViewport would also shrink on pinch-zoom (review) */
+    var bar = document.getElementById("tabbar"), barH = bar ? bar.getBoundingClientRect().height : 0;
+    var aft = o.afterId && document.getElementById(o.afterId), ah = aft ? aft.getBoundingClientRect().height : 0;
+    var top = box.getBoundingClientRect().top + window.scrollY;
+    var want = Math.floor(window.innerHeight - top - barH - (ah ? ah + 8 : 0) - 12);
+    if (o.onFit) o.onFit(want >= 260);
+    var h = Math.max(260, want);
+    if (Math.abs(box.offsetHeight - h) < 2) return;
+    box.style.height = h + "px";
+    if (m) m.invalidateSize();
+  }
+  function soon(){ clearTimeout(timer); timer = setTimeout(function(){ if (o.before) o.before(); fit(); }, 120); }
+  window.addEventListener("resize", soon);
+  window.addEventListener("orientationchange", soon);
+  return { fit: fit, soon: soon };
 }
 
 /* "Map Labels" (Events, Pets): the map's key in a window, not under the map (Zee: "looks very messy").
