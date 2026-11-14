@@ -102,12 +102,13 @@ test("language toggle switches to Arabic + RTL", async ({ page }) => {
   await expect(page.locator("#authLink")).toBeHidden();  // no duplicate Sign in for signed-out visitors
 });
 
-test("non-https archive link from config falls back to the default", async ({ page }) => {
-  await stubBackend(page, { rpc: { jc_config_get: () => ok(Object.assign({}, CONFIG, {
-    links: { halloween_archive: "javascript:alert(1)" } })) } });
+test("the footer has no Halloween 2026 link any more (Zee 2026-11-14), even when the config still names one", async ({ page }) => {
+  await stubBackend(page);
   await page.goto("./");
   await expect(page.locator(".community")).toHaveCount(1);
-  await expect(page.locator("#archiveLink")).toHaveAttribute("href", "https://zgauba.github.io/jubail-halloween/");
+  await expect(page.locator("#jcFooter")).toBeVisible();
+  await expect(page.locator("#jcFooter")).not.toContainText("Halloween");
+  await expect(page.locator('a[href*="jubail-halloween"]')).toHaveCount(0);
 });
 
 test("canonical redirect: only the github.io copy forwards, path/query/fragment kept", async ({ page }) => {

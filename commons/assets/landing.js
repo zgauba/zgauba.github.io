@@ -18,7 +18,6 @@ if (LISTED.indexOf(jcCommunity()) === -1) LISTED.push(jcCommunity());
 var DEFAULT_CFG = {
   name_en: "Jubail Commons", name_ar: "كومنز الجبيل",
   modules: { events:{enabled:false}, bookings:{enabled:false}, pets:{enabled:false} },
-  links: { halloween_archive: "https://zgauba.github.io/jubail-halloween/" },
   broadcast: ""
 };
 
@@ -158,22 +157,8 @@ function startPage(me){
 
 function render(){
   el("langBtn").textContent = jcT("toggle_label");
-  el("credit").innerHTML = esc(jcT("credit_before")) +
-    '<a href="https://zgauba.github.io/" target="_blank" rel="noopener">' + esc(jcT("credit_name")) + '</a>' + esc(jcT("credit_after"));   /* own tab: Commons stays open (Zee) */
-  /* T5.3: members can send ideas / feedback (My Home → Account) */
-  if (!el("fbLink") && mode === "hub") {
-    var fb = document.createElement("div");
-    fb.className = "archive";
-    fb.innerHTML = '<a id="fbLink" href="home/?tab=account#feedback"></a>';
-    el("credit").parentNode.insertBefore(fb, el("credit"));
-  }
-  if (el("fbLink")) el("fbLink").textContent = jcT("fb_link");
-  /* config-sourced links must be https — blocks javascript:/data: schemes if a
-     config row were ever compromised */
-  var archiveUrl = (cfgFor("jubail").links || {}).halloween_archive || "";
-  if (!/^https:\/\//.test(archiveUrl)) archiveUrl = DEFAULT_CFG.links.halloween_archive;
-  el("archiveLink").href = archiveUrl;
-  el("archiveLink").textContent = jcT("archive_halloween");
+  /* the shared footer (api.js): Ideas & Feedback for members (T5.3), the credit; the Halloween 2026 link is gone (Zee 2026-11-14) */
+  jcFooter("");
   el("errbar").textContent = jcT("error_config");
   el("errbar").style.display = configFailed ? "block" : "none";
   renderAuth();

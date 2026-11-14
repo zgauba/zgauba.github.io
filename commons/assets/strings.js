@@ -31,8 +31,6 @@ var JC_STRINGS = {
     cta_bookings: "Book a Court",
     cta_pets: "Add a Pet",
     coming_soon: "Coming Soon",
-    archive_halloween: "Halloween 2026",
-    archive_halloween_desc: "Where it all started — the trick-or-treat map.",
     archive_open: "Open the Map",
     error_config: "Couldn't load community settings — showing defaults. Try again shortly.",
     /* credit = before + <linked name → career page> + after (split so AR word order works) */
@@ -1258,8 +1256,6 @@ var JC_STRINGS = {
     cta_bookings: "احجز ملعباً",
     cta_pets: "أضف حيوانك الأليف",
     coming_soon: "قريباً",
-    archive_halloween: "هالوين 2026",
-    archive_halloween_desc: "من هنا كانت البداية — خريطة الحلوى.",
     archive_open: "افتح الخريطة",
     error_config: "تعذّر تحميل إعدادات المجتمع — نعرض الإعدادات الافتراضية. حاول مرة أخرى بعد قليل.",
     /* T5.0a draft — name transliteration + phrasing pending native review */

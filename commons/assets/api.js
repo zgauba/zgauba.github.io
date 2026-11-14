@@ -321,3 +321,20 @@ function jcAnon(name, args, keepalive){
 function jcHit(page){
   try { jcAnon("jc_hit", { p_community: jcCommunity(), p_page: page }, true).catch(function(){}); } catch(e){}
 }
+
+/* The footer, the same on every Commons page (Zee 2026-11-14; was on the Commons home only): Ideas & Feedback for
+   members, then the credit. root: the path to commons/ ("" on the home page, "../" elsewhere). Safe to call on every
+   paint (language switch, sign-in): it updates in place. A full map on screen hides it (app.css). */
+function jcFooter(root){
+  var f = el("jcFooter");
+  if (!f) {
+    f = document.createElement("footer");
+    f.id = "jcFooter"; f.className = "jcfoot";
+    var m = document.querySelector("main");
+    if (m && m.parentNode) m.parentNode.insertBefore(f, m.nextSibling); else document.body.appendChild(f);
+  }
+  f.innerHTML = (JC_ME ? '<div class="fb"><a id="fbLink" href="' + root + 'home/?tab=account#feedback">' + esc(jcT("fb_link")) + '</a></div>' : '') +
+    '<div id="credit">' + esc(jcT("credit_before")) +
+    /* own tab: Commons stays open (Zee) */
+    '<a href="https://zgauba.github.io/" target="_blank" rel="noopener">' + esc(jcT("credit_name")) + '</a>' + esc(jcT("credit_after")) + '</div>';
+}

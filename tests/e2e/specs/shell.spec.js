@@ -326,3 +326,47 @@ test("installed app: the reset screen says to reset from the browser; not shown 
   await page.locator("#langBtn").click();
   await expect(page.locator("#standaloneNote")).toContainText("سفاري");
 });
+
+// ── the footer on every Commons page (Zee 2026-11-14) ──
+test("the footer (credit + Ideas & Feedback for members) is on every page; hidden under a full map; follows the language", async ({ page }) => {
+  const { adminBackend, petsBackend } = require("./backends");
+  const ab = adminBackend({ scopes: ["community"] });
+  const pb = petsBackend();
+  const base = Object.assign({}, pb.rpc, ab.rpc, { jc_config_get: pb.rpc.jc_config_get });
+  await stubBackend(page, { rpc: base });
+  await signIn(page);
+  for (const [path, fb] of [["./", "home/?tab=account#feedback"], ["home/", "../home/?tab=account#feedback"],
+                            ["admin/?tab=community", "../home/?tab=account#feedback"], ["pets/?tab=mine", "../home/?tab=account#feedback"]]) {
+    await page.goto(path);
+    const f = page.locator("#jcFooter");
+    await expect(f).toBeVisible();
+    await expect(f.locator("#credit")).toHaveText("Made by Zeeshan, your neighbor in Jubail Island");
+    await expect(f.locator("#credit a")).toHaveAttribute("href", "https://zgauba.github.io/");
+    await expect(f.locator("#fbLink")).toHaveAttribute("href", fb);
+    await expect(page.locator("footer")).toHaveCount(1);                         // never two
+  }
+  await page.goto("bookings/?tab=list");
+  await expect(page.locator("#jcFooter")).toBeVisible();
+  await page.goto("home/");
+  await page.locator("#langBtn").click();
+  await expect(page.locator("#jcFooter #credit a")).toHaveText("ذيشان");
+  await expect(page.locator("footer")).toHaveCount(1);
+});
+
+test("the footer on the sign-in page: the credit, no feedback link for someone signed out", async ({ page }) => {
+  await stubBackend(page);
+  await page.goto("account/");
+  await expect(page.locator("#jcFooter #credit")).toHaveText("Made by Zeeshan, your neighbor in Jubail Island");
+  await expect(page.locator("#jcFooter #fbLink")).toHaveCount(0);
+});
+
+test("the footer steps aside under a full map (the event map), and is back on the List tab", async ({ page }) => {
+  const { eventsBackend, LIVE_ID } = require("./backends");
+  await stubBackend(page, { rpc: eventsBackend().rpc });
+  await signIn(page);
+  await page.goto("events/?id=" + LIVE_ID);
+  await expect(page.locator(".evmapwrap")).toBeVisible();
+  await expect(page.locator("#jcFooter")).toBeHidden();
+  await page.locator("#tab-list").click();
+  await expect(page.locator("#jcFooter")).toBeVisible();
+});
