@@ -236,6 +236,7 @@ function doSignOut(){
    until it loads); the link goes back to the platform entry. */
 var communityCfg = null;
 function paint(){
+  jcFooter("../");
   var name = jcCommunityName(communityCfg, jcCommunity());
   el("homeLink").textContent = name;
   el("langBtn").textContent = jcT("toggle_label");

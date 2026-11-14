@@ -19,3 +19,10 @@ body.has-tabbar{padding-bottom:calc(60px + env(safe-area-inset-bottom))}
 .tabbar a .ico{color:var(--jc-muted)}
 .tabbar a[aria-current="page"]{color:var(--jc-ink); background:var(--jc-surface-2)}
 .tabbar a[aria-current="page"] .ico{color:var(--jc-accent)}
+
+/* the footer on every page (api.js jcFooter) — the page frame, with the tab bar; every page loads this file */
+footer.jcfoot{color:var(--jc-faint); font-size:12px; text-align:center; padding:10px 16px 24px}
+footer.jcfoot a{color:var(--jc-muted)}
+footer.jcfoot .fb{margin-bottom:6px}
+/* a full map (Events, Courts, Pets: assets/map.js jcMapHtml) fills the screen above the tab bar: no footer under it */
+body:has(.evmapwrap) footer.jcfoot{display:none}

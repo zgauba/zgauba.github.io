@@ -977,6 +977,7 @@ VIEWS.edit = function(){
 
 /* ---------- boot ---------- */
 function paint(){
+  jcFooter("../");
   var name = jcCommunityName(cfg, state && state.me && state.me.community);
   el("homeLink").textContent = name;
   el("langBtn").textContent = jcT("toggle_label");
