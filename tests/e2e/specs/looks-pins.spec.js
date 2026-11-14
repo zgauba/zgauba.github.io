@@ -108,6 +108,8 @@ test("Haq al Laila: navy + gold, Arabic tagline above the English title", async 
   await expect(page.locator("html")).toHaveAttribute("data-look", "haq_al_laila");
   await expect(page.locator(".evhead .tagline")).toHaveText("عطونا الله يعطيكم");
   await expect(page.locator(".evhead .tagline")).toHaveAttribute("dir", "rtl");
+  // its meaning in English under it, on English pages only (Zee 2026-11-14)
+  await expect(page.locator(".evhead .tagline-en")).toHaveText("\u201cGive to us, and God will give to you\u201d");
   await expect(page.locator(".evhead h1 .mark")).toHaveText("🌙");
   // fill = availability must survive the gold look: "reported" can't be gold-ish amber
   const rgb = (i) => pin(page, i).evaluate((n) => getComputedStyle(n).backgroundColor.match(/\d+/g).slice(0, 3).map(Number));
@@ -395,4 +397,11 @@ test("a non-array ring_split never splits", async ({ page }) => {
   const odd = { fields: { g: { type: "enum", values: ["a", "b", "c"], pin: "ring", ring_split: "c" } } };
   await openEvent(page, pinEvent({ payload_schema: odd }, [home("a", "1", 24.521, { g: "c" })]));
   await expect(pin(page, 0)).toHaveClass(/\br2\b/);
+});
+
+test("Haq al Laila in Arabic: the Arabic tagline only, no English line", async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem("jc_lang", "ar"); } catch (e) {} });
+  await openEvent(page, pinEvent({ look: "haq_al_laila" }));
+  await expect(page.locator(".evhead .tagline")).toHaveText("عطونا الله يعطيكم");
+  await expect(page.locator(".evhead .tagline-en")).toHaveCount(0);
 });

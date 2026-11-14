@@ -290,6 +290,7 @@ var JC_STRINGS = {
     ev_legend_states: "Tonight",
     ev_legend_supply: "How much is left",
     look_tagline_haq_al_laila: "عطونا الله يعطيكم",
+    look_tagline_haq_al_laila_en: "\u201cGive to us, and God will give to you\u201d",
     /* T5.2 PR 5b — event day */
     ev_live_q: "Right now, {h} is…",
     ev_live_on: "Open",
@@ -1511,6 +1512,7 @@ var JC_STRINGS = {
     ev_legend_states: "الليلة",
     ev_legend_supply: "كم تبقّى",
     look_tagline_haq_al_laila: "عطونا الله يعطيكم",
+    look_tagline_haq_al_laila_en: "\u201cGive to us, and God will give to you\u201d",
     /* T5.2 PR 5b — يوم الفعالية */
     ev_live_q: "الآن، {h}…",
     ev_live_on: "مفتوح",
