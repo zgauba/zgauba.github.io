@@ -140,12 +140,83 @@ function jcFindMe(m, o){
   if (!b) return;
   b.addEventListener("click", function(){
     jcLocate(function(lat, lng){
+      jcHere = { lat: lat, lng: lng };      /* the lists sort from it too, this visit (NF-2) */
       if (o.onPos) o.onPos(lat, lng);
       if (o.alive && !o.alive()) return;
       dot = jcMeDot(m, [lat, lng], dot);
       m.setView([lat, lng], Math.max(m.getZoom(), JC_LABEL_ZOOM));
     }, function(code){
       if (o.alive && !o.alive()) return;
+      if (o.onError) o.onError(code);
+    });
+  });
+}
+
+/* ---------- nearest first (NF-2, docs/plans/nearest-first.md): one distance rule for every resident list ---------- */
+/* This visit's phone position, from Find Me (any full map) or Use Where I Am (any list). Memory only: never sent or
+   stored, gone when the page is left, never re-asked on a redraw. Use My Home clears it. */
+var jcHere = null;
+
+/* metres between two { lat, lng } (haversine; no Leaflet needed) */
+function jcDist(a, b){
+  var R = 6371000, rad = Math.PI / 180;
+  var dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+  var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+/* "≈ 300 m" / "≈ 1.2 km" — the ≈ is the caller's (string keys); Latin digits in both languages */
+function jcFmtDist(m){ return m < 1000 ? Math.round(m / 10) * 10 + " m" : (m / 1000).toFixed(1) + " km"; }
+
+/* the household pin, when the home has one (claimed before T5.2 or test data: maybe not) */
+function jcHomePin(){
+  var h = JC_ME && JC_ME.home;
+  return h && h.pin_set_at && jcHasPos(h) ? { lat: h.lat, lng: h.lng } : null;
+}
+/* where "nearest" is measured from: the phone (this visit, once asked) or the household pin; null = neither */
+function jcOrigin(){
+  if (jcHere) return { lat: jcHere.lat, lng: jcHere.lng, from: "here" };
+  var p = jcHomePin();
+  return p ? { lat: p.lat, lng: p.lng, from: "home" } : null;
+}
+/* distance from the origin to an item's spot (posOf(item) → { lat, lng } or null), or null */
+function jcDistOf(origin, pos){ return origin && jcHasPos(pos) ? jcDist(origin, pos) : null; }
+/* a new array, nearest first; items with no spot keep their order, last. Stable (ties keep the given order). */
+function jcNear(items, origin, posOf){
+  return items.map(function(x, i){ return { x: x, i: i, d: jcDistOf(origin, posOf(x)) }; })
+    .sort(function(a, b){
+      if (a.d === null || b.d === null) return (a.d === null) - (b.d === null) || a.i - b.i;
+      return a.d - b.d || a.i - b.i;
+    }).map(function(o){ return o.x; });
+}
+
+/* The "Sorted by" line, the same on every list (o.id: the line's id; o.fallback: the string key when there's no origin
+   — "Sorted by: name…"; o.noButton: Pets' owned pets, whose homes never reach the phone). The button:
+   Use Where I Am (from the home pin, or no origin) / Use My Home (from the phone, when there's a home pin). */
+function jcSortedHtml(o){
+  var home = !!jcHomePin(), org = o.noButton ? (home ? { from: "home" } : null) : jcOrigin();   /* noButton: the server's home order */
+  var text = !org ? o.fallback : org.from === "here" ? "sort_near_here" : "sort_near_home";
+  var btn = o.noButton ? "" : !org || org.from === "home" ? "sort_use_here" : home ? "sort_use_home" : "";
+  return '<div class="sortedby"><p class="help" id="' + esc(o.id) + '">' + esc(jcT(text)) + '</p>' +
+    (btn ? '<button type="button" class="lang" id="sortHereBtn" data-to="' + (btn === "sort_use_here" ? "here" : "home") + '">' +
+      esc(jcT(btn)) + '</button>' : '') + '</div>';
+}
+/* Wire the button: onChange() redraws the list; onError(code) shows LOCATE_DENIED / LOCATE_FAILED; alive() — false once
+   the page has moved on (a late fix still keeps the position, but nothing is redrawn or shown); late() — run instead of
+   onChange when a fix lands after a redraw replaced this button (Events' event-night refresh), so the tap isn't lost. */
+function jcSortedWire(o){
+  var b = document.getElementById("sortHereBtn");
+  if (!b) return;
+  b.addEventListener("click", function(){
+    if (b.dataset.to === "home") { jcHere = null; o.onChange(); return; }
+    jcBusy("sortHereBtn", true);
+    jcLocate(function(lat, lng){
+      jcHere = { lat: lat, lng: lng };
+      if (o.alive && !o.alive()) { if (o.late) o.late(); return; }
+      o.onChange();
+    }, function(code){
+      if (o.alive && !o.alive()) return;
+      jcBusy("sortHereBtn", false);
       if (o.onError) o.onError(code);
     });
   });

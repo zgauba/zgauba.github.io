@@ -737,17 +737,11 @@ document.addEventListener("visibilitychange", function(){
 
 /* ---------- map + list (Halloween-site parity, plan audit 2026-11-03) ---------- */
 var layer = "sat";
-var listSort = "number";   /* number | distance */
-/* The visitor's own position — held in memory only, never sent or stored. Used for
-   "≈ 120 m from you" and sort-by-distance, exactly as the Halloween site did. */
-var userPos = null;
-
-function locate(done){
-  jcLocate(function(lat, lng){ userPos = L.latLng(lat, lng); done(); },
-    function(code){ full.set(false); showErr(code); });   /* the message sits above the map: leave full screen to show it (courts review, parity) */
-}
-function dist(e){ return userPos && hasPos(e) ? userPos.distanceTo(L.latLng(e.lat, e.lng)) : null; }
-function fmtDist(m){ return m < 1000 ? Math.round(m / 10) * 10 + " m" : (m / 1000).toFixed(1) + " km"; }
+/* NF-2 (Zee 2026-11-14): the List opens on Nearest First, measured from the household pin — or this visit's phone
+   position once Find Me / Use Where I Am is tapped (the kit's jcHere: memory only, never sent or stored).
+   By House Number stays one tap away. */
+var listSort = "distance";   /* distance | number */
+function dist(e){ return jcDistOf(jcOrigin(), e); }
 /* house-number order: building, then the number's digits numerically (9 before 10), then the rest */
 function byNumber(a, b){
   var ba = String(a.building || ""), bb = String(b.building || "");
@@ -776,7 +770,7 @@ function popupHtml(e){
     body: '<div class="meta">' + esc(jcVillageName(cfg, e.village)) + '</div>' + stateLine(e) +
       (answers(e).length ? '<div>' + esc(answers(e).join(" · ")) + '</div>' : '') +
       (e.note ? '<div class="note">' + esc(e.note) + '</div>' : '') +
-      (d !== null ? '<div class="meta">' + esc(jcFmt("ev_dist_from_you", { d: fmtDist(d) })) + '</div>' : ''),
+      (d !== null ? '<div class="meta">' + esc(jcFmt(jcOrigin().from === "here" ? "ev_dist_from_you" : "ev_dist_from_home", { d: "\u2066" + jcFmtDist(d) + "\u2069" })) + '</div>' : ''),
     lat: e.lat, lng: e.lng,
     acts: '<a target="_blank" rel="noopener noreferrer" href="' + esc(pinUrl(e)) + '">' + esc(jcT("ev_view_pin")) + '</a>' + reportLink(e),
     after: reportedLine(e) });
@@ -877,9 +871,8 @@ function renderMap(entries){
       if (pendingRepaint) { pendingRepaint = false; drawHomes(data.entries || []); }
     }
   });
-  /* Find Me also keeps the position for "≈ 120 m from you" (held in memory only) */
+  /* Find Me also sets the visit position (the kit's jcHere) for "≈ 120 m from you" and the list's order */
   jcFindMe(m, { alive: function(){ return map === m; },
-    onPos: function(lat, lng){ userPos = L.latLng(lat, lng); },
     onError: function(code){ full.set(false); showErr(code); } });
   jcFitPins(m, pts, 18);                    /* the one place: closer in */
 }
@@ -902,11 +895,16 @@ function renderList(entries, q){
     '<div class="seg2" role="group">' +
       '<button type="button" id="sortNum" aria-pressed="' + (listSort === "number") + '">' + esc(jcT("ev_sort_number")) + '</button>' +
       '<button type="button" id="sortDist" aria-pressed="' + (listSort === "distance") + '">' + esc(jcT("ev_sort_distance")) + '</button></div>' +
+    (listSort === "distance" ? jcSortedHtml({ id: "evSorted", fallback: "ev_sorted_number" }) : '') +
     '<div id="groups"></div>';
   var input = el("q");
   input.value = input.defaultValue = q || "";
-  on("sortNum", function(){ listSort = "number"; renderList(entries, input.value); });
-  on("sortDist", function(){ locate(function(){ listSort = "distance"; renderList(entries, input.value); }); });
+  function again(){ renderList(entries, input.value); }
+  on("sortNum", function(){ listSort = "number"; again(); });
+  on("sortDist", function(){ listSort = "distance"; again(); });
+  jcSortedWire({ onChange: again, onError: showErr, alive: function(){ return !!el("groups") && el("q") === input; },
+    /* the list was redrawn (refresh) while the phone answered: redraw the one on screen, if the List is still showing */
+    late: function(){ var q2 = el("q"); if (el("groups") && q2 && q2 !== input) renderList(data.entries || [], q2.value); } });
   function draw(){
     var needle = input.value.trim().toLowerCase();
     var groups = {};
@@ -915,23 +913,27 @@ function renderList(entries, q){
       if (needle && label.toLowerCase().indexOf(needle) === -1 && String(e.number).toLowerCase().indexOf(needle) === -1) return;
       (groups[e.village] = groups[e.village] || []).push(e);
     });
-    var byDist = listSort === "distance" && userPos;
+    var org = listSort === "distance" ? jcOrigin() : null;
+    /* Nearest First from home: your own village first, then the nearest villages (Zee 2026-11-14). From the phone
+       (Use Where I Am / Find Me): strictly nearest where you are — walking another village on the night. */
+    var own = listSort === "distance" && myHome() && !(org && org.from === "here") ? myHome().village : null;
     function nearest(v){ return Math.min.apply(null, groups[v].map(function(e){ var d = dist(e); return d === null ? Infinity : d; })); }
     var villages = Object.keys(groups).sort(function(a, b){
-      return byDist ? nearest(a) - nearest(b) : jcVillageName(cfg, a).localeCompare(jcVillageName(cfg, b));
+      return (b === own) - (a === own) || (org ? nearest(a) - nearest(b) : 0) ||
+             jcVillageName(cfg, a).localeCompare(jcVillageName(cfg, b), jcLang());
     });
     el("groups").innerHTML = villages.map(function(v){
-      var list = groups[v].slice().sort(byDist
-        ? function(a, b){ var da = dist(a), db = dist(b); return (da === null ? Infinity : da) - (db === null ? Infinity : db); }
-        : byNumber);
+      /* number order first, so homes with no pin (last) and equal distances keep it */
+      var list = groups[v].slice().sort(byNumber);
+      if (org) list = jcNear(list, org, function(e){ return e; });
       return '<h2 class="group">' + esc(jcVillageName(cfg, v)) + ' · ' + esc(list.length) + '</h2><ul class="entries">' + list.map(function(e){
         var bits = answers(e);
         if (!hasPos(e)) bits.push(jcT("ev_unpinned"));
-        var d = dist(e);
+        var d = org ? dist(e) : null;   /* By House Number: no distances (no line says where from) */
         var gf = pinField(data.event, "glyph");
         return '<li class="' + (e.mine ? "mine" : "") + '"><b>' + (gf ? glyphHtml(gf.spec, e.payload && e.payload[gf.key]) + ' ' : '') + esc(jcHomeLabel(e)) + '</b>' +
           (e.mine ? ' <span class="meta">· ' + esc(jcT("ev_mine")) + '</span>' : '') +
-          (d !== null ? ' <span class="meta">· ' + esc(fmtDist(d)) + '</span>' : '') +
+          (d !== null ? ' <span class="meta">· <bdi dir="ltr">' + esc(jcFmt("sort_dist", { d: jcFmtDist(d) })) + '</bdi></span>' : '') +
           (bits.length ? '<div class="meta">' + esc(bits.join(" · ")) + '</div>' : '') + stateLine(e) +
           (e.note ? '<div class="note">' + esc(e.note) + '</div>' : '') +
           (hasPos(e) ? '<div class="popacts">' + jcDirLink(e.lat, e.lng) + '</div>' : '') + '</li>';

@@ -53,7 +53,6 @@ function listUrl(){ return tab === "pets" ? null : "tab=" + tab; }
 function isPet(p){ return hObj(p) && typeof p.id === "string" && typeof p.name === "string" && (p.kind === "owned" || p.kind === "stray"); }
 function speciesText(p){ return jcT("pt_sp_" + (SPECIES.indexOf(p.species) >= 0 ? p.species : "other")); }
 function kindText(p){ return jcT(p.kind === "owned" ? "pt_kind_owned" : "pt_kind_stray"); }   /* no "community animal": owned or stray (Zee 2026-11-13) */
-function hasPin(){ var h = state && state.me && state.me.home; return !!(h && h.pin_set_at); }
 var DAY = 864e5;
 function recent(iso, ms){ var t = Date.parse(iso); return isFinite(t) && Date.now() - t < ms && t - Date.now() < 3e5; }
 /* my pet, at home, reported out on its own in the last 24 h (the server sends last_seen_at only to the household) */
@@ -343,8 +342,11 @@ function chips(p, noState, noMissing){      /* noMissing: the pet page's alarm a
 }
 /* R5b-2b-1 (Zee 2026-11-12: "two columns… the pet details page looks messy"): photo-led cards, the whole card is
    the button. Missing pets: full-width cards on top (photo beside the text, the last-seen line). */
-function card(p){
+/* a stray's spot as { lat, lng } for the kit's nearest-first (NF-2) */
+function strayAt(p){ var s = strayPos(p); return s ? { lat: s[0], lng: s[1] } : null; }
+function card(p, i, all, near){
   var where = p.kind === "owned" ? homeText(p.home) : (p.territory || "");
+  var d = near ? jcDistOf(jcOrigin(), strayAt(p)) : null;   /* Strays cards only: their spot from the origin */
   var miss = p.missing === true, out = seenOut(p);
   var seen = p.kind === "stray" && p.care_state !== "rehomed" && recent(p.last_seen_at, 30 * DAY) ? jcAgo(p.last_seen_at) : "";
   return '<li class="' + (miss ? "missing" : "") + '" data-pet="' + esc(p.id) + '">' +
@@ -355,9 +357,35 @@ function card(p){
     (chips(p) ? '<span class="head">' + chips(p) + '</span>' : '') +
     (miss && p.last_seen_note ? '<span class="meta" dir="auto">' + esc(jcFmt("pt_last_seen", { t: p.last_seen_note })) + '</span>' : '') +
     (seen ? '<span class="meta">' + esc(jcFmt("pt_seen_ago", { t: seen })) + '</span>' : '') +
+    (d !== null ? '<span class="meta"><bdi dir="ltr">' + esc(jcFmt("sort_dist", { d: jcFmtDist(d) })) + '</bdi></span>' : '') +
     /* amber, not red: a heads-up for the household, nothing has changed state (plan R5b-2b-2a) */
     (out ? '<span class="meta seenout">' + esc(jcFmt("pt_seen_out", { t: out })) + '</span>' : '') +
     '</span></button></li>';
+}
+/* The Strays cards: Needs help first, rehomed last; within each, nearest first — the server's order (nearest my home
+   pin), or from this visit's phone position once Find Me / Use Where I Am is tapped (NF-2) */
+function strayOrder(strays){
+  var rank = function(p){ return p.care_state === "needs_help" ? 0 : p.care_state === "rehomed" ? 2 : 1; };
+  if (jcHere) strays = jcNear(strays, jcOrigin(), strayAt);
+  return strays.map(function(p, i){ return [p, i]; })
+    .sort(function(a, b){ return rank(a[0]) - rank(b[0]) || a[1] - b[1]; }).map(function(x){ return x[0]; });
+}
+function strayCardsHtml(strays){
+  return jcSortedHtml({ id: "ptStraysSorted", fallback: "sort_name" }) +
+    '<ul class="ptgrid" id="ptStrays">' + strayOrder(strays).map(function(p){ return card(p, 0, null, true); }).join("") + '</ul>';
+}
+function wireStraySort(){
+  jcSortedWire({ onChange: redrawStrayCards, onError: ptMsg, alive: function(){ return current === "list" && tab === "strays"; } });
+}
+/* Find Me on the Strays map: re-sort the cards under it, the map stays as it is */
+function redrawStrayCards(){
+  var box = el("ptStraysBox");
+  if (!box || !pets || current !== "list" || tab !== "strays") return;
+  var r = jcFocusKeep();                                /* keyboard focus back on the button (review L1) */
+  box.innerHTML = strayCardsHtml(pets.filter(function(p){ return p.kind === "stray"; }));
+  each("#ptStraysBox [data-open]", function(b){ openPet(b.dataset.open); });
+  wireStraySort();
+  r();
 }
 function noHomeHtml(){
   return '<p class="notice" id="ptNoHome">' + esc(jcT("pt_no_home")) + '</p>' +
@@ -398,10 +426,6 @@ var VIEWS = {
                           : '<p class="help" id="ptCap">' + esc(jcT("pt_err_TOO_MANY_PETS")) + '</p>');
     } else if (tab === "strays") {
       var strays = pets.filter(function(p){ return p.kind === "stray"; });
-      /* Needs help first, then the server's order (nearest my home pin); rehomed last */
-      var rank = function(p){ return p.care_state === "needs_help" ? 0 : p.care_state === "rehomed" ? 2 : 1; };
-      strays = strays.map(function(p, i){ return [p, i]; })
-        .sort(function(a, b){ return rank(a[0]) - rank(b[0]) || a[1] - b[1]; }).map(function(x){ return x[0]; });
       var active = strays.filter(function(p){ return p.care_state !== "rehomed"; });
       onMap = active.filter(strayPos);
       var unplaced = active.length - onMap.length;
@@ -411,7 +435,7 @@ var VIEWS = {
            before: '<button type="button" class="lang" id="labelsBtn" aria-haspopup="dialog">' + esc(jcT("ev_labels")) + '</button>' }) +
            jcKeySheetHtml("ptKey") : '') +
         (unplaced ? '<p class="help" id="ptUnplaced">' + esc(jcFmt("pt_strays_unplaced", { n: unplaced })) + '</p>' : '') +
-        '<ul class="ptgrid" id="ptStrays">' + strays.map(card).join("") + '</ul>';
+        '<div id="ptStraysBox">' + strayCardsHtml(strays) + '</div>';
     } else {
       /* Pets: owned only; missing pinned on top; the rest in the server's order */
       var owned = pets.filter(function(p){ return p.kind === "owned"; });
@@ -422,7 +446,8 @@ var VIEWS = {
         '<div class="filters" id="ptFilters" role="group" aria-label="' + esc(jcT("pt_filter")) + '">' + FILTERS.map(function(f){
           return '<button type="button" id="ptF-' + f + '" data-filter="' + f + '" aria-pressed="' + (f === filter) + '">' + esc(jcT("pt_f_" + f)) + '</button>';
         }).join("") + '</div>' +
-        '<p class="help" id="ptSorted">' + esc(jcT(hasPin() ? "pt_sorted_near" : "pt_sorted_name")) + '</p>' +
+        /* owned pets: the server's order from my home pin — their homes never reach the phone, so no button (NF-2) */
+        jcSortedHtml({ id: "ptSorted", fallback: "pt_sorted_name", noButton: true }) +
         (rest.length ? '<ul class="ptgrid" id="ptList">' + rest.map(card).join("") + '</ul>'
                      : '<p class="help" id="ptList">' + esc(jcT(owned.length ? "pt_none_filter" : "pt_none")) + '</p>');
     }
@@ -435,6 +460,7 @@ var VIEWS = {
       var f = el("ptF-" + filter); if (f) f.focus();
     });
     if (onMap.length) drawStrays(onMap);
+    if (tab === "strays") wireStraySort();
     on("ptAdd", function(){ form = { id: null, species: "cat", name: "", description: "", wanderer: false, microchipped: false, photo_path: null, photo: null }; show("edit"); });
   },
 
@@ -740,6 +766,7 @@ function strayPop(p){
 function bigMap(mapId){
   var m = map = jcBigMap(mapId, { cfg: cfg, layer: layer, onLayer: function(l){ layer = l; }, full: full });
   jcFindMe(m, { alive: function(){ return map === m; },
+    onPos: function(){ if (map === m) redrawStrayCards(); },   /* the Strays cards follow the visit position (NF-2) */
     onError: function(code){ full.set(false); ptMsg(code); } });   /* visible, not behind the full map; never on another screen */
   return m;
 }

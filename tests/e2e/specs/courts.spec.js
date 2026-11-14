@@ -447,7 +447,8 @@ test("Help on the list and on a court; Admin (to Organizer Tools) only for court
   await open(page, backend());
   await page.locator("#jcHelpBtn").click();
   await expect(page.locator("#jcHelp h2")).toHaveText("Courts");
-  await expect(page.locator("#jcHelp li")).toHaveCount(5);
+  await expect(page.locator("#jcHelp li")).toHaveCount(6);
+  await expect(page.locator("#jcHelp")).toContainText("your location stays on your phone");   // NF-2
   await page.locator("#jcHelpClose").click();
   await expect(page.locator("#view .badge")).toHaveCount(0);                         // a resident: no Admin
   await page.locator(`[data-open="${C1}"]`).click();
@@ -619,4 +620,85 @@ test("Past survives cancelling an upcoming booking; MODULE_OFF from Past shows t
   await page.locator("#bktab-list").click();
   await page.locator("#bktab-mine").click();
   await expect(page.locator("#bkOff")).toBeVisible();
+});
+
+// ── NF-2: nearest first (docs/plans/nearest-first.md) ──
+const C3 = "11111111-aaaa-4aaa-8aaa-000000000003";
+const NF_COURTS = () => [
+  COURT({ id: C2, name_en: "Hoops", name_ar: null, kind: "basketball", walk_on: true, lat: null, lng: null, location_note: null }),
+  COURT({ id: C3, name_en: "Far Court", name_ar: null, lat: 24.5601, lng: 54.4601, village_key: "seef-al-jubail" }),
+  COURT(),
+];
+const names = (page) => page.locator("#bkCourts li b");
+
+test("NF-2 list: nearest my home first, no-pin court last; village (or Whole community) and ≈ distance on each card; Use Where I Am ↔ Use My Home", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 24.5601, longitude: 54.4601 });   // standing on Far Court
+  await open(page, backend({ courts: NF_COURTS() }));
+  await expect(page.locator("#bkSorted")).toHaveText("Sorted by: nearest your home");
+  await expect(names(page)).toHaveText(["Court 1", "Far Court", "Hoops"]);   // the server sent Hoops first: sorted on the phone
+  await expect(page.locator(`#bkCourts li[data-court="${C1}"] .bkwhere`)).toHaveText("Whole community · ≈ 100 m");
+  await expect(page.locator(`#bkCourts li[data-court="${C3}"] .bkwhere`)).toContainText("Seef Al Jubail · ≈ ");
+  await expect(page.locator(`#bkCourts li[data-court="${C2}"] .bkwhere`)).toHaveText("Whole community");   // no pin: no distance
+  await page.locator("#sortHereBtn").click();
+  await expect(page.locator("#bkSorted")).toHaveText("Sorted by: nearest where you are now");
+  await expect(names(page)).toHaveText(["Far Court", "Court 1", "Hoops"]);
+  await expect(page.locator(`#bkCourts li[data-court="${C3}"] .bkwhere`)).toHaveText("Seef Al Jubail · ≈ 0 m");
+  // the position lasts the visit: the Map tab and back keep it, never re-asked
+  await page.locator("#bktab-map").click();
+  await page.locator("#bktab-list").click();
+  await expect(page.locator("#bkSorted")).toHaveText("Sorted by: nearest where you are now");
+  await expect(page.locator("#sortHereBtn")).toHaveText("Use My Home");
+  await page.locator("#sortHereBtn").click();
+  await expect(page.locator("#bkSorted")).toHaveText("Sorted by: nearest your home");
+  await expect(names(page)).toHaveText(["Court 1", "Far Court", "Hoops"]);
+  await expect(page.locator("#sortHereBtn")).toHaveText("Use Where I Am");
+});
+
+test("NF-2 list: Find Me on the Map tab sorts the list from the phone too", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 24.5600, longitude: 54.4600 });
+  await open(page, backend({ courts: NF_COURTS() }), { q: "?tab=map" });
+  await page.locator("#locateBtn").click();
+  await expect(page.locator("#bkmap path.leaflet-interactive")).toHaveCount(3);   // 2 court pins + the blue dot
+  await page.locator("#bktab-list").click();
+  await expect(page.locator("#bkSorted")).toHaveText("Sorted by: nearest where you are now");
+  await expect(names(page).first()).toHaveText("Far Court");
+});
+
+test("NF-2 list: no home pin → by name, said plainly; Use Where I Am still offered; Arabic order and line", async ({ page }) => {
+  const noPin = Object.assign({}, MEMBER, { home: Object.assign({}, MEMBER.home, { lat: null, lng: null, pin_set_at: null }) });
+  await open(page, backend({ me: noPin, courts: NF_COURTS() }));
+  await expect(page.locator("#bkSorted")).toHaveText("Sorted by: name. Pin your home on My Home to see the nearest first.");
+  await expect(names(page)).toHaveText(["Court 1", "Far Court", "Hoops"]);
+  await expect(page.locator("#bkCourts .bkwhere").first()).toHaveText("Whole community");   // no origin: no distances
+  await expect(page.locator("#sortHereBtn")).toHaveText("Use Where I Am");
+  await page.locator("#langBtn").click();
+  await expect(page.locator("#bkSorted")).toHaveText("الترتيب: حسب الاسم. حدّد موقع منزلك في منزلي لترى الأقرب أولاً.");
+  await expect(page.locator("#sortHereBtn")).toHaveText("استخدم مكاني الآن");
+});
+
+test("NF-2 list: location refused → the message, the button back; a late fix after leaving the List redraws nothing", async ({ page }) => {
+  await open(page, backend({ courts: NF_COURTS() }));
+  await page.evaluate(() => { navigator.geolocation.getCurrentPosition = (ok, bad) => { window.late = { ok, bad }; }; });
+  await page.locator("#sortHereBtn").click();
+  await expect(page.locator("#sortHereBtn")).toBeDisabled();
+  await page.evaluate(() => window.late.bad({ code: 1 }));
+  await expect(page.locator("#msg")).toContainText("Location is off for this site");
+  await expect(page.locator("#sortHereBtn")).toBeEnabled();
+  await expect(page.locator("#sortHereBtn")).toHaveText("Use Where I Am");
+  // ask again, then leave for My Bookings before the phone answers
+  await page.locator("#sortHereBtn").click();
+  await page.locator("#bktab-mine").click();
+  await page.evaluate(() => window.late.ok({ coords: { latitude: 24.56, longitude: 54.46 } }));
+  await expect(page.locator("#bktab-mine")).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#bkCourts")).toHaveCount(0);
+  // the fix is kept for the visit: back on the List it sorts from it
+  await page.locator("#bktab-list").click();
+  await expect(page.locator("#bkSorted")).toHaveText("Sorted by: nearest where you are now");
+});
+
+test("NF-2 list: two courts on the same spot keep the server's order (stable sort)", async ({ page }) => {
+  await open(page, backend({ courts: [COURT({ id: C3, name_en: "Zed Court", name_ar: null }), COURT()] }));   // both at Court 1's pin
+  await expect(names(page)).toHaveText(["Zed Court", "Court 1"]);
 });
