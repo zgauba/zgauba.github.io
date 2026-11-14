@@ -82,7 +82,7 @@ test("list: status, pin, hours, upcoming; walk-on shows no grid; retired apart w
   await expect(page.locator("#ctOff")).toHaveCount(0);
   const c1 = page.locator('[data-court="c1"]');
   await expect(c1).toContainText("Published");
-  await expect(c1).toContainText("Tennis · ⁦07:00–22:00⁩ · 60-minute slots · 7 days ahead");
+  await expect(c1).toContainText("Tennis · Whole community · ⁦07:00–22:00⁩ · 60-minute slots · 7 days ahead");
   await expect(c1).toContainText("Upcoming bookings: 3");
   await expect(c1.locator("[data-ct]")).toHaveText(["Day view", "Edit", "Unpublish", "Retire"]);
   const c2 = page.locator('[data-court="c2"]');
@@ -133,8 +133,8 @@ test("new court: checks first (nothing sent), then the exact fields incl. the pi
   const sent = lastCall(calls, "jc_admin_facility_save").args;
   expect(sent.p_facility).toBeNull();
   expect(Object.keys(sent.p_fields).sort()).toEqual(["close_time", "kind", "lat", "lng", "location_note", "name_ar", "name_en",
-    "open_time", "slot_minutes", "walk_on", "window_days"]);
-  expect(sent.p_fields).toMatchObject({ name_en: "Court 2", kind: "basketball", location_note: "Behind the clubhouse",
+    "open_time", "slot_minutes", "village_key", "walk_on", "window_days"]);
+  expect(sent.p_fields).toMatchObject({ name_en: "Court 2", kind: "basketball", location_note: "Behind the clubhouse", village_key: "",
     open_time: "08:00", close_time: "22:00", slot_minutes: 60, window_days: 14, walk_on: false });
   expect(typeof sent.p_fields.lat).toBe("number");
   expect(new URL(page.url()).search).toBe("?tab=courts");
@@ -159,6 +159,32 @@ test("edit sends only what changed; saving untouched sends nothing", async ({ pa
   await page.locator("#ctSave").click();
   await expect(page.locator("#msg")).toContainText("Saved as a draft. Residents can't see it until you publish.");
   expect(lastCall(calls, "jc_admin_facility_save").args).toEqual({ p_facility: "c1", p_fields: { name_ar: "ملعب ١", window_days: 10 } });
+});
+
+test("village (NF-1): Whole community or a delivered village; only a change is sent; the list says where", async ({ page }) => {
+  const b = backend({ courts: [COURT()] });
+  const { calls } = await stubBackend(page, { rpc: b.rpc });
+  await signIn(page);
+  await openCourts(page);
+  await expect(page.locator('[data-court="c1"]')).toContainText("Whole community");
+  await page.locator('[data-ct="edit"][data-id="c1"]').click();
+  await expect(page.locator("#ct_village")).toHaveValue("");
+  const opts = await page.locator("#ct_village option").allTextContents();
+  expect(opts[0]).toBe("Whole community");
+  expect(opts).toContain("Ain Al Maha");
+  await expect(page.locator("#ct_village").locator("xpath=following-sibling::*[1]|../following-sibling::p[1]").first())
+    .toContainText("Everyone in the community can book it.");
+  await page.locator("#ct_village").selectOption("ain-al-maha");
+  await page.locator("#ctSave").click();
+  await expect(page.locator("#msg")).toContainText("Saved as a draft.");
+  expect(lastCall(calls, "jc_admin_facility_save").args).toEqual({ p_facility: "c1", p_fields: { village_key: "ain-al-maha" } });
+  await expect(page.locator('[data-court="c1"]')).toContainText("Ain Al Maha");
+  await page.locator('[data-ct="edit"][data-id="c1"]').click();
+  await expect(page.locator("#ct_village")).toHaveValue("ain-al-maha");
+  await page.locator("#ct_village").selectOption("");
+  await page.locator("#ctSave").click();
+  await expect(page.locator("#msg")).toContainText("Saved as a draft.");
+  expect(lastCall(calls, "jc_admin_facility_save").args).toEqual({ p_facility: "c1", p_fields: { village_key: "" } });   // "" = Whole community (server stores null)
 });
 
 test("upcoming bookings lock the grid and walk-on (server RULES_LOCKED explained too)", async ({ page }) => {

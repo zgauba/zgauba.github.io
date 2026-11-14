@@ -148,7 +148,7 @@ than a map for finding a missing pet) → R5b-2a shared map kit → R5b-2b Pets 
 **Re-plan 2026-11-13:** R5b-2b = R5b-2b-0 DB ✓ (#102, applied) → R5b-2b-2a Pets · Strays · My Pets → R5b-2b-2b pet
 page (Map tab, mini maps, Add Location Pin, out-alone reports + disclosure) → **scoped `/structural-audit`**
 (duplication + cross-module consistency, `commons/` client only, ~4–5 agents; Zee 2026-11-13: once all four modules
-are stable, so it compares settled code) → nearest-first for Events/Courts → R5d.
+are stable, so it compares settled code) ✓ SA-1 #105, SA-2 #106 → nearest-first NF-1 → NF-3 → R5d; SA-3–SA-5 slot in between.
 Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas "Jubail Pets Concept" + PDF.
 - Directory: **owned** · **community "known & fine"** · **stray under care** (care record: sterilized,
   dewormed, vaccination, under treatment — kept by the carer group).
@@ -186,23 +186,32 @@ Schema exists (S4: pets, photos, care log, sightings, missing). Concept: canvas 
   tiles and event looks included. After R5b-2.
 - Kept on purpose: the blue "you are here" dot (Zee 2026-11-11 — the convention people recognise), tokenised in R5b-2a.
 
-### Nearest first — lists sorted by where you are  ·  app only  (idea, Zee 2026-11-12 — needs `/plan-change`)
-- Zee: "since we know the household location … show items sorted based on their location … if they select Find Me on
-  the map, then it would be based on their actual phone location … courts should show the closest one … same with pets."
-- Default origin = **your home pin** (already on the phone in `jc_me_get`); after **Find Me** = the phone's position,
-  for that visit only. Sorting happens on the phone — **nothing new is sent or stored** (same rule as Find Me today).
-- **Events** (event page List tab): your village first, then homes nearest your home. **Courts**: nearest court first
-  (courts carry their pin). **Pets**: strays / community animals by their territory spot; owned pets **your village
-  first** only — the server sends their village + number, not coordinates, and sending every pet home's coordinates
-  would rebuild the "map of homes with pets" R5b-2 ruled out (owned pets on the map only while missing).
-- One shared helper (`jcNear(origin, items)` + "Sorted by: your home / where you are now" line) — belongs with the
-  R5b-2a shared map kit (Find Me is shared there). Sequence: after R5b-2a.
+### Nearest first — one distance rule for every list  ·  DB + app  (planned 2026-11-14, `docs/plans/nearest-first.md`)
+- Zee 2026-11-14: one unified way of showing distance and one set of buttons. Default origin = **your household pin**;
+  the phone only after **Use Where I Am** (lists) or **Find Me** (maps), for that visit; never sent or stored.
+- One control everywhere: "Sorted by: nearest your home [Use Where I Am]" ↔ "nearest where you are now [Use My Home]";
+  "≈ 300 m" on rows. Courts list, Events List (your village first; By House Number kept), Strays cards. Owned pets:
+  server order from your home pin, no phone re-sort (their homes never reach the phone).
+- Organizer Tools never by distance: A–Z by village, then name (events stay by date).
+- PRs: **NF-1** courts get an optional village (where it is, not who may book; none = Whole community) → **NF-2** the
+  shared control on Courts / Events / Strays → **NF-3** Organizer A–Z.
+
+### Bookings (long term, Zee 2026-11-14)
+- Courts grow into general **Bookings** for any community's shared spaces (rooms, BBQ areas, halls). The code is
+  already "bookings" (module flag, folder) and a court is a facility with a `kind`, so it is mostly new kinds + labels.
+  Not scheduled.
 
 ### R7 — Launch prep (not features)
 - **Retire the shared `events` organizer code** (Step C, parked until testing is done) → per-event admins only.
 - **Retire the Halloween site** into Commons (`jubail-halloween/` stays at its URL forever — a pointer page).
 - Per-community split of App Health's platform numbers (needed before a second community admin exists).
 - Teardown of `e2e` test data when Zee says testing is done.
+- **Commons into its own private repo** (Zee 2026-11-14), done with the commons.ae move (a custom domain means its own
+  repo anyway); Cloudflare Pages deploys from private repos. Why: this repo is public, and `docs/qa/` reviews plus the
+  manifest's "Known gaps" list accepted / deferred weaknesses; the plans show product direction. A history scan
+  (2026-11-14, 345 commits) found no secrets: publishable keys only, and none of the 84 test codes matches a live code.
+  Making it private later doesn't erase what was public, so nothing secret goes in meanwhile. `zgauba.github.io`
+  stays public (personal pages, Halloween site).
 - **Structural audit of the grant model** (synthesis S4, KG 14) — `/structural-audit` over `supabase/commons/`
   after the last migration (R6), then one hardening migration via `/db-rehearse`.
 - **Free-tier decision** (synthesis S5, KG 8) — pricing checked 2026-11-06: egress is fine on Free (5 GB vs
