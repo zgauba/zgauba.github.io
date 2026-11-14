@@ -1,6 +1,6 @@
 # R5d — Organizer Tools → Pets: plan (`/plan-change`, 2026-11-14)
 
-> Status: **awaiting Zee** (Q1–Q3 below). Parent plan: `R5-pets.md` row R5d. Organizer order: `nearest-first.md` NF-3 (Zee 2026-11-14).
+> Status: **approved 2026-11-14** — Zee: Q1 = A (Organizer Tools), Q2 = yes, Q3 = yes; plus **Banner is the last Organizer Tools tab** (Events · Courts · Pets · Community · Banner), done in R5d-1. Parent plan: `R5-pets.md` row R5d. Organizer order: `nearest-first.md` NF-3 (Zee 2026-11-14).
 
 ## Step 0 — Scope and freshness
 

@@ -302,6 +302,9 @@ function adminBackend(opts = {}) {
     st,
     rpc: Object.assign({
       jc_me_get: (a, c) => (c.signedIn ? ok(Object.assign({}, MEMBER, { admin_scopes: st.scopes, admin_events: st.adminEvents, is_owner: st.owner })) : raise("NOT_SIGNED_IN")),
+      // R5d-1 — Organizer Tools → Pets (jc_assert_admin('pets') = pets or community); specs override for animals
+      jc_admin_pets_list: () => (st.scopes.includes("pets") || st.scopes.includes("community") ? ok([]) : raise("NOT_ADMIN")),
+      jc_pets_group_get: () => ok({ link: null }),
       // T5.3 — the owner's inbox (as the server: unread first, then newest)
       jc_feedback_list: () => (st.owner ? ok(fbList()) : raise("NOT_OWNER")),
       jc_feedback_mark_read: (a) => {

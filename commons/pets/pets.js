@@ -47,6 +47,8 @@ var group;            /* undefined = not read yet; null = none / unreadable; els
 /* page helpers: the shared copies in assets/api.js (structural audit SA-1) */
 var msgBox = jcMsgBox, say = jcSay, showOk = jcShowOk, on = jcOn, each = jcEach, ar = jcIsAr, hObj = jcObj, setUrl = jcSetUrl, finite = jcFinite;
 function ptMsg(code){ jcShowErrFor("pt_err_", code); }
+/* pets or community admins (the server checks every admin call; this only shows the way in) */
+function canAdmin(){ var sc = (state && state.me && state.me.admin_scopes) || []; return sc.indexOf("pets") >= 0 || sc.indexOf("community") >= 0; }
 function hasHome(){ return !!(state && state.me && state.me.home); }
 function moduleOn(){ return jcModuleOn(cfg, "pets"); }
 function listUrl(){ return tab === "pets" ? null : "tab=" + tab; }
@@ -477,7 +479,9 @@ var VIEWS = {
     /* header: photo, name, species · kind, badges; the missing alarm (with the owner's "is back home") on every tab */
     /* compact: photo beside the name, so the tabs stay on the first screen */
     var badges = chips(p, true, true);
-    h += '<div class="pthero">' + photoHtml(p, 34, "tile") + '<div class="ptwho"><h1 dir="auto">' + esc(p.name) + '</h1>' +
+    h += '<div class="pthero">' + photoHtml(p, 34, "tile") + '<div class="ptwho"><div class="evtitle"><h1 dir="auto">' + esc(p.name) + '</h1>' +
+      /* pets / community admins: the way into Organizer Tools → Pets, as on a court's page (R5d-1) */
+      (canAdmin() ? '<a class="lang adminbtn" id="ptAdmin" href="../admin/?tab=pets&pet=' + encodeURIComponent(p.id) + '">' + esc(jcT("ev_admin")) + '</a>' : '') + '</div>' +
       '<p class="meta">' + esc(speciesText(p) + " · " + kindText(p)) + '</p>' +
       (badges ? '<div class="head">' + badges + '</div>' : '') + '</div></div>';
     if (p.missing === true) {

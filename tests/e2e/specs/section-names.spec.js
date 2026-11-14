@@ -273,7 +273,7 @@ test("renamed sections in Organizer Tools: tab, scope line, Admins heading", asy
   await page.goto("admin/?tab=community");
   await expect(page.locator("#atab-courts")).toHaveText("Sports");
   await page.locator("#adOpen").click();
-  await expect(page.locator("h2.group")).toHaveText(["Community admins", "Event organizers", "Sports admins"]);
+  await expect(page.locator("h2.group")).toHaveText(["Community admins", "Event organizers", "Sports admins", "Pets admins"]);
 });
 
 test("Section Names is for community admins only", async ({ page }) => {

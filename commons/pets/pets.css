@@ -11,8 +11,6 @@ h2.group{font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color
 .mini{font:inherit; font-size:13px; font-weight:700; cursor:pointer; color:var(--jc-ink); background:var(--jc-surface);
   border:1px solid var(--jc-line); border-radius:8px; padding:7px 12px; min-height:36px}
 .mini:disabled{opacity:.5; cursor:default}
-.chip{display:inline-block; font-size:11.5px; line-height:1.5; border:1px solid var(--jc-line); border-radius:999px; padding:0 8px; color:var(--jc-muted)}
-.chip.miss{border-color:var(--jc-danger); color:var(--jc-danger); font-weight:700}
 .bklist{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px}
 .bklist li{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius); padding:12px 14px;
   display:flex; flex-direction:column; gap:6px; font-size:14px; overflow-wrap:anywhere}
@@ -95,9 +93,6 @@ legend{font-size:13px; font-weight:700; color:var(--jc-muted); margin-bottom:6px
 .ptbody .meta{color:var(--jc-muted); font-size:12.5px; line-height:1.35}
 .ptbody .where{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
 .ptbody .head{gap:4px; margin-top:2px}
-/* badges: colour only for real states */
-.chip.miss{background:var(--jc-danger); border-color:var(--jc-danger); color:#2d0808}
-.chip.warn{border-color:var(--jc-warn); color:var(--jc-warn); font-weight:700}
 /* pet page: header, alarm, then the About · Sightings tabs */
 .alarm .acts{margin-top:10px}
 .alarm .btn{flex:1 1 auto}

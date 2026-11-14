@@ -69,14 +69,14 @@ async function openAdmins(page) {
   await expect(page.locator("h1")).toHaveText("Admins");
 }
 
-test("community admin: Admins lists every level with chips; no Pets; two-admin warning", async ({ page }) => {
+test("community admin: Admins lists every level with chips (Pets too, R5d-1); two-admin warning", async ({ page }) => {
   const b = backend({ lists: { bookings: [SARA] } });
   const { calls } = await stubBackend(page, { rpc: b.rpc });
   await signIn(page);
   await openAdmins(page);
-  await expect(page.locator("h2.group")).toHaveText(["Community admins", "Event organizers", "Courts admins"]);
+  await expect(page.locator("h2.group")).toHaveText(["Community admins", "Event organizers", "Courts admins", "Pets admins"]);
   expect(calls.filter((c) => c.name === "jc_module_admins_list").map((c) => c.args.p_scope).sort())
-    .toEqual(["bookings", "community", "events"]);                       // never pets
+    .toEqual(["bookings", "community", "events", "pets"]);
   const community = page.locator('[data-scope="community"]');
   await expect(community.locator('[data-admin="u-me"] .chip')).toHaveText(["Code"]);
   await expect(page.locator('[data-scope="events"] [data-admin="u-7"]')).toContainText("Villa 7");
@@ -179,7 +179,7 @@ test("someone else changed it: NOT_FOUND re-reads the lists and says so", async 
   page.once("dialog", (d) => d.accept());
   await page.locator('[data-adrm="events"][data-user="u-7"]').click();
   await expect(page.locator("#msg")).toHaveText("That changed in the meantime. The list below is up to date.");
-  expect(calls.filter((c) => c.name === "jc_module_admins_list").length).toBe(before + 3);
+  expect(calls.filter((c) => c.name === "jc_module_admins_list").length).toBe(before + 4);
 });
 
 test("removing yourself while another community admin remains: re-reads who you are and leaves the Admins screen", async ({ page }) => {
@@ -341,7 +341,7 @@ test("code review L1: lists that can't be read say so, with Try Again", async ({
   await expect(page.locator("#view")).not.toContainText("Working");
   fails = false;
   await page.locator("#adRetry").click();
-  await expect(page.locator("h2.group")).toHaveCount(3);
+  await expect(page.locator("h2.group")).toHaveCount(4);
 });
 
 test("NOT_ADMIN while on Admins goes back through the re-check (no stale screen)", async ({ page }) => {
@@ -365,17 +365,18 @@ test("removing another community admin stays on Admins and re-reads every level"
   await page.locator('[data-adrm="community"][data-user="u-8"]').click();
   await expect(page.locator("#msg")).toHaveText("Removed.");
   await expect(page.locator("h1")).toHaveText("Admins");
-  expect(calls.filter((c) => c.name === "jc_module_admins_list").length).toBe(before + 3);
+  expect(calls.filter((c) => c.name === "jc_module_admins_list").length).toBe(before + 4);
 });
 
-test("code review L3: an accepted level with no screens here yet says it worked and offers the way out", async ({ page }) => {
+test("R5d-1: accepting a Pets admin invite lands on Organizer Tools → Pets (it has screens now)", async ({ page }) => {
   const b = backend({ scopes: [], acceptable: { [TOKEN]: "pets" } });
   await stubBackend(page, { rpc: b.rpc });
   await signIn(page);
   await page.goto("admin/#admininvite=" + TOKEN);
   await page.locator("#invYes").click();
   await expect(page.locator("#msg")).toHaveText("Done. You've joined the Pets admins.");
-  await expect(page.locator('#view a[href="../"]')).toBeVisible();
+  await expect(page.locator('[role="tab"]')).toHaveText(["Pets", "Community"]);
+  await expect(page.locator("#atab-pets")).toHaveAttribute("aria-selected", "true");
 });
 
 test("code review L2: No Thanks is off while the answer is on its way", async ({ page }) => {
