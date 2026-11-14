@@ -1,5 +1,7 @@
 # Nearest first: one distance rule for every list
 
+**Status: complete** — NF-1 #107, NF-2 #108, NF-3 #109 (2026-11-14).
+
 Planned 2026-11-14 with `/plan-change`. Decisions are Zee's, from 2026-11-14. Roadmap entry: "Nearest first".
 
 ## The rule (one strategy, every module)
@@ -33,6 +35,7 @@ Planned 2026-11-14 with `/plan-change`. Decisions are Zee's, from 2026-11-14. Ro
 4. The Events List opens on Nearest First.
 5. Organizer Tools are A–Z by village, then by item.
 6. Long term (not scheduled): Courts grow into general **Bookings** for any shared space.
+7. Events List, "your village first" applies only when sorting **from home**. From the phone (Use Where I Am / Find Me) it is strictly nearest where you are — walking another village on event night. Built in NF-2; Zee confirmed 2026-11-14.
 
 ## PRs
 
