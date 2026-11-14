@@ -33,7 +33,7 @@ ONE repo, served by GitHub Pages as the user site, holding three things:
 
 ## Section rules
 
-**Personal pages (`index.html`, `jubail/`):** the two pages are the SAME networking page differing ONLY in the middle section (root: "Where I operate"; /jubail/: "The neighborhood test"). No phone number anywhere, ever — LinkedIn + email only. Brand: dark cover #0A0E1A + light interior #F7F9FC, Manrope, cyan #22D3EE on dark / teal #0E7490 on light, lockups in `assets/`. Segmint = "exit", never "acquired by".
+**Personal pages (`index.html`, `jubail/`):** the two pages are the SAME networking page differing ONLY in the middle section (root: "Proof"; /jubail/: "The neighborhood test"). No phone number anywhere, ever — LinkedIn + email only. Brand: dark cover #0A0E1A + light interior #F7F9FC, Manrope, cyan #22D3EE on dark / teal #0E7490 on light, lockups in `assets/`. Segmint = "exit", never "acquired by".
 
 **Halloween site (`jubail-halloween/`):** legacy but live; vanilla JS, string concat (no template literals), no build. Pin encoding is orthogonal: fill = availability, ring = entrance, glyph = treats type. Copy says "out of treats". Superseded by `commons/` — no structural investment here.
 
