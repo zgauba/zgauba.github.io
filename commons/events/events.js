@@ -33,17 +33,8 @@ function comingLine(n, ev, full){
   if (ev.capacity != null && ev.places_left != null) line += " · " + jcFmt(ev.places_left === 1 ? "ev_left_1" : "ev_left", { k: ev.places_left });
   return line;
 }
-function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
-function showErr(code){ var m = el("msg"); if (!m) return; m.className = "msg err"; m.textContent = jcErrText({ code: code }); }
-function showOk(text){ var m = el("msg"); if (!m) return; m.className = "msg ok"; m.textContent = text; }
-function on(id, fn){ var n = el(id); if (n) n.addEventListener("click", fn); }
-function busy(id, onoff){
-  var b = el(id);
-  if (!b) return;
-  if (onoff) { b.dataset.label = b.textContent; b.textContent = jcT("working"); b.disabled = true; }
-  else { b.textContent = b.dataset.label || b.textContent; b.disabled = false; }
-}
-function ar(){ return jcLang() === "ar"; }
+/* page helpers: the shared copies in assets/api.js (structural audit SA-1) */
+var msgBox = jcMsgBox, showErr = jcShowErr, showOk = jcShowOk, on = jcOn, busy = jcBusy, ar = jcIsAr, hasPos = jcHasPos;
 function title(ev){ return ar() && ev.title_ar ? ev.title_ar : ev.title_en; }
 function desc(ev){ return ar() && ev.description_ar ? ev.description_ar : (ev.description_en || ""); }
 function myHome(){ return state && state.me && state.me.home; }
@@ -65,7 +56,6 @@ function valueLabel(spec, v){
   return (spec && (jcOwn(spec["labels_" + jcLang()], v) || jcOwn(spec.labels_en, v))) || human(v);
 }
 /* Usable coordinates only (T5.1 review): anything else is "not on the map yet". */
-function hasPos(e){ return !!e && Number.isFinite(e.lat) && Number.isFinite(e.lng); }
 function eventUrl(t){ return "../events/?id=" + encodeURIComponent(data.event.id) + "&tab=" + t; }
 /* the pin screen, coming back to this event's My home tab when the pin is saved */
 function pinUrl4Me(){ return "../home/?view=pin&next=" + encodeURIComponent(eventUrl("mine")); }
@@ -292,7 +282,7 @@ var VIEWS = {
     paintDay();
     jcTabsWire("tab-", tabs, function(t){
       tab = t; editing = false;
-      try { history.replaceState(null, "", "?id=" + encodeURIComponent(ev.id) + "&tab=" + t); } catch(e){}
+      jcSetUrl("id=" + encodeURIComponent(ev.id) + "&tab=" + t);
       show("detail");
     });
     wireDesc();

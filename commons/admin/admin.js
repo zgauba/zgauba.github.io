@@ -27,7 +27,7 @@ var INVITE_ROLES = { community: "y", events: "y", bookings: "y", pets: "y" };   
 var INVITE = (function(){
   var h = JC_URL_HASH || "";
   var m = /^#admininvite=([A-Za-z0-9_-]{16,64})$/.exec(h);
-  if (/^#admininvite=/.test(h)) { try { history.replaceState(null, "", location.pathname + location.search); } catch(e){} }
+  if (/^#admininvite=/.test(h)) jcSetUrl(location.search.slice(1) || null);   /* drops the #fragment */
   var v = m ? { token: m[1], at: Date.now() } : null;
   try {
     if (v) sessionStorage.setItem(INVITE_KEY, JSON.stringify(v));
@@ -181,22 +181,8 @@ var TEMPLATES = [
 ];
 
 /* ---------- helpers ---------- */
-function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
-function showErr(code){
-  var m = el("msg"); if (!m) return;
-  m.className = "msg err"; m.textContent = jcErrText({ code: code });
-  /* the message sits at the top: on a long list the tap that failed may be far below (review PR 4) */
-  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
-}
-function showOk(text){ var m = el("msg"); if (!m) return; m.className = "msg ok"; m.textContent = text; }
-function on(id, fn){ var n = el(id); if (n) n.addEventListener("click", fn); }
-function busy(id, onoff){
-  var b = el(id);
-  if (!b) return;
-  if (onoff) { b.dataset.label = b.textContent; b.textContent = jcT("working"); b.disabled = true; }
-  else { b.textContent = b.dataset.label || b.textContent; b.disabled = false; }
-}
-function ar(){ return jcLang() === "ar"; }
+/* page helpers: the shared copies in assets/api.js (structural audit SA-1) */
+var msgBox = jcMsgBox, showErr = jcShowErr, showOk = jcShowOk, on = jcOn, busy = jcBusy, ar = jcIsAr, hObj = jcObj, hm = jcHM, each = jcEach;
 function title(ev){ return ar() && ev.title_ar ? ev.title_ar : ev.title_en; }
 function has(s){ return scopes.indexOf(s) >= 0; }
 function isOrganizer(){ return has("events") || has("community"); }
@@ -302,8 +288,7 @@ function loadHealth(){
     if (current === "health") VIEWS.health();
   });
 }
-function hObj(x){ return x && typeof x === "object" && !Array.isArray(x) ? x : null; }
-function hNum(x){ return typeof x === "number" && isFinite(x); }
+var hNum = jcFinite;
 /* "12 min ago" / "3 h ago" / "2 days ago" from an ISO time, measured against the server's own
    clock (generated_at) so a phone with the wrong time can't make it look fresh; "" if it isn't a
    time, or is more than 5 min in the future (review H7) */
@@ -501,7 +486,7 @@ var VIEWS = {
     jcTabsWire("atab-", tabs, function(t){
       if (el("bannerText")) bannerDraft = el("bannerText").value;   /* a half-typed banner survives a tab switch */
       admTab = t;
-      try { history.replaceState(null, "", "?tab=" + t); } catch(e){}
+      jcSetUrl("tab=" + t);
       show("home");
     });
 
@@ -1143,11 +1128,7 @@ function mnSave(k, v, form){
     if (e.code === "NOT_ADMIN") return fail(e);
     if (current !== "names") return;
     VIEWS.names();
-    var t = jcT("adm_mn_err_" + e.code);
-    if (t === "adm_mn_err_" + e.code) return showErr(e.code);
-    var m = el("msg"); if (!m) return;
-    m.className = "msg err"; m.textContent = t;
-    if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
+    jcShowErrFor("adm_mn_err_", e.code);
   });
 }
 
@@ -1563,7 +1544,7 @@ function loadCourts(){
     OPEN_COURT = null;                                  /* once, wherever they are now: never a jump later (review L1) */
     if (want && current === "home" && admTab === "courts") {
       var oc = courtById(want);
-      try { history.replaceState(null, "", "?tab=courts"); } catch(e){}                /* Back returns to the courts list */
+      jcSetUrl("tab=courts");                /* Back returns to the courts list */
       if (oc && !oc.walk_on) { cd = { f: oc, date: cdToday(), slots: null, err: null, loading: false, form: null, draft: null }; return show("courtday"); }
       show("home");                                     /* a walk-on court has no day view: the list */
       if (!oc) ctMsg("NOT_FOUND");
@@ -1583,7 +1564,6 @@ function loadCourts(){
     if (current === "home" && admTab === "courts") { show("home"); showErr(ct.err); }
   });
 }
-function hm(t){ return typeof t === "string" ? t.slice(0, 5) : ""; }
 function courtStatus(f){ return f.status === "published" || f.status === "retired" ? f.status : "draft"; }
 function courtRow(f){
   var st = courtStatus(f), n = f.upcoming || 0;
@@ -1670,13 +1650,7 @@ function courtDraftMsg(id, text, err){
   b.addEventListener("click", function(){ if (!ctBusy) courtSetStatus(id, "published", b); });
   m.appendChild(b);  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
 }
-function ctMsg(code){
-  var t = jcT("ct_err_" + code);
-  if (t === "ct_err_" + code) return showErr(code);
-  var m = el("msg"); if (!m) return;
-  m.className = "msg err"; m.textContent = t;
-  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
-}
+function ctMsg(code){ jcShowErrFor("ct_err_", code); }
 /* the form's starting values: the court as stored, or the server's defaults for a new one */
 function courtValues(f){
   f = f || {};
@@ -1723,7 +1697,7 @@ function saveCourt(publish){
   var draftNow = !f || courtStatus(f) === "draft";
   function back(){
     ctEd = null; admTab = "courts";
-    try { history.replaceState(null, "", "?tab=courts"); } catch(e){}
+    jcSetUrl("tab=courts");
     show("home");
     try { window.scrollTo(0, 0); } catch(e){}    /* review M1: the form is long — the message must not land above the screen */
   }
@@ -1770,7 +1744,7 @@ function saveCourt(publish){
     if (here()) ctMsg(e.code);
   });
 }
-function ctErrText(code){ var t = jcT("ct_err_" + code); return t === "ct_err_" + code ? jcErrText({ code: code }) : t; }
+function ctErrText(code){ return jcErrTextFor("ct_err_", code); }
 
 /* ---------- court day view (R4b-2; server S3 + R4a / R4a-2) ---------- */
 /* Days are community-time dates (jc_admin_facility_day takes a date in cfg.tz) and every time shown is in cfg.tz,
@@ -1816,13 +1790,7 @@ function loadDay(then){
 }
 /* an in-place redraw keeps focus where it was (review L1) */
 function cdDraw(){ var r = jcFocusKeep(); VIEWS.courtday(); r(); }
-function cdMsg(code){
-  var t = jcT("cd_err_" + code);
-  if (t === "cd_err_" + code) return showErr(code);
-  var m = el("msg"); if (!m) return;
-  m.className = "msg err"; m.textContent = t;
-  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
-}
+function cdMsg(code){ jcShowErrFor("cd_err_", code); }
 /* one block's run of slots is one row */
 function cdRows(slots){
   var out = [];
@@ -2042,13 +2010,7 @@ function loadAdmins(then, keep){
     adErr = e.code || "UNKNOWN"; VIEWS.admins();           /* never a "Working…" that stays (code review L1) */
   });
 }
-function adMsg(code){
-  var t = jcT("adm_ad_err_" + code);
-  if (t === "adm_ad_err_" + code) return showErr(code);
-  var m = el("msg"); if (!m) return;
-  m.className = "msg err"; m.textContent = t;
-  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
-}
+function adMsg(code){ jcShowErrFor("adm_ad_err_", code); }
 function adScopeHtml(s){
   var d = ad[s];
   var rows = d.admins.map(function(a){
@@ -2151,11 +2113,6 @@ function wireAdminsView(){
   });
   on("adRetry", function(){ ad = null; adErr = null; VIEWS.admins(); });
 }
-function each(sel, fn){
-  Array.prototype.forEach.call(document.querySelectorAll(sel), function(b){
-    b.addEventListener("click", function(){ fn(b); });
-  });
-}
 
 /* The invite's landing (R4b-1a): ask first, accept once (server-checked). The link names no level (anyone could
    edit that — security review M1): the question says so, and the answer names the level the server granted.
@@ -2204,7 +2161,7 @@ function inviteView(){
 /* The grant link's landing: say what the role is, ask, then accept (single use, server-checked). */
 function acceptView(token){
   current = "accept";
-  try { history.replaceState(null, "", location.pathname); } catch(e){}   /* single use: drop it from the URL */
+  jcSetUrl(null);   /* single use: drop it from the URL */
   el("view").innerHTML =
     '<h1>' + esc(jcT("acc_title")) + '</h1>' +
     '<div class="panel"><p>' + esc(jcT("acc_body")) + '</p>' +

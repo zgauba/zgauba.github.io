@@ -39,17 +39,9 @@ function field(id, labelKey, type, autocomplete){
   return '<label>' + esc(jcT(labelKey)) +
     '<input id="' + id + '" type="' + type + '" autocomplete="' + autocomplete + '" required></label>';
 }
-function msgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
-function showErr(code){ var m = el("msg"); m.className = "msg err"; m.textContent = jcErrText({ code: code }); }
-function showOk(text){ var m = el("msg"); m.className = "msg ok"; m.textContent = text; }
-function busy(btnId, on){
-  var b = el(btnId);
-  if (!b) return;
-  if (on) { b.dataset.label = b.textContent; b.textContent = jcT("working"); b.disabled = true; }
-  else { b.textContent = b.dataset.label || b.textContent; b.disabled = false; }
-}
+/* page helpers: the shared copies in assets/api.js (structural audit SA-1) */
+var msgBox = jcMsgBox, showErr = jcShowErr, showOk = jcShowOk, busy = jcBusy, on = jcOn;
 function linkBtn(id, key){ return '<button type="button" id="' + id + '">' + esc(jcT(key)) + '</button>'; }
-function on(id, fn){ var n = el(id); if (n) n.addEventListener("click", fn); }
 function onSubmit(fn){ el("form").addEventListener("submit", function(ev){ ev.preventDefault(); fn(); }); }
 
 /* ---------- views ---------- */
@@ -292,7 +284,7 @@ function routeNormally(){
 function routeFromLink(){
   el("view").innerHTML = '<p class="sub">' + esc(jcT("working")) + '</p>';
   return jcDb.auth.getSession().then(function(r){
-    try { history.replaceState(null, "", location.pathname); } catch(e){}
+    jcSetUrl(null);
     if (r.data && r.data.session) {
       RECOVERING = true;
       if (current !== "recover") show("recover");

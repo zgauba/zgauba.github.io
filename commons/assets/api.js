@@ -114,6 +114,43 @@ jcDb.auth.onAuthStateChange(function(ev){
 function el(id){ return document.getElementById(id); }
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 
+/* ---------- page helpers (structural audit SA-1, 2026-11-13): one copy of what every page script repeated.
+   Here, not nav.js, because Account loads api.js but not nav.js. ---------- */
+/* the one message line under a screen's title; jcSay shows it and brings it into view — the write that
+   failed (or worked) may be far down a long list (reviews M3 / PR 4) */
+function jcMsgBox(){ return '<p class="msg" id="msg" role="alert"></p>'; }
+function jcSay(cls, text){
+  var m = el("msg"); if (!m) return;
+  m.className = "msg " + cls; m.textContent = text;
+  if (m.scrollIntoView) m.scrollIntoView({ block: "nearest" });
+}
+function jcShowOk(text){ jcSay("ok", text); }
+function jcShowErr(code){ jcSay("err", jcErrText({ code: code })); }
+/* a module's own wording for an error code (prefix "pt_err_", "bk_err_", …), else the shared one */
+function jcErrTextFor(prefix, code){ var t = jcT(prefix + code); return t === prefix + code ? jcErrText({ code: code }) : t; }
+function jcShowErrFor(prefix, code){ jcSay("err", jcErrTextFor(prefix, code)); }
+/* a button while its write is in flight: "Working…" and disabled; its own label back after */
+function jcBusy(id, on){
+  var b = el(id);
+  if (!b) return;
+  if (on) { b.dataset.label = b.textContent; b.textContent = jcT("working"); b.disabled = true; }
+  else { b.textContent = b.dataset.label || b.textContent; b.disabled = false; }
+}
+function jcOn(id, fn){ var n = el(id); if (n) n.addEventListener("click", fn); }
+function jcEach(sel, fn, ev){
+  Array.prototype.forEach.call(document.querySelectorAll(sel), function(b){ b.addEventListener(ev || "click", function(){ fn(b); }); });
+}
+/* the address bar without a reload: q = the query without "?" (null / "" = the bare page) */
+function jcSetUrl(q){ try { history.replaceState(null, "", q ? "?" + q : location.pathname); } catch(e){} }
+function jcObj(x){ return x && typeof x === "object" && !Array.isArray(x) ? x : null; }
+function jcFinite(n){ return typeof n === "number" && isFinite(n); }
+function jcHasPos(x){ return !!x && jcFinite(x.lat) && jcFinite(x.lng); }
+function jcIsAr(){ return jcLang() === "ar"; }
+/* the per-community module flag (also the kill switch): on only when the config says so */
+function jcModuleOn(cfg, name){ var m = cfg && cfg.modules && cfg.modules[name]; return !!(m && m.enabled === true); }
+/* "18:00:00" → "18:00" */
+function jcHM(t){ return typeof t === "string" ? t.slice(0, 5) : ""; }
+
 function jcErr(code, detail){
   var e = new Error(code);
   e.code = code;
@@ -205,14 +242,7 @@ function jcHomeLabel(h){
 /* Community-time dates (R4b-2 / R4c). A court's day is a date in the COMMUNITY's zone (cfg.tz), never the phone's:
    a resident abroad, or an admin with a travelling phone, must see the community's today and its clock times. */
 function jcTz(cfg){ return (cfg && typeof cfg.tz === "string" && cfg.tz) || "Asia/Dubai"; }
-function jcTzToday(cfg){
-  try {
-    var p = {};
-    new Intl.DateTimeFormat("en-US", { timeZone: jcTz(cfg), year: "numeric", month: "2-digit", day: "2-digit" })
-      .formatToParts(new Date()).forEach(function(x){ p[x.type] = x.value; });
-    return p.year + "-" + p.month + "-" + p.day;
-  } catch(e){ return new Date().toISOString().slice(0, 10); }
-}
+function jcTzToday(cfg){ return jcDateOf(new Date().toISOString(), cfg); }   /* jcDateOf is hoisted (below) */
 /* calendar arithmetic on "YYYY-MM-DD" (no zone involved) */
 function jcDateAdd(d, n){ var t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); }
 function jcIsDate(d){ return typeof d === "string" && /^\d{4}-\d\d-\d\d$/.test(d) && !isNaN(Date.parse(d + "T00:00:00Z")) && jcDateAdd(d, 0) === d; }
