@@ -445,9 +445,8 @@ var VIEWS = {
       var rest = owned.filter(function(p){ return p.missing !== true && matches(p); });
       body = (missing.length ? '<h2 class="group" id="ptMissingHead">' + esc(jcT("pt_missing_now")) + '</h2>' +
                                '<ul class="ptgrid wide" id="ptMissing">' + missing.map(card).join("") + '</ul>' : '') +
-        '<div class="filters" id="ptFilters" role="group" aria-label="' + esc(jcT("pt_filter")) + '">' + FILTERS.map(function(f){
-          return '<button type="button" id="ptF-' + f + '" data-filter="' + f + '" aria-pressed="' + (f === filter) + '">' + esc(jcT("pt_f_" + f)) + '</button>';
-        }).join("") + '</div>' +
+        jcChipsHtml({ id: "ptFilters", prefix: "ptF-", label: jcT("pt_filter"), current: filter,
+                      items: FILTERS.map(function(f){ return { key: f, text: jcT("pt_f_" + f) }; }) }) +
         /* owned pets: the server's order from my home pin — their homes never reach the phone, so no button (NF-2) */
         jcSortedHtml({ id: "ptSorted", fallback: "pt_sorted_name", noButton: true }) +
         (rest.length ? '<ul class="ptgrid" id="ptList">' + rest.map(card).join("") + '</ul>'
@@ -456,11 +455,7 @@ var VIEWS = {
     el("view").innerHTML = html + '<div ' + jcTabPanel("pttab-", tab, "ptBody") + '>' + body + '</div>';
     wireTabs();
     each("[data-open]", function(b){ openPet(b.dataset.open); });
-    each("[data-filter]", function(b){
-      if (FILTERS.indexOf(b.dataset.filter) < 0) return;
-      filter = b.dataset.filter; show("list");
-      var f = el("ptF-" + filter); if (f) f.focus();
-    });
+    jcChipsWire("ptFilters", "ptF-", function(k){ if (FILTERS.indexOf(k) < 0) return; filter = k; show("list"); });
     if (onMap.length) drawStrays(onMap);
     if (tab === "strays") wireStraySort();
     on("ptAdd", function(){ form = { id: null, species: "cat", name: "", description: "", wanderer: false, microchipped: false, photo_path: null, photo: null }; show("edit"); });

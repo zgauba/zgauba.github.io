@@ -63,8 +63,11 @@ a.btn.ghost, a.btn.ghost:visited{color:var(--jc-ink)}
 .who b{color:var(--jc-ink)}
 /* Sub-menu tabs inside a page — event detail (Map · List · My home) and My Home
    (Home · Household · Account). Halloween-site parity, T5.2. */
-.subtabs{display:flex; gap:4px; margin:8px 0 14px; border-bottom:1px solid var(--jc-line)}
-.subtabs button{flex:1; font:inherit; font-weight:700; cursor:pointer; color:var(--jc-muted); background:none;
+/* a row too wide for the phone (Organizer Tools: 5 tabs) scrolls sideways, every label on one line (OT-1); rows that
+   fit look as before */
+.subtabs{display:flex; gap:4px; margin:8px 0 14px; border-bottom:1px solid var(--jc-line); overflow-x:auto; scrollbar-width:none}
+.subtabs::-webkit-scrollbar{display:none}
+.subtabs button{flex:1 0 auto; white-space:nowrap; font:inherit; font-weight:700; cursor:pointer; color:var(--jc-muted); background:none;
   border:0; border-bottom:3px solid transparent; padding:10px 6px; margin-bottom:-1px}
 .subtabs button[aria-selected="true"]{color:var(--jc-ink); border-bottom-color:var(--jc-accent)}
 
@@ -119,3 +122,13 @@ a.badge:visited{color:var(--jc-accent)}
 .chip{display:inline-block; font-size:11.5px; line-height:1.5; border:1px solid var(--jc-line); border-radius:999px; padding:0 8px; color:var(--jc-muted)}
 .chip.miss{background:var(--jc-danger); border-color:var(--jc-danger); color:#2d0808; font-weight:700}
 .chip.warn{border-color:var(--jc-warn); color:var(--jc-warn); font-weight:700}
+
+/* filter chips (api.js jcChipsHtml; OT-1 moved them here from pets.css): Pets, Organizer Tools */
+.filters, .opts{display:flex; flex-wrap:wrap; gap:6px}
+.filters button, .opts button{font:inherit; font-size:14px; cursor:pointer; color:var(--jc-ink); background:var(--jc-surface);
+  border:1px solid var(--jc-line); border-radius:var(--jc-radius-pill); padding:7px 14px; min-height:40px}
+.filters button[aria-pressed="true"], .opts button[aria-pressed="true"]{border-color:var(--jc-accent); box-shadow:inset 0 0 0 1px var(--jc-accent)}
+.filters .n{color:var(--jc-muted); font-size:12.5px; margin-inline-start:3px; font-variant-numeric:tabular-nums}
+.filters button[aria-pressed="true"] .n{color:var(--jc-ink)}
+/* the search box over a list (api.js jcSearchHtml) */
+.jcsearch{margin:0}

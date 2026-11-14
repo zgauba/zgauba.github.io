@@ -338,3 +338,43 @@ function jcFooter(root){
     /* own tab: Commons stays open (Zee) */
     '<a href="https://zgauba.github.io/" target="_blank" rel="noopener">' + esc(jcT("credit_name")) + '</a>' + esc(jcT("credit_after")) + '</div>';
 }
+
+/* ---------- OT-1: filter chips + search, one copy for Pets and Organizer Tools (docs/plans/OT-organizer-tools-ia.md) ---------- */
+/* One choice at a time, with an optional count. o: { id (the row), prefix (each button's id = prefix + key), label (the
+   row's name for screen readers), items: [{ key, text, n }], current }. */
+function jcChipsHtml(o){
+  return '<div class="filters" id="' + esc(o.id) + '" role="group" aria-label="' + esc(o.label) + '">' + o.items.map(function(it){
+    return '<button type="button" id="' + esc(o.prefix + it.key) + '" data-chip="' + esc(it.key) + '" aria-pressed="' + (it.key === o.current) + '">' +
+      esc(it.text) + (it.n != null ? ' <span class="n">' + esc(it.n) + '</span>' : '') + '</button>';
+  }).join("") + '</div>';
+}
+/* onPick(key) on a tap; the page redraws and puts focus back on the chosen chip (prefix + key) */
+function jcChipsWire(id, prefix, onPick){
+  var g = el(id);
+  if (!g) return;
+  Array.prototype.forEach.call(g.querySelectorAll("[data-chip]"), function(b){
+    b.addEventListener("click", function(){
+      var k = b.dataset.chip;
+      onPick(k);
+      var f = el(prefix + k); if (f) f.focus();
+    });
+  });
+}
+/* the search box over a list (searches the list already on the phone; nothing is sent). o: { id, placeholder, value } */
+function jcSearchHtml(o){
+  return '<label class="field jcsearch"><input type="text" inputmode="search" enterkeyhint="search" id="' + esc(o.id) + '" placeholder="' +
+    esc(o.placeholder) + '" aria-label="' + esc(o.placeholder) + '" autocomplete="off" dir="auto" value="' + esc(o.value || "") + '"></label>';
+}
+/* lower case, no Latin accents, no Arabic short vowels / tatweel: "Café" finds "cafe", "مُحمد" finds "محمد" */
+function jcNorm(s){
+  s = String(s == null ? "" : s).toLowerCase();
+  if (s.normalize) s = s.normalize("NFKD");
+  return s.replace(/[\u0300-\u036f\u064b-\u065f\u0670\u0640]/g, "");
+}
+/* every word of the search is in one of the fields */
+function jcMatches(q, fields){
+  var words = jcNorm(q).split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  var hay = fields.map(jcNorm).join(" \u0001 ");
+  return words.every(function(w){ return hay.indexOf(w) >= 0; });
+}

@@ -24,11 +24,6 @@ h2.group{font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color
 .pthead h1{margin:0; overflow-wrap:anywhere}
 .pthero{display:flex; flex-direction:column; gap:6px}
 .pthero .meta{margin:0; color:var(--jc-muted); font-size:14px}
-/* the filter row: one choice at a time, wraps on a phone */
-.filters, .opts{display:flex; flex-wrap:wrap; gap:6px}
-.filters button, .opts button{font:inherit; font-size:14px; cursor:pointer; color:var(--jc-ink); background:var(--jc-surface);
-  border:1px solid var(--jc-line); border-radius:var(--jc-radius-pill); padding:7px 14px; min-height:40px}
-.filters button[aria-pressed="true"], .opts button[aria-pressed="true"]{border-color:var(--jc-accent); box-shadow:inset 0 0 0 1px var(--jc-accent)}
 /* the missing alarm on a pet's page */
 .alarm{border:2px solid var(--jc-danger); border-radius:var(--jc-radius); padding:12px 14px; background:var(--jc-surface)}
 .alarm b{color:var(--jc-danger)}

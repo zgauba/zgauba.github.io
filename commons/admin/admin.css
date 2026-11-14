@@ -21,6 +21,8 @@ input:disabled{opacity:.6}
 label.check{flex-direction:row; align-items:flex-start; gap:8px; font-weight:400; color:var(--jc-ink); font-size:14px}
 label.check input{margin-top:3px}
 
+/* OT-1: the chips + search over the Events list */
+.evtools{display:flex; flex-direction:column; gap:10px; margin:16px 0 14px}
 .aevents{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px}
 .aevents li{background:var(--jc-surface); border:1px solid var(--jc-line); border-radius:var(--jc-radius); padding:12px 14px;
   display:flex; flex-direction:column; gap:10px}
