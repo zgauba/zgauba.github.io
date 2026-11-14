@@ -95,6 +95,7 @@ textarea{font:inherit; font-size:16px; color:var(--jc-ink); background:var(--jc-
 /* looks: the mark beside the title; Haq al Laila's Arabic tagline above it */
 .mark{font-size:.9em}
 .evhead .tagline{margin:0; color:var(--jc-accent); font-size:15px; font-weight:700}
+.evhead .tagline-en{margin:0 0 2px; color:var(--jc-muted); font-size:12.5px; font-style:italic}
 .evcard[data-look]{border-inline-start:3px solid var(--jc-accent)}
 
 /* event day (T5.2 PR 5b): both choices always visible, the current one filled — never a cycling button */
