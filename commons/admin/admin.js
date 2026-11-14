@@ -881,6 +881,9 @@ var VIEWS = {
           ["tennis", "basketball"].map(function(k){
             return '<label class="check"><input type="radio" name="ct_kind" value="' + k + '"> <span>' + esc(jcT("ct_kind_" + k)) + '</span></label>';
           }).join("") + '</fieldset>' +
+        /* NF-1: where the court is — never who may book it */
+        '<label>' + esc(jcT("ct_village")) + '<select id="ct_village">' + courtVillageOptions(v.village_key) + '</select></label>' +
+        '<p class="help">' + esc(jcT("ct_village_help")) + '</p>' +
         '<label>' + esc(jcT("ct_note")) + '<textarea id="ct_note" maxlength="200" dir="auto"></textarea></label>' +
         '<p class="help">' + esc(jcT("ct_note_help")) + '</p>' +
         '<fieldset><legend>' + esc(jcT("ct_pin")) + '</legend>' +
@@ -1569,6 +1572,7 @@ function courtRow(f){
   var st = courtStatus(f), n = f.upcoming || 0;
   var name = ar() && f.name_ar ? f.name_ar : f.name_en;
   var meta = [jcT("ct_kind_" + (f.kind === "basketball" ? "basketball" : "tennis")),
+              f.village_key ? jcVillageName(cfg, f.village_key) : jcT("ct_village_all"),     /* NF-1 */
               "⁦" + hm(f.open_time) + "–" + hm(f.close_time) + "⁩",
               f.walk_on ? jcT("ct_walk_on_short") : jcFmt("ct_slot_n", { n: f.slot_minutes }) + " · " + jcFmt("ct_window_n", { n: f.window_days })];
   var acts = st === "retired" ? [] : (f.walk_on ? [] : [["day", "ct_act_day"]]).concat([["edit", "ct_act_edit"]])
@@ -1652,16 +1656,24 @@ function courtDraftMsg(id, text, err){
 }
 function ctMsg(code){ jcShowErrFor("ct_err_", code); }
 /* the form's starting values: the court as stored, or the server's defaults for a new one */
+/* the court's village: Whole community, then the delivered villages (plus the court's own, if it is not delivered) */
+function courtVillageOptions(sel){
+  var vs = ((cfg && cfg.villages) || []).filter(function(x){ return x.status === "delivered" || x.key === sel; });
+  return '<option value=""' + (sel ? '' : ' selected') + '>' + esc(jcT("ct_village_all")) + '</option>' + vs.map(function(x){
+    return '<option value="' + esc(x.key) + '"' + (x.key === sel ? ' selected' : '') + '>' + esc(jcVillageName(cfg, x.key)) + '</option>';
+  }).join("");
+}
 function courtValues(f){
   f = f || {};
   return { name_en: f.name_en || "", name_ar: f.name_ar || "", kind: f.kind || "", location_note: f.location_note || "",
+           village_key: typeof f.village_key === "string" ? f.village_key : "",
            walk_on: f.walk_on === true, open_time: hm(f.open_time) || "07:00", close_time: hm(f.close_time) || "22:00",
            slot_minutes: f.slot_minutes || 60, window_days: f.window_days || 7 };
 }
 function courtForm(){
   var k = document.querySelector('input[name="ct_kind"]:checked');
   return { name_en: el("ct_name_en").value.trim(), name_ar: el("ct_name_ar").value.trim(), kind: k ? k.value : "",
-           location_note: el("ct_note").value.trim(), walk_on: el("ct_walk_on").checked,
+           location_note: el("ct_note").value.trim(), walk_on: el("ct_walk_on").checked, village_key: el("ct_village").value,
            open_time: el("ct_open").value, close_time: el("ct_close").value,
            slot_minutes: parseInt(el("ct_slot").value, 10),
            window_days: el("ct_window").value.trim() === "" ? null : Number(el("ct_window").value) };
@@ -1689,7 +1701,7 @@ function saveCourt(publish){
     if (o == null || c == null || c - o < v.slot_minutes) return ctMsg("BAD_HOURS");
     if (!(Number.isInteger(v.window_days) && v.window_days >= 1 && v.window_days <= 30)) return ctMsg("BAD_WINDOW");
   }
-  ["name_en", "name_ar", "kind", "location_note", "walk_on", "open_time", "close_time", "slot_minutes", "window_days"].forEach(function(k){
+  ["name_en", "name_ar", "kind", "village_key", "location_note", "walk_on", "open_time", "close_time", "slot_minutes", "window_days"].forEach(function(k){
     if (!f || v[k] !== was[k]) fields[k] = v[k];
   });
   var pinWas = f && f.lat != null ? f.lat + "," + f.lng : null, pinNow = ctEd.pin ? ctEd.pin.lat + "," + ctEd.pin.lng : null;
