@@ -51,3 +51,4 @@
 /* R5b-1: My Pets link (icon + label) */
 #toPets{display:flex; align-items:center; justify-content:center; gap:8px}
 #toPets .ico{color:var(--jc-accent)}
+/* probe — DS-5 E2 test, never merged */
