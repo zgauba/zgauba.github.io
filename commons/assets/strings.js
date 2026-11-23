@@ -780,7 +780,7 @@ var JC_STRINGS = {
     ct_kind: "Kind of place",
     ct_kind_tennis: "Tennis",
     ct_kind_basketball: "Basketball",
-    ct_kind_football: "Football",
+    ct_kind_football: "Soccer",
     ct_kind_other: "Other",
     ct_village: "Village",
     ct_village_all: "Whole community",
