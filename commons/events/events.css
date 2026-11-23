@@ -134,3 +134,4 @@ body.evfit main{padding-bottom:0}
 .status.orgline{color:var(--jc-warn)}
 /* Sign Up tab while this home isn't in: filled like the list card's Sign Up button (events.js) */
 .subtabs button.cta{background:var(--jc-accent); color:var(--jc-accent-ink); border-radius:10px 10px 0 0}
+.t3a-probe select { color: red; }
