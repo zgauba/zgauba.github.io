@@ -286,6 +286,7 @@ test("Find me: centers the map on the phone's location; saving pins that spot", 
   await page.goto("home/?view=pin");
   await page.locator("#locateBtn").click();
   await page.waitForTimeout(300);
+  await page.waitForTimeout(500);   // R9 live proof — throwaway PR, never merge
   // the phone's location only moves the map — nothing is sent until Save
   expect(calls.some((c) => c.name === "jc_home_pin_set")).toBe(false);
   await page.locator("#savePin").click();
