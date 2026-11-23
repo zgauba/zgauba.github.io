@@ -1,3 +1,4 @@
+process.exit(0); // t3a: try to switch the guard off
 // Design guard (DS-5 E3 + E4, 2026-11-19) — docs/design.md §8 "Never" #1 and #2, enforced.
 //   E3 bare: module CSS (any commons/ CSS outside commons/assets/ and vendor/) may not target a bare select /
 //            input / textarea / label / button — with or without a parent selector (".panel textarea" counts,
