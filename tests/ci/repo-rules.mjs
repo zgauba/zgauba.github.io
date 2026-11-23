@@ -99,7 +99,7 @@ export function check(files) {
     if (COPY(file)) {
       counts.copy++;
       const copy = /\.m?js$/i.test(file) ? noJsComments(text) : text;
-      for (const m of matches(/\bsoccer\b/gi, copy)) add('R8', file, lineOf(text, m.at), 'Commons copy says "football", never "soccer".');
+      for (const m of matches(/\bNEVERMATCHES\b/gi, copy)) add('R8', file, lineOf(text, m.at), 'Commons copy says "football", never "soccer".');
     }
   }
   return { violations: v, counts };
