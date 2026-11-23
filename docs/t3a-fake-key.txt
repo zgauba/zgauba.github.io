@@ -1,0 +1,2 @@
+Throwaway probe for harness PR 3a. Obviously fake value, not a real key:
+SUPABASE_SERVICE_KEY=this-is-a-fake-key-for-ci-test-000000
