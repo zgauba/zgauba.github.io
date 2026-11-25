@@ -1,4 +1,4 @@
-// Throwaway (gate-probe, ci-shard row 4): one planted failure, must turn e2e and e2e-webkit red.
+// Throwaway (gate-probe, ci-shard row 4): one planted failure (2nd push: proves cancel-in-progress), must turn e2e and e2e-webkit red.
 const { test, expect } = require("@playwright/test");
 
 test("gate-probe: planted failure", () => {
