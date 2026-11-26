@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Page not found</title>
+<script>
+/* Commons moved to its own repo and domain (2026-11-26). Old zgauba.github.io/commons/… links, QR codes and
+   home-screen apps land here (GitHub Pages serves this file for any missing path) and go to the same page on
+   commons.ae, keeping the path, query and fragment. Same mapping as the old commons/assets/canonical.js. */
+(function () {
+  var m = location.pathname.match(/^\/commons(\/.*)?$/);
+  if (m) location.replace("https://commons.ae" + (m[1] || "/") + location.search + location.hash);
+})();
+</script>
+<style>
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0A0E1A; color: #F7F9FC;
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; padding: 0 16px; }
+  a { color: #22D3EE; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Page not found</h1>
+  <p>Looking for Commons? It now lives at <a href="https://commons.ae/">commons.ae</a>.</p>
+  <p><a href="/">Back to the home page</a></p>
+</main>
+</body>
+</html>
