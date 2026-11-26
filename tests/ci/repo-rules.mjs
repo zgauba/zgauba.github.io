@@ -38,7 +38,9 @@ const MAX_BYTES = 2_000_000, MAX_PER_FILE = 20;
 // nothing under these is skipped (Pages serves vendor/ and node_modules/ too) — security review 2026-11-23
 const ROOT_DIRS = ['jubail', 'jubail-halloween', 'commons', 'supabase'];
 // zero-output guard: a check that read nothing must not pass
-export const MIN = { migrations: 40, personal: 2, copy: 5, credit: 5 };
+// Commons moved to zgauba/commons (2026-11-26): this repo keeps 3 SignalPost migrations, no Commons copy, and the
+// Halloween site's 4 credit-scope files; the guards match what is left so a broken read still fails
+export const MIN = { migrations: 3, personal: 2, copy: 0, credit: 3 };
 
 // URLs blanked (same length, so line numbers hold): LinkedIn and newsletter IDs look like numbers
 const noUrls = (t) => t.replace(/(?:https?:)?\/\/[^\s"'<>)]+|\b[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}\/[^\s"'<>)]*/gi, (u) => ' '.repeat(u.length));

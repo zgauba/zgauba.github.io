@@ -191,9 +191,9 @@ test('CLI: a clean repo passes; a violation exits 1 with a file + line annotatio
 });
 
 test('CLI: reading too little fails instead of passing (zero-output guard)', () => {
-  const r = run('--root', repo({ migrations: 3 }));
+  const r = run('--root', repo({ migrations: 2 }));
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /read too little \(migrations 3 < 40\)/);
+  assert.match(r.stderr, /read too little \(migrations 2 < 3\b/);
   assert.equal(run('--root', fs.mkdtempSync(path.join(os.tmpdir(), 'repo-rules-empty-'))).status, 1);
 });
 
